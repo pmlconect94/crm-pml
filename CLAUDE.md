@@ -1,0 +1,1396 @@
+# CRM Grupo Lizárraga — Guía maestra para Claude Code
+
+> **LEER COMPLETO ANTES DE ESCRIBIR UNA SOLA LÍNEA DE CÓDIGO.**
+> Este documento es la fuente de verdad del proyecto. Define la arquitectura, las reglas, los flujos de negocio, el esquema de base de datos y todo lo que se necesita para construir la plataforma correctamente desde el primer intento.
+
+---
+
+## 1. Visión del producto
+
+**CRM empresarial completo para Grupo Lizárraga** — empresa familiar dedicada a la importación, distribución y producción de productos del mar en México.
+
+### Empresas del grupo
+
+| Empresa | Tipo | ID interno | Estado |
+|---|---|---|---|
+| Productos Marinos Lizárraga, S. de R.L. de C.V. | Distribuidora — importa y vende | `pml` | Activa en plataforma |
+| Marlin Lizárraga, S. de R.L. de C.V. | Productora — maquila para PML | `marlin` | Deshabilitada por ahora |
+
+### Ciclo del negocio que cubre la plataforma
+
+```
+Importación → Logística → Inventario → Ventas → Cobranza → Contabilidad → RH
+```
+
+### Estado actual de construcción
+
+**Solo el módulo de Importaciones está activo.** Todos los demás módulos existen en la UI como "Próximamente" y se irán activando uno a uno conforme se diseñen y validen en el prototipo HTML.
+
+**El objetivo es construir la plataforma completa** — no solo importaciones. Importaciones es el primer módulo porque es donde el negocio tiene más urgencia. Cada módulo nuevo seguirá el mismo patrón.
+
+---
+
+## 2. Stack de producción (lo que Claude Code debe construir)
+
+```
+Frontend:    Vite + React 18 + TypeScript
+Backend:     Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions)
+Auth:        Supabase Auth con Google Workspace OAuth2 Y Microsoft Entra ID (SSO corporativo)
+Estilos:     Tailwind CSS v3 + design tokens del sistema (ver sección 9)
+Routing:     React Router v6
+Estado:      React Query (TanStack Query) para datos del servidor, Zustand para UI local
+Fonts:       Inter (sans-serif) + JetBrains Mono (monoespaciado) — Google Fonts
+Deploy:      Vercel (frontend) + Supabase cloud (backend)
+```
+
+### Lo que NO usar
+- Redux (demasiado pesado para este proyecto)
+- Next.js (no es necesario SSR)
+- Axios (usar fetch nativo o React Query)
+- Cualquier CSS-in-JS (usar Tailwind)
+
+---
+
+## 3. Referencia del prototipo HTML
+
+El prototipo en este repositorio es el **spec de UI definitivo**. Antes de construir cualquier pantalla, revisar cómo está implementada en el prototipo.
+
+### Archivos del prototipo
+
+```
+CRM Lizarraga.html          ← Shell completo, login, switcher, routing
+styles.css                   ← Design system con variables CSS
+data.js                      ← Datos mock generales (CRM_DATA)
+blufin-data.js               ← Datos mock Blufin Seafood
+calendario-data.js           ← Datos calendario Blufin
+camanchaca-data.js           ← Datos mock Camanchaca (SA + MX)
+neptuno-data.js              ← Datos mock Neptuno
+catalogo.jsx                 ← Componente SkuCatalogo (compartido entre los 3 módulos)
+components.jsx               ← Icon, Sidebar, Topbar, DEPTS, logos
+dashboards.jsx               ← Dashboards + picker de proveedores
+tweaks-panel.jsx             ← Panel de diseño (ignorar en producción)
+
+── Blufin Seafood ─────────────────────────────────────────────────────────────
+blufin.jsx / blufin-bulk.jsx / blufin-pagos.jsx / blufin-contrato.jsx
+blufin-recepcion.jsx / blufin-notas.jsx / blufin-facturas.jsx
+blufin-calendario.jsx / blufin-costos.jsx
+
+── Salmones Camanchaca ────────────────────────────────────────────────────────
+camanchaca-sa-forms.jsx / camanchaca.jsx / camanchaca-pagos.jsx
+camanchaca-recepcion.jsx / camanchaca-mx.jsx / camanchaca-costos.jsx
+camanchaca-calendario.jsx
+
+── Neptuno Seafood ────────────────────────────────────────────────────────────
+neptuno.jsx
+
+── Assets ─────────────────────────────────────────────────────────────────────
+assets/marlin-logo.png           ← Fondo oscuro nativo
+assets/pml-logo.png              ← Fondo blanco (no usar sobre oscuro)
+assets/pml-logo-transparent.png  ← Sin fondo (usar sobre oscuro)
+assets/blufin-logo.png           ← Logo Blufin Seafood
+assets/camanchaca-logo.png       ← Logo Salmones Camanchaca
+assets/neptuno-logo.png          ← Logo Neptuno Alimentos del Mar
+```
+
+---
+
+## 4. Arquitectura de navegación (producción)
+
+```
+/ (login)
+  └── /app
+        ├── /dashboard
+        ├── /importaciones
+        │     ├── /importaciones/blufin
+        │     │     ├── contratos
+        │     │     ├── recepcion
+        │     │     ├── pagos
+        │     │     ├── notas-credito
+        │     │     ├── facturas
+        │     │     ├── calendario
+        │     │     ├── costos
+        │     │     └── productos (catálogo SKUs)
+        │     ├── /importaciones/camanchaca
+        │     │     ├── [sa] contenedores / pagos / recepcion / calendario / costos / productos
+        │     │     └── [mx] compras / pagos / costos / calendario / productos
+        │     └── /importaciones/neptuno
+        │           ├── facturas
+        │           ├── pagos
+        │           ├── notas-credito
+        │           ├── costos
+        │           ├── calendario
+        │           └── productos (catálogo SKUs)
+        ├── /logistica          ← PRÓXIMAMENTE
+        ├── /administracion     ← PRÓXIMAMENTE
+        ├── /ventas             ← PRÓXIMAMENTE
+        ├── /cobranza           ← PRÓXIMAMENTE
+        ├── /contabilidad       ← PRÓXIMAMENTE
+        └── /rh                 ← PRÓXIMAMENTE
+```
+
+### Protección de rutas
+- Todo `/app/*` requiere sesión activa
+- Sidebar muestra solo departamentos permitidos según el rol del usuario
+- Un `coord_logistica` no puede ver ni acceder a `/administracion`, `/ventas`, etc.
+- Redirigir a `/login` si no hay sesión, a `/app/dashboard` si la hay
+
+---
+
+## 5. Autenticación y roles
+
+### Proveedores de auth
+1. **Google Workspace** — para cuentas @lizarraga.mx
+2. **Microsoft Entra ID (Azure AD)** — SSO corporativo alternativo
+3. **Email/Password** — para cuentas locales de prueba
+
+### Roles y permisos
+
+```typescript
+type Rol = 'admin_total' | 'director_ops' | 'coord_logistica' | 'gerente_rh' | 'contador' | 'vendedor';
+
+const PERMISOS: Record<Rol, { depts: string[] }> = {
+  admin_total:     { depts: ['importaciones','logistica','administracion','ventas','cobranza','contabilidad','rh'] },
+  director_ops:    { depts: ['importaciones','logistica','administracion','rh'] },
+  coord_logistica: { depts: ['importaciones','logistica'] },
+  gerente_rh:      { depts: ['rh','administracion'] },
+  contador:        { depts: ['contabilidad','cobranza','administracion'] },
+  vendedor:        { depts: ['ventas'] },
+};
+```
+
+Los roles se guardan en la tabla `usuarios` y se leen del JWT de Supabase Auth. Usar RLS para filtrar datos por `empresa_id` automáticamente.
+
+### Flujo de alta de usuarios
+1. El usuario llega a `/registro` y llena nombre, correo, empresa
+2. O hace SSO con Google/Microsoft → se crea cuenta en `usuarios` con `activo = false`
+3. Un `admin_total` activa la cuenta y asigna rol desde el panel de administración
+4. El usuario recibe email de bienvenida
+
+---
+
+## 6. Módulo de Importaciones — Blufin Seafood ✅
+
+**Proveedor:** Menita Comercial Oceánica, S.A. de C.V.
+**RFC:** MCO060711537
+**Dirección:** Priv. Pino Suárez Bodegas No. 14, 15 y 20, Col. El Vigía, Zapopan, Jalisco, CP 45140
+**Logo:** `assets/blufin-logo.png`
+
+### Tabs del módulo
+
+| Tab | Ruta | Descripción |
+|---|---|---|
+| Contratos | `/blufin/contratos` | Lista, alta manual, carga masiva PDF |
+| Recepción | `/blufin/recepcion` | Recepción en bodega, match kg por SKU |
+| Pagos | `/blufin/pagos` | Anticipos, saldos, forwards cambiarios, pago múltiple |
+| Notas de crédito | `/blufin/notas-credito` | NCs por presentación/descuento/faltante, aplicación a contratos |
+| Facturas | `/blufin/facturas` | Revisión de factura del proveedor vs contrato, diff por línea |
+| Calendario | `/blufin/calendario` | ETAs en puerto y bodega, vencimientos de pagos |
+| Central de costos | `/blufin/costos` | Inventario + costo promedio ponderado + histórico precios |
+| Productos | `/blufin/productos` | Catálogo de SKUs del proveedor |
+
+### Estructura de un contrato Blufin
+
+```typescript
+interface BlufinContrato {
+  id: string;                    // UUID
+  empresaId: string;             // 'pml'
+  folio: string;                 // 'MCO-CV-003542'
+  fecha: Date;
+  lote: string;
+  status: 'Contratado' | 'En tránsito' | 'En puerto' | 'Entregado';
+  etaPuerto: Date;
+  etaBodega: Date;               // CLAVE para ordenar en Central de Costos
+  contenedor: string;
+  naviera: string;
+  totalUSD: number;
+  totalKg: number;
+  anticipoUSD: number;
+  anticipoFecha: Date;
+  anticipoPagado: boolean;       // REQUERIDO — sin este campo los pagos crashean
+  saldoUSD: number;
+  saldoFecha: Date;
+  saldoPagado: boolean;          // REQUERIDO
+  tcPonderado: number;           // TC de respaldo si no hay pagos/forwards
+  productos: BlufinProducto[];
+}
+```
+
+### Lógica crítica: Costo promedio ponderado
+
+```typescript
+// Central de Costos — cálculo de costo promedio
+// fuentes: ordenadas de más nuevo (etaBodega DESC) a más viejo
+// stockKg: kg que el usuario tiene en bodega
+function calcularPromedio(fuentes: Fuente[], stockKg: number) {
+  let restante = stockKg;
+  let sumUSD = 0, sumTC = 0, totalKgUsado = 0;
+  
+  for (const f of fuentes) {
+    if (restante <= 0) break;
+    const usado = Math.min(f.kg, restante);
+    sumUSD += f.precioUSD * usado;
+    sumTC  += f.tc * usado;
+    totalKgUsado += usado;
+    restante -= usado;
+  }
+  
+  const avgUSD = sumUSD / totalKgUsado;
+  const avgTC  = sumTC  / totalKgUsado;
+  return { avgUSD, avgTC, avgMXN: avgUSD * avgTC };
+}
+
+// TC por contenedor (orden de prioridad):
+// 1. Promedio ponderado de pagos reales: Σ(tc × monto) / Σ(monto)
+// 2. tcForward del forward asociado
+// 3. tcPonderado del contrato
+// 4. Fallback: tcDelDia (integrar con Banxico API)
+```
+
+### Notas de crédito Blufin
+
+Las NCs de Blufin son más complejas que las de otros proveedores:
+- Pueden ser por presentación, descuento o faltante
+- Tienen folio timbrado (CFDI)
+- Se aplican a contratos específicos (puede ser un contrato diferente al de origen)
+- Tienen saldo pendiente que se va consumiendo en múltiples aplicaciones
+
+---
+
+## 7. Módulo de Importaciones — Salmones Camanchaca ✅
+
+**Folio interno compartido:** CAM-001..N (impares = SA, pares = MX)
+**Logo:** `assets/camanchaca-logo.png`
+
+### 7a. Salmones Camanchaca, S.A. (importación USD)
+
+**Dirección:** Diego Portales 2000, Puerto Montt, Los Lagos, Chile
+**Vendedor:** Felipe Rodríguez Aránguiz
+**Moneda:** USD
+
+**Flujo completo:**
+
+1. **Planeación** — Felipe manda calendario por WhatsApp con: OC#, descripción estimada, kg estimados, llegada estimada (texto libre). Se captura en `cam_ordenes_planeadas`.
+
+2. **Confirmación con factura** — Cuando llega la factura formal:
+   - Se asigna folio interno (CAM-001, CAM-003, ...)
+   - Se captura: # factura, fecha, fecha vencimiento, ETA Manzanillo
+   - **ETA Bodega = ETA Manzanillo + 7 días** (automático, editable)
+   - Naviera
+   - SKUs con precios en USD
+
+3. **Pagos al proveedor (USD)** — Pago completo o abonos parciales. Sin anticipos (diferencia clave vs Blufin).
+   - TC capturado por pago → CLAVE para calcular costo promedio
+   - Opción de Forward cambiario (MONEX / SANTANDER)
+
+4. **Costo de importación (MXN)** — Pagos a agencias aduanales en Manzanillo (LTP Importaciones, MAFA, etc.). Pueden ser múltiples agencias por contenedor.
+
+5. **Costo total internado** = FOB (USD × TC efectivo) + Σ(costo importación MXN)
+
+6. **Recepción en bodega** — Match de kg recibidos vs contratados por SKU.
+
+7. **Descuento simplificado** — Monto USD + motivo (sin flujo de NC complejo).
+
+8. **NC por descuento** — Nota de crédito simplificada (monto USD + motivo, sin CFDI).
+
+**Fórmula costo total:**
+```
+tcEfectivo   = Σ(pago.tc × pago.monto) / Σ(pago.monto)   // pagos reales
+             ó tcForward                                    // si tiene forward
+             ó tcDelDia                                     // fallback
+
+costoFOBmxn  = totalUSD × tcEfectivo
+costoImpMXN  = Σ(costoImportacion.montoMXN)
+costoTotalKg = (costoFOBmxn + costoImpMXN) / totalKg
+```
+
+**Tab "Comparación internación"** (dentro de Pagos):
+Tabla por contenedor: FOB USD | TC | FOB MXN | [agencia 1] | [agencia 2] | Total importación | % del FOB (verde <8%, amarillo 8-12%, rojo >12%) | Costo total MXN/kg.
+
+### 7b. Camanchaca México, S.A. de C.V. (compras MXN)
+
+**RFC:** CME190315XY2
+**Ciudad:** Ciudad de México
+**Moneda:** MXN
+**Crédito:** 30 días
+
+**Flujo:**
+1. Llega factura → se da de alta directamente (sin planeación previa)
+2. Campos: folio interno, # factura, entrada Intelisis, fecha, SKUs con precios MXN
+3. Vencimiento = fecha factura + 30 días (automático)
+4. Pagos parciales (abonos) en MXN
+5. NC por descuento en MXN
+
+---
+
+## 8. Módulo de Importaciones — Neptuno Seafood ✅
+
+**Proveedor:** Neptuno Alimentos del Mar
+**Dirección:** Av. de Todos los Santos 9105, Pacífico, Tijuana, Baja California
+**Moneda:** USD
+**Logo:** `assets/neptuno-logo.png`
+
+**Diferencias clave vs Camanchaca SA:**
+- Sin folio interno — el **número de factura ES el identificador**
+- Sin planeación previa ni OC de referencia
+- Se da de alta cuando llega la factura, directo
+- Sin naviera (entrega directa en bodega)
+- Sin costo de importación separado (costo directo a bodega)
+- Con entrada de compra Intelisis
+- NC por descuento (USD)
+
+**Tabs:** Facturas | Pagos | Notas de crédito | Central de Costos | Calendario | Productos
+
+**Flujo:**
+1. Llega factura → alta directa con: # factura, entrada Intelisis, fecha, vencimiento, SKUs con precios USD
+2. Pagos en USD (completo o abonos)
+3. NC por descuento cuando hay diferencias de calidad/peso
+
+**SKUs:** Pez Espada Loin, Merluza Filete, Bacalao, Pulpo, Calamar, Rape
+
+---
+
+## 9. Design System
+
+### Paleta de colores (variables CSS → Tailwind config)
+
+```css
+/* Estructura */
+--navy-900: #0A2540   /* sidebar, botones primarios */
+--navy-800: #0F2F52
+--navy-700: #143C66
+
+/* Acento principal */
+--blue-500: #0073E6
+--cyan-500: #00A3FF
+
+/* Texto */
+--ink-900: #0B1A2B    /* texto principal */
+--ink-700: #334156
+--ink-500: #6B7A8F    /* texto secundario */
+--ink-400: #94A3B5
+--ink-200: #E2E8EF    /* bordes */
+--ink-100: #F1F5F9
+--ink-50:  #F8FAFC    /* fondo de página */
+
+/* Semánticos */
+--green-500: #10B981
+--amber-500: #F59E0B
+--red-500:   #EF4444
+--violet-500:#8B5CF6
+
+/* Módulos / proveedores */
+--camanchaca: #0EA5A1  /* Camanchaca y Neptuno — color teal */
+
+/* Tipografía */
+--font-sans: 'Inter', system-ui
+--font-mono: 'JetBrains Mono', monospace
+```
+
+### Componentes base
+
+| Clase | Descripción |
+|---|---|
+| `.btn`, `.btn-primary`, `.btn-accent`, `.btn-ghost`, `.btn-sm`, `.btn-lg` | Botones |
+| `.card` | Tarjeta con sombra suave |
+| `.badge`, `.badge-green`, `.badge-blue`, `.badge-amber`, `.badge-red` | Etiquetas de estado |
+| `.tbl` | Tablas de datos |
+| `.field-input`, `.field-label` | Inputs de formulario |
+| `.kpi`, `.kpi-value`, `.kpi-label` | KPI cards |
+| `.page-header`, `.page-title`, `.page-subtitle` | Encabezados de página |
+| `.hstack`, `.vstack` | Flexbox helpers |
+| `.mono`, `.muted`, `.fw-600`, `.fw-700` | Utilities de texto |
+
+### Assets de marca
+
+| Archivo | Uso |
+|---|---|
+| `assets/marlin-logo.png` | Logo Marlin — fondo oscuro nativo (badge oval negro/dorado) |
+| `assets/pml-logo.png` | Logo PML — fondo blanco, solo sobre fondos claros |
+| `assets/pml-logo-transparent.png` | Logo PML — sin fondo, usar sobre navys |
+| `assets/blufin-logo.png` | Logo Blufin Seafood — fondo blanco |
+| `assets/camanchaca-logo.png` | Logo Salmones Camanchaca — fondo blanco |
+| `assets/neptuno-logo.png` | Logo Neptuno Alimentos del Mar — fondo blanco |
+
+Para logos con fondo blanco sobre fondos oscuros, envolver en un `div` blanco con `border-radius`.
+
+---
+
+## 10. Catálogo de SKUs (componente compartido)
+
+Cada proveedor tiene su propio catálogo de SKUs con: código, descripción, categoría, kg/caja, tipo de cajas (opcional).
+
+Este catálogo es el master de productos — se referencia en contratos, facturas, recepciones y costos.
+
+**Categorías por proveedor:**
+- **Blufin:** Tilapia Filete · Tilapia Entera · Camarón · Otros
+- **Camanchaca:** Salmón Reserva · Salmón Premium · Salmón Café · Ahumados · Otros
+- **Neptuno:** Pez Espada · Merluza · Bacalao · Pulpo · Calamar · Otros
+
+El prototipo tiene un componente `SkuCatalogo` reutilizable en `catalogo.jsx` con búsqueda, filtro por categoría y edición inline.
+
+---
+
+## 11. Módulos PRÓXIMAMENTE
+
+Todos estos módulos se activarán uno por uno. Se diseñan primero en el prototipo HTML, se validan con el equipo, y luego se migran a producción.
+
+### Logística (distribución PML)
+- Gestión de rutas, flota propia
+- Entregas a clientes (retail, mayoristas, restaurantes)
+- Tracking de vehículos y órdenes de entrega
+- Firmas digitales de recepción
+
+### Ventas
+- Pipeline de clientes: retail, mayoristas, HORECA, exportación
+- Cotizaciones, pedidos, catálogo de productos
+- Historial de precios por cliente
+- Diferente para PML (clientes externos) vs Marlin (solo PML)
+
+### Cobranza
+- CxC de clientes PML
+- Antigüedad de saldos
+- Recordatorios automáticos (WhatsApp + email)
+- Gestión de cheques y referencias bancarias
+
+### Administración
+- KPIs ejecutivos
+- Bancos y flujo de caja
+- Relación PML ↔ Marlin (órdenes de maquila)
+
+### Contabilidad
+- CxP a proveedores
+- Timbrado de CFDI (integración con PAC)
+- Conciliaciones bancarias
+- Polizas contables
+
+### Recursos Humanos
+- Expedientes de empleados
+- Nómina
+- Vacaciones y permisos
+- Evaluaciones de desempeño
+
+### Marlin Lizárraga
+- Misma plataforma pero con datos de Marlin
+- Producción: órdenes de maquila, materia prima, almacenes
+- Habilitado cuando el módulo esté completo
+
+---
+
+## 12. Esquema Supabase — COMPLETO
+
+> **Este esquema es la base de datos de producción.** Toda tabla nueva se documenta aquí antes de implementarse.
+> Usar PostgreSQL + RLS filtrado por `empresa_id`. Habilitar RLS en TODAS las tablas.
+
+### Tablas core (compartidas)
+
+```sql
+-- ─────────────────────────────────────────────
+-- EMPRESAS DEL GRUPO
+-- ─────────────────────────────────────────────
+create table empresas (
+  id       text primary key,   -- 'pml' | 'marlin'
+  nombre   text not null,
+  rfc      text,
+  tipo     text,               -- 'Distribuidora' | 'Productora'
+  ciudad   text,
+  activo   boolean default true
+);
+
+insert into empresas values
+  ('pml',    'Productos Marinos Lizárraga, S. de R.L. de C.V.', 'PML123456789', 'Distribuidora', 'Zapopan, Jalisco', true),
+  ('marlin', 'Marlin Lizárraga, S. de R.L. de C.V.',           'MAR987654321', 'Productora',    'Zapopan, Jalisco', false);
+
+-- ─────────────────────────────────────────────
+-- USUARIOS Y ROLES
+-- ─────────────────────────────────────────────
+create table usuarios (
+  id            uuid primary key default gen_random_uuid(),
+  auth_user_id  uuid references auth.users(id) on delete cascade,  -- Supabase Auth
+  nombre        text not null,
+  email         text unique not null,
+  rol           text not null default 'vendedor',
+    -- 'admin_total' | 'director_ops' | 'coord_logistica' | 'gerente_rh' | 'contador' | 'vendedor'
+  empresa_id    text references empresas(id),
+  activo        boolean default false,  -- admin debe activar manualmente
+  created_at    timestamptz default now(),
+  updated_at    timestamptz default now()
+);
+
+-- RLS: usuario solo ve su propio registro y los de su empresa si es admin
+alter table usuarios enable row level security;
+
+-- ─────────────────────────────────────────────
+-- CATÁLOGO MAESTRO DE SKUS
+-- ─────────────────────────────────────────────
+create table catalogo_sku (
+  id          uuid primary key default gen_random_uuid(),
+  empresa_id  text references empresas(id),
+  proveedor   text not null,  -- 'blufin' | 'camanchaca' | 'neptuno'
+  code        text not null,
+  descripcion text not null,
+  categoria   text,           -- 'Tilapia Filete' | 'Salmón Premium' | 'Pulpo' | etc
+  kg_caja     numeric(8,3) not null,
+  cajas_tipo  text,
+  activo      boolean default true,
+  created_at  timestamptz default now(),
+  unique(empresa_id, proveedor, code)
+);
+
+-- ─────────────────────────────────────────────
+-- CATÁLOGOS DE REFERENCIA
+-- ─────────────────────────────────────────────
+create table bancos (
+  id     serial primary key,
+  nombre text not null unique  -- 'MONEX' | 'SANTANDER' | 'BBVA' | etc
+);
+
+insert into bancos (nombre) values ('MONEX'), ('SANTANDER');
+
+create table agencias_importadoras (
+  id           serial primary key,
+  razon_social text not null,
+  rfc          text,
+  ciudad       text,
+  activo       boolean default true
+);
+
+insert into agencias_importadoras (razon_social, rfc) values
+  ('LTP IMPORTACIONES', null),
+  ('MAFA', null),
+  ('AGENCIA ADUANAL PACIFICO', null),
+  ('GLOBAL CUSTOMS MX', null);
+
+create table navieras (
+  id     serial primary key,
+  nombre text not null unique
+);
+
+insert into navieras (nombre) values ('COSCO'),('HAPAG-LLOYD'),('MSC'),('MAERSK'),('EVERGREEN'),('CMA CGM'),('OOCL'),('CSAV');
+
+create table bodegas (
+  id         serial primary key,
+  nombre     text not null,
+  ciudad     text,
+  empresa_id text references empresas(id)
+);
+
+insert into bodegas (nombre, ciudad, empresa_id) values
+  ('FRIOMEX', 'Guadalajara', 'pml'),
+  ('JALNAY',  'Guadalajara', 'pml'),
+  ('ALMACEN GENERAL', 'Guadalajara', 'pml');
+```
+
+---
+
+### Tablas Blufin Seafood
+
+```sql
+-- ─────────────────────────────────────────────
+-- CONTRATOS
+-- ─────────────────────────────────────────────
+create table blufin_contratos (
+  id               uuid primary key default gen_random_uuid(),
+  empresa_id       text references empresas(id),
+  folio            text unique not null,    -- 'MCO-CV-003542'
+  fecha            date,
+  lote             text,
+  status           text not null default 'Contratado',
+    -- 'Contratado' | 'En tránsito' | 'En puerto' | 'Entregado'
+  eta_puerto       date,
+  eta_bodega       date,                    -- CLAVE para Central de Costos (ordenar DESC)
+  contenedor       text,
+  naviera_id       int references navieras(id),
+  total_usd        numeric(14,2),
+  total_kg         numeric(12,3),
+  anticipo_usd     numeric(14,2),
+  anticipo_fecha   date,
+  anticipo_pagado  boolean default false,   -- CRÍTICO: sin este campo el módulo de pagos falla
+  saldo_usd        numeric(14,2),
+  saldo_fecha      date,
+  saldo_pagado     boolean default false,   -- CRÍTICO
+  tc_ponderado     numeric(10,4),           -- TC de respaldo si no hay pagos ni forwards
+  created_at       timestamptz default now(),
+  created_by       uuid references usuarios(id)
+);
+
+alter table blufin_contratos enable row level security;
+
+-- ─────────────────────────────────────────────
+-- PRODUCTOS POR CONTRATO
+-- ─────────────────────────────────────────────
+create table blufin_contrato_productos (
+  id           uuid primary key default gen_random_uuid(),
+  contrato_id  uuid references blufin_contratos(id) on delete cascade,
+  sku_id       uuid references catalogo_sku(id),
+  marca        text,
+  pct          text,   -- porcentaje de limpieza ('95%', '90%')
+  talla        text,   -- '3-5' | '5-7' | '350-550' | etc
+  kg           numeric(12,3),
+  kg_caja      numeric(8,3),
+  cajas        int,
+  precio_usd   numeric(10,4),
+  total_usd    numeric(14,2)
+);
+
+-- ─────────────────────────────────────────────
+-- PAGOS (anticipos y saldos)
+-- ─────────────────────────────────────────────
+create table blufin_pagos (
+  id            uuid primary key default gen_random_uuid(),
+  contrato_id   uuid references blufin_contratos(id),
+  tipo          text not null,  -- 'anticipo' | 'saldo'
+  monto_usd     numeric(14,2) not null,
+  tc            numeric(10,4) not null,  -- TC aplicado — CLAVE para costo promedio ponderado
+  monto_mxn     numeric(16,2),           -- calculado: monto_usd × tc
+  fecha         date not null,
+  banco_id      int references bancos(id),
+  referencia    text,
+  capturado_por uuid references usuarios(id),
+  created_at    timestamptz default now()
+);
+
+alter table blufin_pagos enable row level security;
+
+-- ─────────────────────────────────────────────
+-- FORWARDS CAMBIARIOS
+-- ─────────────────────────────────────────────
+create table blufin_forwards (
+  id            uuid primary key default gen_random_uuid(),
+  contrato_id   uuid references blufin_contratos(id),
+  asociado_a    text,       -- 'anticipo' | 'saldo'
+  monto_usd     numeric(14,2),
+  tc_forward    numeric(10,4),  -- TC pactado — usado en costos si no hay pagos reales
+  monto_mxn     numeric(16,2),
+  fecha_cierre  date,
+  fecha_entrega date,
+  banco_id      int references bancos(id),
+  status        text default 'Pendiente',  -- 'Pendiente' | 'Ejecutado'
+  capturado_por uuid references usuarios(id),
+  created_at    timestamptz default now()
+);
+
+-- ─────────────────────────────────────────────
+-- RECEPCIONES EN BODEGA
+-- ─────────────────────────────────────────────
+create table blufin_recepciones (
+  id              uuid primary key default gen_random_uuid(),
+  contrato_id     uuid references blufin_contratos(id),
+  fecha_recepcion date not null,
+  bodega_id       int references bodegas(id),
+  observaciones   text,
+  capturado_por   uuid references usuarios(id),
+  created_at      timestamptz default now()
+);
+
+create table blufin_recepcion_lineas (
+  id             uuid primary key default gen_random_uuid(),
+  recepcion_id   uuid references blufin_recepciones(id) on delete cascade,
+  sku_id         uuid references catalogo_sku(id),
+  kg_contratados numeric(12,3) not null,
+  kg_recibidos   numeric(12,3) not null,
+  diferencia     numeric(12,3) generated always as (kg_recibidos - kg_contratados) stored,
+  observaciones  text
+);
+
+-- ─────────────────────────────────────────────
+-- NOTAS DE CRÉDITO (complejas — con CFDI)
+-- ─────────────────────────────────────────────
+create table blufin_notas_credito (
+  id                  uuid primary key default gen_random_uuid(),
+  empresa_id          text references empresas(id),
+  folio_interno       text not null,
+  folio_timbrado      text,            -- UUID del CFDI timbrado con el SAT
+  razon               text not null,   -- 'presentacion' | 'descuento' | 'faltante'
+  contrato_origen_id  uuid references blufin_contratos(id),
+  recepcion_origen_id uuid references blufin_recepciones(id),
+  monto_usd           numeric(14,2) not null,
+  tc                  numeric(10,4),
+  monto_mxn           numeric(16,2),
+  status              text default 'Pendiente',  -- 'Pendiente' | 'Aplicada'
+  saldo_pendiente_usd numeric(14,2),
+  created_at          timestamptz default now()
+);
+
+create table blufin_nc_aplicaciones (
+  id                  uuid primary key default gen_random_uuid(),
+  nc_id               uuid references blufin_notas_credito(id),
+  contrato_destino_id uuid references blufin_contratos(id),
+  monto_usd           numeric(14,2) not null,
+  fecha               date not null,
+  created_at          timestamptz default now()
+);
+
+-- ─────────────────────────────────────────────
+-- REVISIÓN DE FACTURAS DEL PROVEEDOR
+-- ─────────────────────────────────────────────
+create table blufin_facturas (
+  id               uuid primary key default gen_random_uuid(),
+  contrato_id      uuid references blufin_contratos(id),
+  fecha_subida     date,
+  nombre_archivo   text,
+  storage_path     text,    -- path en Supabase Storage
+  status           text default 'Pendiente revisión',  -- | 'Aprobada'
+  total_contrato   numeric(14,2),
+  total_factura    numeric(14,2),
+  diferencia_monto numeric(14,2) generated always as (total_factura - total_contrato) stored,
+  revisado_por     uuid references usuarios(id),
+  created_at       timestamptz default now()
+);
+
+create table blufin_factura_lineas (
+  id                   uuid primary key default gen_random_uuid(),
+  factura_id           uuid references blufin_facturas(id) on delete cascade,
+  -- Datos de la factura del proveedor
+  sku_factura          text,
+  descripcion_factura  text,
+  kg_factura           numeric(12,3),
+  precio_factura       numeric(10,4),
+  total_factura        numeric(14,2),
+  -- Datos del contrato PML
+  sku_contrato         text,
+  descripcion_contrato text,
+  kg_contrato          numeric(12,3),
+  precio_contrato      numeric(10,4),
+  total_contrato       numeric(14,2),
+  -- Resultado de la comparación
+  match                text,   -- 'ok' | 'diferente'
+  diferencias          jsonb,  -- [{ campo, valorContrato, valorFactura, delta }]
+  aceptado             boolean,
+  nota_revision        text
+);
+```
+
+---
+
+### Tablas Salmones Camanchaca
+
+```sql
+-- ─────────────────────────────────────────────
+-- PROVEEDOR
+-- ─────────────────────────────────────────────
+create table proveedores (
+  id              uuid primary key default gen_random_uuid(),
+  empresa_id      text references empresas(id),
+  nombre          text not null,
+  nombre_interno  text,           -- nombre que PML usa internamente
+  pais            text,
+  ciudad          text,
+  rfc             text,
+  moneda          text,           -- 'USD' | 'MXN' | 'EUR'
+  credito_dias    int default 0,
+  contacto        text,
+  email           text,
+  activo          boolean default true,
+  logo_path       text,           -- path en Supabase Storage
+  created_at      timestamptz default now()
+);
+
+-- ─────────────────────────────────────────────
+-- ÓRDENES PLANEADAS (calendario de Felipe vía WhatsApp)
+-- ─────────────────────────────────────────────
+create table cam_ordenes_planeadas (
+  id               uuid primary key default gen_random_uuid(),
+  empresa_id       text references empresas(id),
+  oc_proveedor     text not null,       -- # de OC que viene en la factura
+  descripcion      text,                -- texto libre de Felipe: '18 ton salmón lonja premium'
+  kg_estimados     numeric(12,3),
+  llegada_estimada text,                -- texto libre: 'principios mayo 2026'
+  status           text default 'planeado',
+    -- 'planeado' | 'confirmado' | 'cancelado'
+  folio_interno    text,                -- se asigna al confirmar con factura
+  capturado_por    uuid references usuarios(id),
+  created_at       timestamptz default now()
+);
+
+-- ─────────────────────────────────────────────
+-- SECUENCIA DE FOLIOS COMPARTIDA SA/MX
+-- CAM-001 (SA), CAM-002 (MX), CAM-003 (SA), etc.
+-- ─────────────────────────────────────────────
+create sequence cam_folio_seq start 1;
+
+create function next_cam_folio() returns text as $$
+  select 'CAM-' || lpad(nextval('cam_folio_seq')::text, 3, '0')
+$$ language sql;
+
+-- ─────────────────────────────────────────────
+-- CONTENEDORES SA (Camanchaca Chile — importación USD)
+-- ─────────────────────────────────────────────
+create table cam_contenedores_sa (
+  id                uuid primary key default gen_random_uuid(),
+  empresa_id        text references empresas(id),
+  folio_interno     text unique not null default next_cam_folio(),
+    -- 'CAM-001', 'CAM-003', ... (impares = SA)
+  orden_planeada_id uuid references cam_ordenes_planeadas(id),
+  oc_proveedor      text,
+  factura           text,             -- # factura del proveedor (null si solo planeado)
+  fecha_factura     date,
+  fecha_vencimiento date,             -- REQUERIDO para calendario
+  status            text not null default 'Planeado',
+    -- 'Planeado' | 'En tránsito' | 'En Manzanillo' | 'Entregado'
+  eta_manzanillo    date,
+  eta_bodega        date,             -- = eta_manzanillo + 7 días (editable)
+  naviera_id        int references navieras(id),
+  total_usd         numeric(14,2),
+  total_kg          numeric(12,3),
+  capturado_por     uuid references usuarios(id),
+  created_at        timestamptz default now()
+);
+
+create table cam_productos_sa (
+  id            uuid primary key default gen_random_uuid(),
+  contenedor_id uuid references cam_contenedores_sa(id) on delete cascade,
+  sku_id        uuid references catalogo_sku(id),
+  kg_caja       numeric(8,3),
+  cajas         int,
+  kg            numeric(12,3),
+  precio_usd    numeric(10,4),
+  total_usd     numeric(14,2)
+);
+
+-- Pagos al proveedor USD (sin anticipos — completo o abonos)
+create table cam_pagos_sa (
+  id            uuid primary key default gen_random_uuid(),
+  contenedor_id uuid references cam_contenedores_sa(id),
+  tipo          text not null,  -- 'completo' | 'abono'
+  monto_usd     numeric(14,2) not null,
+  tc            numeric(10,4) not null,  -- TC aplicado — CLAVE para costo promedio
+  monto_mxn     numeric(16,2),
+  fecha         date not null,
+  banco_id      int references bancos(id),
+  referencia    text,
+  created_at    timestamptz default now()
+);
+
+-- Forwards cambiarios SA
+create table cam_forwards_sa (
+  id            uuid primary key default gen_random_uuid(),
+  contenedor_id uuid references cam_contenedores_sa(id),
+  monto_usd     numeric(14,2) not null,
+  tc_forward    numeric(10,4) not null,  -- TC fijo a futuro — usado en costos si no hay pagos
+  monto_mxn     numeric(16,2),
+  fecha_cierre  date,
+  fecha_entrega date,
+  banco_id      int references bancos(id),
+  status        text default 'Pendiente',  -- 'Pendiente' | 'Ejecutado'
+  created_at    timestamptz default now()
+);
+
+-- Costo importación (pagos en MXN a agencias aduanales)
+-- Pueden ser MÚLTIPLES agencias por contenedor (LTP + MAFA, etc.)
+-- Fórmula: costoTotalKg = (totalUSD × tcEfectivo + Σmonto_mxn) / totalKg
+create table cam_costo_importacion (
+  id            uuid primary key default gen_random_uuid(),
+  contenedor_id uuid references cam_contenedores_sa(id),
+  agencia_id    int references agencias_importadoras(id),
+  monto_mxn     numeric(14,2) not null,
+  pagado        boolean default false,
+  fecha         date,
+  observaciones text,  -- 'Pedimento 06/2026-001'
+  created_at    timestamptz default now()
+);
+
+-- Recepciones SA en bodega
+create table cam_recepcion_sa (
+  id            uuid primary key default gen_random_uuid(),
+  contenedor_id uuid references cam_contenedores_sa(id) unique,  -- 1 recepción por contenedor
+  fecha         date not null,
+  bodega_id     int references bodegas(id),
+  capturado_por uuid references usuarios(id),
+  created_at    timestamptz default now()
+);
+
+create table cam_recepcion_sa_lineas (
+  id             uuid primary key default gen_random_uuid(),
+  recepcion_id   uuid references cam_recepcion_sa(id) on delete cascade,
+  sku_id         uuid references catalogo_sku(id),
+  kg_contratados numeric(12,3) not null,
+  kg_recibidos   numeric(12,3) not null,
+  diferencia     numeric(12,3) generated always as (kg_recibidos - kg_contratados) stored,
+  observaciones  text
+);
+
+-- NC por descuento SA (simplificada — solo monto + motivo, sin CFDI)
+create table cam_nc_sa (
+  id            uuid primary key default gen_random_uuid(),
+  contenedor_id uuid references cam_contenedores_sa(id),
+  monto_usd     numeric(14,2) not null,
+  motivo        text not null,
+  fecha         date not null,
+  status        text default 'Aplicada',
+  created_at    timestamptz default now()
+);
+
+-- ─────────────────────────────────────────────
+-- COMPRAS MX (Camanchaca México — facturas en MXN)
+-- ─────────────────────────────────────────────
+create table cam_compras_mx (
+  id                uuid primary key default gen_random_uuid(),
+  empresa_id        text references empresas(id),
+  folio_interno     text unique not null default next_cam_folio(),
+    -- 'CAM-002', 'CAM-004', ... (pares = MX)
+  factura_num       text not null,    -- 'MX-8841'
+  entrada_intelisis text,             -- 'EI-2026-0234' — número en ERP Intelisis
+  fecha_factura     date not null,
+  fecha_vencimiento date,             -- = fecha_factura + 30 días (automático)
+  status            text default 'Pendiente',
+    -- 'Pendiente' | 'Parcial' | 'Liquidada'
+  total_mxn         numeric(16,2) not null,
+  saldo_pendiente   numeric(16,2),   -- = total_mxn - Σ(cam_pagos_mx.monto) - Σ(cam_nc_mx.monto_mxn)
+  capturado_por     uuid references usuarios(id),
+  created_at        timestamptz default now()
+);
+
+create table cam_productos_mx (
+  id         uuid primary key default gen_random_uuid(),
+  compra_id  uuid references cam_compras_mx(id) on delete cascade,
+  sku_id     uuid references catalogo_sku(id),
+  kg_caja    numeric(8,3),
+  cajas      int,
+  kg         numeric(12,3),
+  precio_mxn numeric(10,4),
+  total_mxn  numeric(16,2)
+);
+
+-- Pagos MX (abonos parciales en MXN, crédito 30 días)
+create table cam_pagos_mx (
+  id         uuid primary key default gen_random_uuid(),
+  compra_id  uuid references cam_compras_mx(id),
+  monto      numeric(16,2) not null,
+  fecha      date not null,
+  banco_id   int references bancos(id),
+  referencia text,
+  created_at timestamptz default now()
+);
+
+-- NC por descuento MX (en MXN)
+create table cam_nc_mx (
+  id        uuid primary key default gen_random_uuid(),
+  compra_id uuid references cam_compras_mx(id),
+  monto_mxn numeric(16,2) not null,
+  motivo    text not null,
+  fecha     date not null,
+  status    text default 'Aplicada',
+  created_at timestamptz default now()
+);
+```
+
+---
+
+### Tablas Neptuno Seafood
+
+```sql
+-- ─────────────────────────────────────────────
+-- FACTURAS (el número de factura ES el identificador)
+-- Sin folio interno, sin planeación previa, sin naviera
+-- ─────────────────────────────────────────────
+create table nep_facturas (
+  id                uuid primary key default gen_random_uuid(),
+  empresa_id        text references empresas(id),
+  factura_num       text not null,           -- 'NEP-2026-001' — identificador principal
+  entrada_intelisis text,                    -- 'EI-2026-0900'
+  fecha_factura     date not null,
+  fecha_vencimiento date,
+  status            text default 'Pendiente',
+    -- 'Pendiente' | 'Parcial' | 'Liquidada'
+  total_usd         numeric(14,2) not null,
+  total_kg          numeric(12,3),
+  saldo_usd         numeric(14,2),  -- = total_usd - Σ(pagos.monto) - Σ(nc.monto_usd)
+  capturado_por     uuid references usuarios(id),
+  created_at        timestamptz default now(),
+  unique(empresa_id, factura_num)
+);
+
+alter table nep_facturas enable row level security;
+
+create table nep_factura_productos (
+  id          uuid primary key default gen_random_uuid(),
+  factura_id  uuid references nep_facturas(id) on delete cascade,
+  sku_id      uuid references catalogo_sku(id),
+  kg_caja     numeric(8,3),
+  cajas       int,
+  kg          numeric(12,3),
+  precio_usd  numeric(10,4),
+  total_usd   numeric(14,2)
+);
+
+-- Pagos en USD (completo o abonos)
+create table nep_pagos (
+  id         uuid primary key default gen_random_uuid(),
+  factura_id uuid references nep_facturas(id),
+  tipo       text not null,  -- 'completo' | 'abono'
+  monto_usd  numeric(14,2) not null,
+  tc         numeric(10,4) not null,  -- TC aplicado
+  monto_mxn  numeric(16,2),
+  fecha      date not null,
+  banco_id   int references bancos(id),
+  referencia text,
+  created_at timestamptz default now()
+);
+
+-- Notas de crédito por descuento (simplificadas, solo monto + motivo)
+create table nep_notas_credito (
+  id         uuid primary key default gen_random_uuid(),
+  factura_id uuid references nep_facturas(id),
+  monto_usd  numeric(14,2) not null,
+  motivo     text not null,
+  fecha      date not null,
+  status     text default 'Aplicada',
+  created_at timestamptz default now()
+);
+```
+
+---
+
+### Tablas para módulos futuros (esqueleto)
+
+```sql
+-- ─────────────────────────────────────────────
+-- LOGÍSTICA (distribución PML) — PRÓXIMAMENTE
+-- ─────────────────────────────────────────────
+-- log_vehiculos (id, empresa_id, placa, tipo, capacidad_kg, activo)
+-- log_clientes  (id, empresa_id, razon_social, rfc, tipo, ciudad, credito_dias)
+-- log_rutas     (id, empresa_id, nombre, descripcion, activo)
+-- log_entregas  (id, empresa_id, cliente_id, vehiculo_id, fecha, status, total_kg)
+-- log_entrega_lineas (id, entrega_id, sku_id, kg, precio_mxn)
+
+-- ─────────────────────────────────────────────
+-- VENTAS — PRÓXIMAMENTE
+-- ─────────────────────────────────────────────
+-- ven_clientes     (id, empresa_id, razon_social, rfc, tipo, ciudad, credito_dias)
+-- ven_cotizaciones (id, empresa_id, cliente_id, fecha, status, total_mxn)
+-- ven_pedidos      (id, empresa_id, cliente_id, cotizacion_id, fecha, status, total_mxn)
+-- ven_pedido_lineas (id, pedido_id, sku_id, kg, precio_mxn)
+
+-- ─────────────────────────────────────────────
+-- COBRANZA — PRÓXIMAMENTE
+-- ─────────────────────────────────────────────
+-- cob_cuentas_cobrar (id, empresa_id, cliente_id, pedido_id, monto, fecha_vencimiento, status)
+-- cob_pagos_recibidos (id, cuenta_id, monto, fecha, banco_id, referencia)
+
+-- ─────────────────────────────────────────────
+-- CONTABILIDAD — PRÓXIMAMENTE
+-- ─────────────────────────────────────────────
+-- cont_cfdi    (id, empresa_id, tipo, rfc_emisor, rfc_receptor, monto, fecha, uuid_sat)
+-- cont_polizas (id, empresa_id, tipo, fecha, concepto, monto)
+
+-- ─────────────────────────────────────────────
+-- RECURSOS HUMANOS — PRÓXIMAMENTE
+-- ─────────────────────────────────────────────
+-- rh_empleados  (id, empresa_id, nombre, puesto, departamento, fecha_ingreso, salario, activo)
+-- rh_nomina     (id, empresa_id, periodo, empleado_id, salario_bruto, deducciones, neto)
+-- rh_vacaciones (id, empleado_id, fecha_inicio, fecha_fin, dias, status)
+```
+
+---
+
+### Configuración de Supabase
+
+```sql
+-- 1. Habilitar RLS en TODAS las tablas de negocio
+-- 2. Política base: usuario solo ve datos de su empresa
+create policy "empresa_isolation" on blufin_contratos
+  for all using (empresa_id = (
+    select empresa_id from usuarios where auth_user_id = auth.uid()
+  ));
+-- Aplicar política similar a todas las tablas
+
+-- 3. TC del día — Edge Function que llama a Banxico API
+-- Endpoint: /functions/v1/tc-del-dia
+-- Responde: { tc: 18.435, fecha: '2026-05-26', fuente: 'banxico' }
+
+-- 4. Storage buckets
+-- 'facturas-pdf' — facturas de proveedores
+-- 'documentos-importacion' — pedimentos, BLs, etc.
+-- 'logos-proveedores' — logos de empresas
+-- Policy: solo usuarios de la misma empresa pueden leer/escribir
+
+-- 5. Realtime — habilitar en tablas de pagos para notificaciones
+alter publication supabase_realtime add table blufin_pagos;
+alter publication supabase_realtime add table cam_pagos_sa;
+alter publication supabase_realtime add table cam_pagos_mx;
+alter publication supabase_realtime add table nep_pagos;
+```
+
+---
+
+## 13. Patrones de código críticos
+
+### Patrón de formularios que guardan datos
+
+Todo formulario debe:
+1. Hacer la mutación a Supabase
+2. Invalidar el cache de React Query para que la tabla se refresque
+3. Cerrar el modal
+4. Mostrar toast de éxito/error
+
+```typescript
+// Ejemplo con React Query + Supabase
+const { mutate: registrarPago } = useMutation({
+  mutationFn: async (pago: NuevoPago) => {
+    const { error } = await supabase
+      .from('blufin_pagos')
+      .insert(pago);
+    if (error) throw error;
+  },
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['blufin_pagos', contratoId] });
+    queryClient.invalidateQueries({ queryKey: ['blufin_contratos'] });
+    onClose();
+    toast.success('Pago registrado correctamente');
+  },
+  onError: (err) => toast.error('Error: ' + err.message),
+});
+```
+
+### Cálculo de TC efectivo
+
+```typescript
+// Usado en Central de Costos para calcular costo promedio
+function tcEfectivo(pagos: Pago[], forwards: Forward[], tcDelDia: number): number {
+  if (pagos.length > 0) {
+    // Promedio ponderado de pagos reales
+    const sumProd = pagos.reduce((s, p) => s + p.tc * p.monto_usd, 0);
+    const sumMonto = pagos.reduce((s, p) => s + p.monto_usd, 0);
+    return sumProd / sumMonto;
+  }
+  if (forwards.length > 0) {
+    return forwards[0].tc_forward; // primer forward
+  }
+  return tcDelDia; // fallback — leer de Edge Function
+}
+```
+
+### Actualización de saldo_pendiente
+
+Cada vez que se registra un pago o NC, actualizar `saldo_pendiente` en la tabla padre:
+
+```sql
+-- Trigger en cam_pagos_mx para actualizar saldo automáticamente
+create or replace function update_cam_compra_saldo()
+returns trigger as $$
+begin
+  update cam_compras_mx
+  set
+    saldo_pendiente = total_mxn
+      - (select coalesce(sum(monto), 0) from cam_pagos_mx where compra_id = new.compra_id)
+      - (select coalesce(sum(monto_mxn), 0) from cam_nc_mx where compra_id = new.compra_id),
+    status = case
+      when saldo_pendiente <= 0.01 then 'Liquidada'
+      when (select sum(monto) from cam_pagos_mx where compra_id = new.compra_id) > 0 then 'Parcial'
+      else 'Pendiente'
+    end
+  where id = new.compra_id;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_update_cam_compra_saldo
+after insert or update on cam_pagos_mx
+for each row execute function update_cam_compra_saldo();
+```
+
+Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
+
+---
+
+## 14. Reglas críticas que NO romper
+
+1. **`blufin_contratos.anticipo_pagado` y `saldo_pagado` son REQUERIDOS.** El módulo de pagos de Blufin usa estos campos para calcular si hay saldo pendiente. Sin ellos el cálculo falla.
+
+2. **TC por contenedor — siempre calcular en este orden:**
+   - Promedio ponderado de pagos reales registrados
+   - TC del forward asociado
+   - TC ponderado del contrato
+   - Fallback: tcDelDia (Banxico API)
+
+3. **Nunca mutar `saldo_pendiente` directamente.** Usar triggers o funciones que lo recalculen a partir de los pagos y NCs registrados.
+
+4. **ETA Bodega de Camanchaca SA = ETA Manzanillo + 7 días.** Este cálculo es automático pero editable. Mostrar siempre la nota "auto +7d" en el UI.
+
+5. **Folios TST-CV-001..005 son datos de prueba de Blufin.** Eliminar antes de pasar a producción. Son contratos de prueba para verificar el cálculo de costo promedio.
+
+6. **Reglas de Hooks de React.** Nunca llamar hooks después de un `if (condition) return ...`. Si una pantalla tiene diferentes vistas (lista vs detalle), separarlas en dos componentes distintos.
+
+7. **Folio compartido SA/MX en Camanchaca.** Usar la secuencia PostgreSQL `cam_folio_seq` para garantizar unicidad entre SA (impares) y MX (pares). No generar folios en el frontend.
+
+8. **Neptuno no tiene naviera.** Entrega directa en bodega — no registrar campo de naviera.
+
+9. **Camanchaca MX requiere Entrada Intelisis.** Es el número de entrada en el ERP Intelisis de PML — capturar siempre al dar de alta una compra.
+
+---
+
+## 15. Módulos del prototipo HTML → estado
+
+| Módulo | Estado en prototipo | Acción en producción |
+|---|---|---|
+| Login / Auth | ✅ UI completa | Conectar con Supabase Auth |
+| Company Switcher | ✅ UI completa | Conectar con tabla `empresas` |
+| Dashboard General | ✅ KPIs mock | Conectar con queries reales |
+| Importaciones — Picker | ✅ Completo | Conectar con tabla `proveedores` |
+| **Blufin Seafood** | ✅ **Todos los tabs** | **Construir primero** |
+| **Salmones Camanchaca** | ✅ **SA + MX completos** | **Construir segundo** |
+| **Neptuno Seafood** | ✅ **Completo** | **Construir tercero** |
+| Catálogo SKUs | ✅ Compartido | Conectar con `catalogo_sku` |
+| Logística | 🔜 Placeholder | Diseñar en prototipo primero |
+| Administración | 🔜 Dashboard básico | Diseñar en prototipo primero |
+| Ventas | 🔜 Placeholder | Diseñar en prototipo primero |
+| Cobranza | 🔜 Placeholder | Diseñar en prototipo primero |
+| Contabilidad | 🔜 Placeholder | Diseñar en prototipo primero |
+| Recursos Humanos | 🔜 Dashboard básico | Diseñar en prototipo primero |
+| Marlin Lizárraga | 🔜 Deshabilitado | Habilitar cuando esté listo |
+
+---
+
+## 16. Estado de construcción real (lo que está live en producción)
+
+Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east-1), **schema namespace `crm`** (coexiste con WMS en `public`). RLS habilitado con políticas `dev_open` temporales — endurecer al integrar Supabase Auth.
+
+### Foundation ✅
+
+| Pieza | Detalle |
+|---|---|
+| Stack | Vite 5 + React 18 + TS estricto + Tailwind v3 + Supabase JS + React Router v6 + TanStack Query + **Framer Motion 12** + Sonner |
+| Auth | Stub con usuario `admin_total` quemado (`src/lib/auth.tsx`). SSO Google/Microsoft pendiente |
+| Cliente Supabase | `src/lib/supabase.ts` con `db: { schema: 'crm' }` por default |
+| Tipos | `src/types/database.ts` manual con tablas core + Blufin (contratos, productos, pagos, forwards). Regenerar con CLI cuando schema crezca mucho |
+| Shell | Sidebar con switcher PML/Marlin, topbar con switcher de empresa (popover Framer Motion), AppLayout con Outlet |
+| Migraciones empacadas | `supabase/migrations/*.sql` versionadas para re-aplicar a cualquier proyecto |
+| Context para skills | `PRODUCT.md` y `DESIGN.md` en raíz |
+
+### Importaciones — Blufin Seafood
+
+| Tab | Estado | Archivos | Notas |
+|---|---|---|---|
+| **Contratos** | ✅ LIVE | `BlufinContratosListPage.tsx` · `BlufinNuevoContratoPage.tsx` · `BlufinCargaMasivaPage.tsx` (stub PDF) | Auto-cálculos: ETA bodega = ETA puerto + 7d · anticipo 10% · cajas desde kg/kg_caja. Lote y naviera NO se capturan al crear (van en Recepción/Embarque). TC ponderado se llena con `getTcDelDia()` (stub null hasta Edge Function Banxico) |
+| **Pagos** | ✅ LIVE | `BlufinPagosPage.tsx` · `PagoModal.tsx` · `ForwardModal.tsx` · `BlufinPagoMultiplePage.tsx` · `pagos-queries.ts` | Sub-tabs Pendientes / Realizados / Forwards. **3 modos de captura**: (1) Pago individual vía `PagoModal` con auto-fill monto + auto-update flag contrato. (2) Forward vía `ForwardModal` con TC pactado + fecha entrega futura. (3) Pago múltiple vía `BlufinPagoMultiplePage` — página dedicada con checkbox-multiselect, TC/banco/fecha compartidos, override de monto por fila, sticky footer con totales, mutación batch `createPagosMultiples`. **Ejecutar forward**: botón "Ejecutar" en sub-tab Forwards convierte forward Pendiente en pago real (`executeForward`) — inserta pago con TC pactado + referencia `FORWARD ejecutado <fecha>` + cambia status a Ejecutado + recalcula flag. **Bloqueos**: 1 solo forward Pendiente por (contrato, asociado_a) — opción "Cubre anticipo/saldo" se deshabilita en modal si ya existe. **Pendientes con forward** muestran badge "FORWARD CERRADO PARA <fecha entrega>" y CTA cambia a "Pagar spot" para distinguir pago al TC del día vs ejecución del forward. **Realizados** tiene filtros: search · chips tipo · select banco · rango fechas con suma filtrada en vivo. **Liquidado** = `saldo_pagado` (no requiere anticipo_pagado). **Delete con PIN**: cada row tiene botón trash → `DeleteConfirmModal` con PIN 4 dígitos; `deletePago` recalcula flag a la baja. Bloqueo: `deleteContrato` rechaza si tiene pagos o forwards |
+| Recepción | 🔜 Próximo | — | Aquí se capturan **Lote** y **Naviera real** (cuando llega contenedor) |
+| Notas de crédito | 🔜 | — | Flujo complejo: CFDI timbrado, razón (presentación/descuento/faltante), aplicaciones a contratos, saldo pendiente |
+| Facturas | 🔜 | — | Subir PDF + comparador línea-por-línea vs contrato |
+| Calendario | 🔜 | — | Reutilizable: ETAs + vencimientos pagos |
+| Central de Costos | 🔜 | — | La pieza estratégica: TC efectivo ponderado, costo promedio por kg restante. Necesita Pagos primero ✅ |
+| Productos | 🔜 | — | CRUD catálogo SKU Blufin |
+
+### Importaciones — Camanchaca y Neptuno
+
+Picker UI los muestra como "Próximamente". Schema Camanchaca y Neptuno **no** migrado todavía. Habilitar cuando Blufin esté completo.
+
+### Resto de módulos
+
+Logística, Ventas, Cobranza, Administración, Contabilidad, RH, Marlin — sidebar los muestra con badge SOON. Schema sin crear, frontend sin crear.
+
+### Pendientes de infraestructura
+
+| # | Pendiente | Bloquea |
+|---|---|---|
+| 1 | Edge Function `tc-del-dia` con Banxico SIE | Central de Costos, autorrellenar TC en Pagos/Forwards/Pago múltiple |
+| 2 | Edge Function parser PDF con LLM | Carga masiva real de contratos Blufin |
+| 3 | Supabase Auth real (Google Workspace + Microsoft Entra) | RLS endurecida + PIN del super admin movido a DB |
+| 4 | RLS por `empresa_id` desde JWT (reemplazar `dev_open`) | Multi-usuario seguro |
+| 5 | Supabase Storage buckets (`facturas-pdf`, `documentos-importacion`, `logos-proveedores`) | Subir PDFs de facturas |
+| 6 | PIN del super admin en `crm.usuarios.pin_eliminacion` con hash (bcrypt/argon2) + Edge Function `verify-admin-pin` | Hoy vive en `localStorage` (default `1234`) — stub para desarrollo |
+
+### Datos de prueba en BD
+
+- `crm.blufin_contratos`: 2 reales — `MCO-CV-100001` ($24,800), `MCO-CV-003876` ($74,456 con anticipo $7,445.60 ya pagado)
+- `crm.blufin_pagos`: 1 — anticipo de MCO-CV-003876 vía BANBAJIO con SPEI-TEST-9001
+- Catálogo: 11 SKUs Blufin seedeados desde migración
+
+---
+
+## 17. Patrones de diseño establecidos
+
+Tres skills se aplicaron sobre la base: **emil-design-eng** (Emil Kowalski), **design-taste-frontend-v1** (anti-slop visual) e **impeccable** (product register). Cuando entran en conflicto, **impeccable product gana** porque es un CRM operativo, no marketing.
+
+### Decisiones cementadas
+
+| Decisión | Por qué | Skill que pesó |
+|---|---|---|
+| **Geist + Geist Mono** como font family | Mejores tabular nums para tablas densas; mantenemos contra `Inter` del product register porque la diferencia es marginal y `Geist` se ve más afilado | design-taste-v1 |
+| **Restrained color strategy** — un acento azul ≤10% surface | Producto, no marketing | impeccable |
+| **`Geist Mono` para todo número/folio/referencia** con `tabular-nums` | Alineación correcta en tablas financieras | impeccable + emil |
+| **Light theme único** sidebar navy + content claro | Operación oficina con luz de día | impeccable theme decision |
+| **No Stagger en data lists ni KPIs** | "Product loads into a task; users don't want to watch it load" | impeccable product |
+| **`<PageEnter>` sí en headers** (sutil 280ms) | Convey state change sin orquestar carga | impeccable + emil |
+| **Press feedback `scale(0.97)`** en todo botón | Touch que se nota; universal good | emil |
+| **Hover effects bajo `@media (hover: hover) and (pointer: fine)`** | No falsos hovers en touch | emil |
+| **Skeleton loaders, NO spinners centrados** | Producto serio | impeccable + design-taste |
+| **Diffusion shadow `0 20px 40px -15px`** en hero tiles únicamente | Premium sin glow | design-taste |
+| **Springs Framer Motion solo en mount/dismount de popovers y modales** | Convey state, no decoración | emil + impeccable |
+| **Modal para pago individual**, página dedicada para pago múltiple | Forms cortos → modal; con muchas decisiones → página | impeccable |
+| **Spacing scale 4/8/12/16/20/24/28/32** (no `13`, `15`, `7`) | Token consistency | DESIGN.md |
+| **KPI cards compactos** padding 12×14 · value 20px | Producto operativo: tablas se ganan el espacio, KPIs son orientativos | impeccable density |
+| **Page header compact**: title 18px, subtitle 12px, margin-bottom 14px. Tabs 8×14 con 12px font. Grid gap 12px | Maximizar espacio vertical para listas — usuario opera 8h/día sobre tablas | impeccable density |
+| **Acciones destructivas con PIN del super admin** (4 dígitos, `<DeleteConfirmModal>`) | Operación familiar — un solo dueño con poder absoluto + auditoría visual cuando borre algo | producto |
+| **Radii tokens `--r-sm/md/lg/xl` (6/10/14/20px)** | No `2.5rem` en surfaces principales — esto es herramienta, no Bento dashboard | impeccable |
+| **Empty states con icono + título + descripción + CTA**, no solo "Sin datos" | UX writing | impeccable |
+| **Sin emojis en código/UI** (`✓`, `🔒`, `⏰` prohibidos) | Reemplazar por badges o Icon component | design-taste + impeccable |
+
+### Patrones de componentes
+
+**Cuando crear un módulo Blufin (tab) nuevo:**
+
+1. Crear `<TabName>Page.tsx` en `src/pages/blufin/` con:
+   - `<PageEnter>` solo en el header del tab (no en data)
+   - Header con título + subtitle + CTA top-right
+   - KPIs row de 4 columnas (instant mount, sin Stagger)
+   - Sub-tabs si la tab tiene múltiples vistas (Pendientes/Realizados/Forwards)
+   - Lista o tabla con skeleton loader
+   - Empty state con CTA
+2. Queries en `src/features/blufin/<tab>-queries.ts` con tipos en `src/types/database.ts`
+3. Modal de captura `<Feature>Modal.tsx` en `src/features/blufin/` si form ≤ 10 campos
+4. Página dedicada de captura `<TabName>Nuevo<X>Page.tsx` si form > 10 campos
+5. Habilitar tab en `BlufinLayout.tsx` cambiando `enabled: false → true`
+6. Agregar ruta en `App.tsx`
+7. Smoke test: navegar → ver lista vacía → crear ítem → verificar persistencia en Supabase → confirmar invalidación de cache + toast
+8. Documentar en CLAUDE.md §16
+
+**Cuando el flag de un contrato cambia (anticipo_pagado, saldo_pagado, status):**
+La mutación que registra el evento (pago, recepción, etc.) ES responsable de actualizar el flag. No usar triggers SQL todavía (vive en el frontend para que sea visible/testeable). Cuando integremos auth real y multi-usuario, mover a triggers para evitar race conditions.
+
+**Cuando una acción requiere captura en batch (N items con config compartida):**
+- Página dedicada (no modal) en `BlufinXMultiplePage.tsx`
+- Sección superior con config compartida (TC, banco, fecha, referencia)
+- Tabla de items con checkbox-multiselect y override individual por fila
+- Sticky footer con count + total USD + total MXN + botón "Registrar N items"
+- Mutación batch que (1) inserta N filas con un solo `.insert([...])`, (2) recalcula efectos secundarios (flags de contratos, totales) en paralelo con `Promise.all`, (3) si algún paso falla, todo el batch falla
+- Patrón ya implementado en `createPagosMultiples` (`pagos-queries.ts`)
+
+**Cuando una entidad puede eliminarse (pago, contrato, forward, NC, etc.):**
+- Botón trash en cada row de la tabla → `setDeleteTarget({ kind, id, description })`
+- Reutilizar `<DeleteConfirmModal>` (`src/components/DeleteConfirmModal.tsx`)
+- Props: `what` (e.g. "este pago"), `itemDescription` (folio + tipo + monto), `consequences` (qué pasa con flags/datos relacionados)
+- Requiere **PIN de 4 dígitos del super admin** (`src/lib/pin.ts`, default `1234`, override en localStorage)
+- Solo accesible si `user.rol === 'admin_total'` — el modal muestra warning si no
+- Mutación delete debe ser **simétrica al create**: si crear marca un flag, borrar debe **desmarcarlo** recalculando el acumulado. Ejemplo: `deletePago` borra el pago + recalcula `anticipo_pagado`/`saldo_pagado` del contrato según el nuevo acumulado.
+- Invalidar todas las queries afectadas en `onSuccess`
+
+**Cuando el módulo tiene `tipos` con metadata visual (anticipo/saldo/abono, tipo de NC, etc.):**
+Definir un objeto `TIPO_META` con bg/text/label/icon y un componente `<TipoPill>` que lo renderiza. Mantener consistencia visual.
+
+### Animación / motion checklist
+
+- [ ] `<PageEnter>` solo en header del módulo, no en data
+- [ ] KPIs y filas de tabla aparecen instant (sin fade-up class)
+- [ ] Springs (`SPRING.snappy`) solo en mount/dismount de popovers/modales
+- [ ] `prefers-reduced-motion: reduce` apaga animaciones (ya en index.css)
+- [ ] Press feedback `scale(0.97)` (heredado de `.btn`)
+- [ ] Hover lift solo en hero cards (no en data tables)
+
+### Image scaling checklist
+
+- [ ] Logos proveedor en hero tile: `120×60 padding 8 border-radius var(--r-md)`
+- [ ] Logos proveedor en module header: `120×60 padding 8`
+- [ ] Logos proveedor en secondary tile: `80×40 padding 6 border-radius var(--r-sm)`
+- [ ] Avatar de usuario: `32×32 círculo` con iniciales 2 chars, sin color decorativo
+- [ ] Brand container sidebar: `32×32` con padding 4
+
+### Anti-patterns que NO repetir
+
+- `transition: all` → siempre propiedades específicas
+- `borderRadius: 8` / `10` / `12` hardcoded → siempre `var(--r-sm/md/lg)`
+- `padding: 18` / `30` / `42` → solo del scale (4/8/12/16/20/24/28/32)
+- `<style>{`...`}</style>` inline en componentes → vive en `src/index.css`
+- 3 cards iguales en grid simétrico → usar layout asym o list
+- `border-left: 3px var(--accent)` como side-stripe → use badge o full border
+- Glow/neon outer shadow → use plain shadow tinted to surface
+- Emojis en cualquier lado → Icon component o badge

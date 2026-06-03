@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Build artifacts
+dist
+dist-ssr
+.vite
+vite.config.d.ts
+vite.config.js
+vite.config.js.map
+
+# Local / secret env (ver .env.example para la plantilla)
+*.local
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+.thumbnail
+*.log
+
+# Carpetas locales de trabajo (no son código fuente)
+screenshots/
+uploads/
+
+# Claude Code session-local artifacts (no son del proyecto)
+.claude/.credentials.json

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRM Lizárraga</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script src="blufin-data.js"></script>
+<script src="calendario-data.js"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="dashboards.jsx"></script>
+<script type="text/babel" src="blufin.jsx"></script>
+<script type="text/babel" src="blufin-bulk.jsx"></script>
+<script type="text/babel" src="blufin-pagos.jsx"></script>
+<script type="text/babel" src="blufin-contrato.jsx"></script>
+<script type="text/babel" src="blufin-recepcion.jsx"></script>
+<script type="text/babel" src="blufin-notas.jsx"></script>
+<script type="text/babel" src="blufin-facturas.jsx"></script>
+<script type="text/babel" src="blufin-calendario.jsx"></script>
+<script type="text/babel" src="blufin-costos.jsx"></script>
+
+<!-- ── Módulo Camanchaca ────────────────────────────────────────────────── -->
+<script src="camanchaca-data.js"></script>
+<script type="text/babel" src="camanchaca-sa-forms.jsx"></script>
+
+<script type="text/babel" src="catalogo.jsx"></script>
+
+<!-- Neptuno -->
+<script src="neptuno-data.js"></script>
+<script type="text/babel" src="camanchaca.jsx"></script>
+<script type="text/babel" src="camanchaca-pagos.jsx"></script>
+<script type="text/babel" src="camanchaca-recepcion.jsx"></script>
+<script type="text/babel" src="camanchaca-mx.jsx"></script>
+<script type="text/babel" src="camanchaca-costos.jsx"></script>
+<script type="text/babel" src="camanchaca-calendario.jsx"></script>
+<script type="text/babel" src="neptuno.jsx"></script>
+
+<script type="text/babel">
+
+
+const { useState, useEffect } = React;
+const { Icon, CompanyCrest, LizarragaLogo, Sidebar, Topbar, DEPTS } = window;
+const { DashboardGeneral, DashboardLogistica, DashboardAdmin, DashboardRH, DashboardPlaceholder } = window;
+const { TweaksPanel, useTweaks, TweakSection, TweakRadio } = window;
+const { BlufinModule } = window;
+const { CamanchacaModule } = window;
+const { NeptunoModule }   = window;
+
+const ROLE_PERMS = {
+  admin_total: { label: "Admin corporativo", depts: ["administracion", "logistica", "ventas", "cobranza", "contabilidad", "rh"] },
+  director_ops: { label: "Director de operaciones", depts: ["administracion", "logistica", "rh"] },
+  coord_logistica: { label: "Coordinador de logística", depts: ["logistica"] },
+  gerente_rh: { label: "Gerente de RH", depts: ["rh", "administracion"] },
+  contador: { label: "Contador", depts: ["contabilidad", "cobranza", "administracion"] },
+  vendedor: { label: "Vendedor", depts: ["ventas"] }
+};
+
+const ROLE_NAMES = {
+  admin_total: "Carlos Lizárraga",
+  director_ops: "Mariana Salgado",
+  coord_logistica: "Luis Montoya",
+  gerente_rh: "Paola Esquivel",
+  contador: "Ricardo Núñez",
+  vendedor: "Fernanda López"
+};
+
+// ============== LOGIN SCREEN ==============
+
+// Google "G" logo SVG
+const GoogleLogo = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+    <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+    <path d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
+    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+  </svg>
+);
+
+// Microsoft logo SVG
+const MicrosoftLogo = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="8.5" height="8.5" fill="#F25022"/>
+    <rect x="9.5" y="0" width="8.5" height="8.5" fill="#7FBA00"/>
+    <rect x="0" y="9.5" width="8.5" height="8.5" fill="#00A4EF"/>
+    <rect x="9.5" y="9.5" width="8.5" height="8.5" fill="#FFB900"/>
+  </svg>
+);
+
+const LoginScreen = ({ onLogin }) => {
+  const [tab, setTab] = useEffect ? "login" : "login";
+  const [activeTab, setActiveTab] = useState("login"); // login | signup
+  const [user, setUser] = useState("carlos@lizarraga.mx");
+  const [pwd, setPwd] = useState("");
+  const [nombre, setNombre] = useState("");
+  const [empresa, setEmpresa] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+
+  return (
+    <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1.1fr 1fr", background: "#F6F9FC" }}>
+
+      {/* ── LEFT — branded splash ── */}
+      <div style={{
+        position: "relative",
+        background: "linear-gradient(160deg, #0F2F52 0%, #0A2540 45%, #061830 100%)",
+        color: "white", overflow: "hidden",
+        display: "flex", flexDirection: "column",
+      }}>
+        {/* Subtle grid pattern */}
+        <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)", backgroundSize: "40px 40px", pointerEvents: "none" }} />
+        {/* Glow */}
+        <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translate(-50%,-50%)", width: 600, height: 600, borderRadius: "50%", background: "radial-gradient(circle, rgba(0,115,230,0.18) 0%, transparent 65%)", pointerEvents: "none" }} />
+        {/* Bottom wave */}
+        <svg style={{ position: "absolute", bottom: 0, left: 0, right: 0, width: "100%", opacity: 0.08, pointerEvents: "none" }} height="160" viewBox="0 0 1200 160" preserveAspectRatio="none">
+          <path d="M0,80 C300,20 600,140 900,80 C1050,50 1150,100 1200,80 L1200,160 L0,160 Z" fill="#00A3FF"/>
+        </svg>
+
+        {/* Top brand */}
+        <div style={{ position: "relative", zIndex: 2, padding: "28px 40px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="fish" size={18} style={{ color: "#00A3FF" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>Grupo Lizárraga</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 600 }}>CRM Corporativo · v2.4.1</div>
+          </div>
+        </div>
+
+        {/* Center logos */}
+        <div style={{ position: "relative", zIndex: 2, flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px 48px", gap: 0 }}>
+
+          {/* Marlin — badge logo, natural on dark */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, marginBottom: 44 }}>
+            <img
+              src="assets/marlin-logo.png"
+              alt="Marlin Lizárraga"
+              style={{ width: 290, height: "auto", objectFit: "contain", filter: "drop-shadow(0 10px 28px rgba(0,0,0,0.55))" }}
+            />
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>
+              MARLIN LIZÁRRAGA, S. DE R.L. DE C.V.
+            </div>
+          </div>
+
+          {/* Divider con texto */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, width: "80%", marginBottom: 44 }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>GRUPO</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+          </div>
+
+          {/* PML — transparent PNG directo sobre navy */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            <img
+              src="assets/pml-logo-transparent.png"
+              alt="Productos Marinos Lizárraga"
+              style={{ width: 300, height: "auto", objectFit: "contain", filter: "brightness(1.15) drop-shadow(0 6px 20px rgba(0,115,230,0.35))" }}
+            />
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)", textAlign: "center" }}>
+              PRODUCTOS MARINOS LIZÁRRAGA, S. DE R.L. DE C.V.
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom strip */}
+        <div style={{ position: "relative", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "space-between", color: "rgba(255,255,255,0.4)", fontSize: 11, letterSpacing: "0.04em", padding: "18px 40px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: "#34D399", boxShadow: "0 0 8px #34D399", flexShrink: 0 }}></span>
+            Sistemas en línea · Zapopan, Jal.
+          </div>
+          <div>© 1994–2026 Grupo Lizárraga</div>
+        </div>
+      </div>
+
+      {/* ── RIGHT — form panel ── */}
+      <div style={{ background: "white", display: "flex", alignItems: "center", justifyContent: "center", padding: "48px 40px", position: "relative" }}>
+        <div style={{ width: "100%", maxWidth: 400 }}>
+
+          {/* Tab switcher */}
+          <div style={{ display: "flex", background: "var(--ink-100)", borderRadius: 10, padding: 4, marginBottom: 32, gap: 4 }}>
+            {[{ id: "login", label: "Iniciar sesión" }, { id: "signup", label: "Darse de alta" }].map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+                flex: 1, padding: "9px 0", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                background: activeTab === t.id ? "white" : "transparent",
+                color: activeTab === t.id ? "var(--ink-900)" : "var(--ink-500)",
+                boxShadow: activeTab === t.id ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+                transition: "all 0.15s",
+              }}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* ── LOGIN FORM ── */}
+          {activeTab === "login" && (
+            <form onSubmit={e => { e.preventDefault(); onLogin(); }}>
+              <h2 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.02em" }}>Bienvenido de vuelta</h2>
+              <p style={{ fontSize: 13, color: "var(--ink-500)", margin: "0 0 28px", lineHeight: 1.5 }}>Inicia sesión con tu cuenta corporativa para continuar.</p>
+
+              <label className="field-label">Correo electrónico</label>
+              <input className="field-input" type="email" value={user} onChange={e => setUser(e.target.value)} style={{ marginBottom: 14 }} placeholder="correo@lizarraga.mx" />
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <label className="field-label" style={{ margin: 0 }}>Contraseña</label>
+                <a href="#" style={{ fontSize: 12, color: "var(--blue-500)", textDecoration: "none", fontWeight: 600 }}>¿Olvidaste tu contraseña?</a>
+              </div>
+              <input type="password" className="field-input" value={pwd} onChange={e => setPwd(e.target.value)} style={{ marginBottom: 14 }} placeholder="••••••••••" />
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--ink-700)", marginBottom: 20, cursor: "pointer" }}>
+                <input type="checkbox" defaultChecked /> Mantener sesión iniciada
+              </label>
+
+              <button type="submit" style={{
+                width: "100%", padding: "13px 20px", borderRadius: 10,
+                background: "var(--navy-900)", color: "white",
+                fontSize: 14, fontWeight: 700, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                marginBottom: 20, letterSpacing: "-0.01em",
+                transition: "background 0.15s",
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--navy-800)"}
+                onMouseLeave={e => e.currentTarget.style.background = "var(--navy-900)"}
+              >
+                Entrar al sistema <Icon name="arrowRight" size={14} />
+              </button>
+
+              {/* Divider */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                <div style={{ flex: 1, height: 1, background: "var(--ink-200)" }} />
+                <span style={{ fontSize: 11, color: "var(--ink-400)", fontWeight: 600, letterSpacing: "0.08em" }}>O CONTINÚA CON</span>
+                <div style={{ flex: 1, height: 1, background: "var(--ink-200)" }} />
+              </div>
+
+              {/* Google */}
+              <button type="button" onClick={onLogin} style={{
+                width: "100%", padding: "11px 16px", borderRadius: 10,
+                background: "white", border: "1px solid var(--ink-200)",
+                fontSize: 13.5, fontWeight: 600, color: "var(--ink-800)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                marginBottom: 10, boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                transition: "all 0.15s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#F8FAFC"; e.currentTarget.style.borderColor = "var(--ink-300)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "white"; e.currentTarget.style.borderColor = "var(--ink-200)"; }}
+              >
+                <GoogleLogo /> Continuar con Google
+              </button>
+
+              {/* Microsoft */}
+              <button type="button" onClick={onLogin} style={{
+                width: "100%", padding: "11px 16px", borderRadius: 10,
+                background: "white", border: "1px solid var(--ink-200)",
+                fontSize: 13.5, fontWeight: 600, color: "var(--ink-800)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                transition: "all 0.15s",
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#F8FAFC"; e.currentTarget.style.borderColor = "var(--ink-300)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "white"; e.currentTarget.style.borderColor = "var(--ink-200)"; }}
+              >
+                <MicrosoftLogo /> Continuar con Microsoft 365
+              </button>
+
+              {/* Sign up nudge */}
+              <div style={{ textAlign: "center", marginTop: 28, fontSize: 12.5, color: "var(--ink-500)" }}>
+                ¿No tienes cuenta?{" "}
+                <button type="button" onClick={() => setActiveTab("signup")} style={{ background: "none", border: "none", color: "var(--blue-500)", fontWeight: 700, cursor: "pointer", fontSize: 12.5, padding: 0 }}>
+                  Solicitar acceso →
+                </button>
+              </div>
+              <div style={{ textAlign: "center", marginTop: 16, fontSize: 11, color: "var(--ink-400)", lineHeight: 1.6 }}>
+                Al iniciar sesión aceptas las políticas de uso y privacidad de Grupo Lizárraga.
+              </div>
+            </form>
+          )}
+
+          {/* ── SIGN UP FORM ── */}
+          {activeTab === "signup" && (
+            <div>
+              <h2 style={{ fontSize: 26, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.02em" }}>Solicitar acceso</h2>
+              <p style={{ fontSize: 13, color: "var(--ink-500)", margin: "0 0 28px", lineHeight: 1.5 }}>Tu cuenta será revisada y activada por el administrador del sistema.</p>
+
+              <label className="field-label">Nombre completo</label>
+              <input className="field-input" value={nombre} onChange={e => setNombre(e.target.value)} style={{ marginBottom: 14 }} placeholder="Nombre Apellido" />
+
+              <label className="field-label">Correo corporativo</label>
+              <input className="field-input" type="email" value={signupEmail} onChange={e => setSignupEmail(e.target.value)} style={{ marginBottom: 14 }} placeholder="correo@lizarraga.mx" />
+
+              <label className="field-label">Empresa</label>
+              <select className="field-input" value={empresa} onChange={e => setEmpresa(e.target.value)} style={{ marginBottom: 20 }}>
+                <option value="">— Selecciona empresa —</option>
+                <option value="pml">Productos Marinos Lizárraga</option>
+                <option value="marlin">Marlin Lizárraga</option>
+              </select>
+
+              <button type="button" onClick={() => setActiveTab("login")} style={{
+                width: "100%", padding: "13px 20px", borderRadius: 10,
+                background: "var(--navy-900)", color: "white",
+                fontSize: 14, fontWeight: 700, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                marginBottom: 14, letterSpacing: "-0.01em",
+              }}>
+                Enviar solicitud <Icon name="arrowRight" size={14} />
+              </button>
+
+              {/* Divider */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                <div style={{ flex: 1, height: 1, background: "var(--ink-200)" }} />
+                <span style={{ fontSize: 11, color: "var(--ink-400)", fontWeight: 600, letterSpacing: "0.08em" }}>O REGÍSTRATE CON</span>
+                <div style={{ flex: 1, height: 1, background: "var(--ink-200)" }} />
+              </div>
+
+              <button type="button" onClick={() => setActiveTab("login")} style={{
+                width: "100%", padding: "11px 16px", borderRadius: 10,
+                background: "white", border: "1px solid var(--ink-200)",
+                fontSize: 13.5, fontWeight: 600, color: "var(--ink-800)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                marginBottom: 10, boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}>
+                <GoogleLogo /> Registrarse con Google
+              </button>
+
+              <button type="button" onClick={() => setActiveTab("login")} style={{
+                width: "100%", padding: "11px 16px", borderRadius: 10,
+                background: "white", border: "1px solid var(--ink-200)",
+                fontSize: 13.5, fontWeight: 600, color: "var(--ink-800)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              }}>
+                <MicrosoftLogo /> Registrarse con Microsoft 365
+              </button>
+
+              <div style={{ textAlign: "center", marginTop: 24, fontSize: 12.5, color: "var(--ink-500)" }}>
+                ¿Ya tienes cuenta?{" "}
+                <button type="button" onClick={() => setActiveTab("login")} style={{ background: "none", border: "none", color: "var(--blue-500)", fontWeight: 700, cursor: "pointer", fontSize: 12.5, padding: 0 }}>
+                  Iniciar sesión →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============== COMPANY SWITCHER ==============
+const CompanySwitcher = ({ user, onSelect, onLogout }) =>
+<div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #F3F9FF 0%, #E6F4FF 100%)", display: "flex", flexDirection: "column" }}>
+    <div style={{ padding: "20px 40px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div className="hstack" style={{ gap: 10 }}>
+        <LizarragaLogo size={36} color="dark" accent="#0073E6" />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Grupo Lizárraga</div>
+          <div style={{ fontSize: 11, color: "var(--ink-500)" }}>CRM Corporativo</div>
+        </div>
+      </div>
+      <div className="hstack" style={{ gap: 12 }}>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{user.name}</div>
+          <div style={{ fontSize: 11, color: "var(--ink-500)" }}>{user.email}</div>
+        </div>
+        <div className="avatar" style={{ background: "var(--navy-900)", color: "white", width: 36, height: 36, fontSize: 13 }}>{user.initials}</div>
+        <button className="btn btn-ghost btn-sm" onClick={onLogout}><Icon name="logout" size={13} /> Salir</button>
+      </div>
+    </div>
+
+    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+      <div style={{ maxWidth: 920, width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>Selecciona la empresa</h1>
+          <p className="muted" style={{ fontSize: 14, marginTop: 8 }}>Tienes acceso a las siguientes entidades del grupo</p>
+        </div>
+
+        <div className="grid grid-2" style={{ gap: 20 }}>
+          {CRM_DATA.companies.map((c) => {
+          const depts = user.roles[c.id]?.length || 0;
+          const isSoon = c.id === "marlin";
+          return (
+            <button
+              key={c.id}
+              disabled={isSoon}
+              onClick={() => !isSoon && onSelect(c.id)}
+              style={{
+                background: "white",
+                border: "1px solid var(--ink-200)",
+                borderRadius: 16,
+                padding: 28,
+                textAlign: "left",
+                cursor: isSoon ? "not-allowed" : "pointer",
+                transition: "all 0.2s",
+                boxShadow: "var(--shadow-sm)",
+                opacity: isSoon ? 0.65 : 1,
+                position: "relative",
+                overflow: "hidden"
+              }}
+              onMouseEnter={isSoon ? undefined : (e) => {e.currentTarget.style.transform = "translateY(-2px)";e.currentTarget.style.boxShadow = "var(--shadow-lg)";e.currentTarget.style.borderColor = "var(--blue-500)";}}
+              onMouseLeave={isSoon ? undefined : (e) => {e.currentTarget.style.transform = "translateY(0)";e.currentTarget.style.boxShadow = "var(--shadow-sm)";e.currentTarget.style.borderColor = "var(--ink-200)";}}>
+              
+                {isSoon &&
+              <div style={{ position: "absolute", top: 14, right: -32, transform: "rotate(35deg)", background: "var(--ink-900, #0A2540)", color: "white", padding: "3px 40px", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em" }}>
+                    PRÓXIMAMENTE
+                  </div>
+              }
+                <div className="hstack" style={{ justifyContent: "space-between", marginBottom: 20 }}>
+                  <CompanyCrest company={c} size={64} />
+                  <div className="vstack" style={{ gap: 4, alignItems: "flex-end" }}>
+                    {!isSoon && <span className={`badge ${c.id === "pml" ? "badge-blue" : "badge-violet"}`}>{c.tipo}</span>}
+                    {!isSoon && <span className="text-xs muted">{depts} depto{depts !== 1 ? "s" : ""} habilitado{depts !== 1 ? "s" : ""}</span>}
+                    {isSoon && <span className="badge badge-gray">No disponible</span>}
+                  </div>
+                </div>
+                <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: "-0.01em" }}>{c.name}</h2>
+                <p className="muted" style={{ fontSize: 13, marginTop: 4, marginBottom: 20 }}>{c.tagline}</p>
+
+                <div className="hstack" style={{ justifyContent: "flex-end", marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--ink-100)", color: isSoon ? "var(--ink-400)" : "var(--blue-500)", fontWeight: 600, fontSize: 13 }}>
+                  {isSoon ? "En construcción" : <>Entrar <Icon name="arrowRight" size={14} /></>}
+                </div>
+              </button>);
+
+        })}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 32, fontSize: 12, color: "var(--ink-500)" }}>
+          ¿Necesitas acceso a otra empresa? <a href="#" style={{ color: "var(--blue-500)", fontWeight: 600, textDecoration: "none" }}>Solicitar permisos</a>
+        </div>
+      </div>
+    </div>
+  </div>;
+
+
+// ============== APP SHELL (with dept content) ==============
+const AppShell = ({ company, user, onSwitchCompany, onLogout, bulkVariation }) => {
+  const [activeDept, setActiveDept] = useState("logistica");
+  const [activeSupplier, setActiveSupplier] = useState("blufin");
+  const allowed = user.roles[company.id] || [];
+  const activeDeptMeta = DEPTS.find((d) => d.id === activeDept);
+
+  // sync bulk variation to window for blufin-bulk to read
+  useEffect(() => {
+    window.__blufinBulkVariation = bulkVariation;
+  }, [bulkVariation]);
+
+  // reset supplier if not in logistica
+  useEffect(() => {
+    if (activeDept !== "logistica") setActiveSupplier(null);
+  }, [activeDept]);
+
+  // reset if not allowed
+  useEffect(() => {
+    if (activeDept !== "dashboard" && !allowed.includes(activeDept)) {
+      setActiveDept("dashboard");
+    }
+  }, [allowed.join(",")]);
+
+  let content;
+  if (activeDept === "logistica" && activeSupplier === "blufin")      content = <BlufinModule key={bulkVariation} />;else
+  if (activeDept === "logistica" && activeSupplier === "camanchaca")  content = <CamanchacaModule />;else
+  if (activeDept === "logistica" && activeSupplier === "neptuno")     content = <NeptunoModule />;else
+  if (activeDept === "dashboard") content = <DashboardGeneral company={company} />;else
+  if (activeDept === "logistica") content = <DashboardLogistica company={company} onSelectSupplier={(s) => { setActiveDept("logistica"); setActiveSupplier(s); }} />;else
+  if (activeDept === "administracion") content = <DashboardAdmin company={company} />;else
+  if (activeDept === "rh") content = <DashboardRH company={company} />;else
+  content = <DashboardPlaceholder company={company} dept={activeDept} label={activeDeptMeta?.label} icon={activeDeptMeta?.icon} />;
+
+  const topbarLabel = activeSupplier === "blufin"      ? "Importaciones › Blufin Seafood"
+    : activeSupplier === "camanchaca" ? "Importaciones › Camanchaca"
+    : activeSupplier === "neptuno"    ? "Importaciones › Neptuno Seafood"
+    : (activeDeptMeta?.label || "Dashboard");
+
+  return (
+    <div className="app-shell" data-screen-label={`App — ${company.short} — ${topbarLabel}`}>
+      <Sidebar
+        company={company}
+        activeDept={activeDept}
+        setActiveDept={(d) => { setActiveDept(d); if (d !== "logistica") setActiveSupplier(null); }}
+        activeSupplier={activeSupplier}
+        setActiveSupplier={(s) => { setActiveDept("logistica"); setActiveSupplier(s); }}
+        onSwitchCompany={onSwitchCompany}
+        onLogout={onLogout}
+        allowedDepts={allowed} />
+      
+      <div className="main-area">
+        <Topbar user={user} company={company} activeDeptLabel={topbarLabel} onOpenSwitcher={onSwitchCompany} />
+        <div className="content">{content}</div>
+      </div>
+    </div>);
+
+};
+
+// ============== ROOT APP ==============
+const App = () => {
+  const [screen, setScreen] = useState("app"); // login | switcher | app
+  const [companyId, setCompanyId] = useState("pml");
+
+  const [tweaks, setTweak] = useTweaks(/*EDITMODE-BEGIN*/{
+    "role": "admin_total",
+    "company": "pml",
+    "screen": "almacen",
+    "bulkVariation": "table"
+  }/*EDITMODE-END*/);
+
+  // Build user from tweaks
+  const roleName = ROLE_NAMES[tweaks.role] || "Carlos Lizárraga";
+  const user = {
+    name: roleName,
+    email: roleName.toLowerCase().replace(/\s+/g, ".").replace(/[áéíóú]/g, "") + "@lizarraga.mx",
+    initials: roleName.split(" ").map((n) => n[0]).join("").slice(0, 2),
+    roles: {
+      pml: ROLE_PERMS[tweaks.role]?.depts || [],
+      marlin: ROLE_PERMS[tweaks.role]?.depts || []
+    }
+  };
+
+  // sync company tweak -> current
+  useEffect(() => {
+    if (tweaks.company && tweaks.company !== companyId) setCompanyId(tweaks.company);
+  }, [tweaks.company]);
+
+  const company = CRM_DATA.companies.find((c) => c.id === companyId);
+
+  return (
+    <>
+      {screen === "login" && <LoginScreen onLogin={() => setScreen("switcher")} />}
+      {screen === "switcher" && <CompanySwitcher user={user} onSelect={(id) => {setCompanyId(id);setTweak("company", id);setScreen("app");}} onLogout={() => setScreen("login")} />}
+      {screen === "app" &&
+      <AppShell
+        company={company}
+        user={user}
+        bulkVariation={tweaks.bulkVariation}
+        onSwitchCompany={() => setScreen("switcher")}
+        onLogout={() => setScreen("login")} />
+
+      }
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Rol simulado" />
+        <TweakRadio
+          label="Rol"
+          value={tweaks.role}
+          onChange={(v) => setTweak("role", v)}
+          options={Object.entries(ROLE_PERMS).map(([id, r]) => ({ value: id, label: r.label }))} />
+        
+        <TweakSection label="Empresa activa" />
+        <TweakRadio
+          label="Empresa"
+          value={tweaks.company}
+          onChange={(v) => {setTweak("company", v);setCompanyId(v);}}
+          options={CRM_DATA.companies.map((c) => ({ value: c.id, label: c.short }))} />
+        
+        <TweakSection label="Pantalla" />
+        <TweakRadio
+          label="Vista"
+          value={screen}
+          onChange={(v) => setScreen(v)}
+          options={[
+          { value: "login", label: "Login" },
+          { value: "switcher", label: "Empresas" },
+          { value: "app", label: "App" }]
+          } />
+        
+        <TweakSection label="Blufin — Variación carga masiva" />
+        <TweakRadio
+          label="Layout"
+          value={tweaks.bulkVariation}
+          onChange={(v) => setTweak("bulkVariation", v)}
+          options={[
+          { value: "table", label: "Tabla" },
+          { value: "wizard", label: "Wizard" },
+          { value: "split", label: "Split PDF" }]
+          } />
+      </TweaksPanel>
+    </>);
+
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
