@@ -1245,6 +1245,27 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 
 Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east-1), **schema namespace `crm`** (coexiste con WMS en `public`). RLS habilitado con políticas `dev_open` temporales — endurecer al integrar Supabase Auth.
 
+### Infraestructura del proyecto
+
+| Pieza | Valor |
+|---|---|
+| Repo GitHub | `https://github.com/pmlconect94/crm-pml` (privado, rama `main`) |
+| Supabase | proyecto `crm-pml` · ref `xjbhfeqcjjqyjkvdbyxy` · región us-east-1 · schema `crm` |
+| Dev server | `npm run dev` → puerto 5174 (5173 lo ocupa el sistema de nómina local; `strictPort: false`, toma el siguiente libre) |
+| Credenciales frontend | `.env.local` (NO versionado — plantilla en `.env.example`; keys en Supabase Dashboard → Settings → API) |
+| PIN super admin | default `1234`, override en `localStorage.crm_admin_pin` (stub hasta auth real) |
+| Workflow de cierre | al terminar un bloque de trabajo: actualizar §16, commit descriptivo en español, push a `main` |
+
+### SIGUIENTE PASO (handoff de sesión)
+
+**Construir tab Recepción de Blufin** siguiendo el patrón de §17 "Cuando crear un módulo Blufin (tab) nuevo":
+- Registrar kg recibidos por SKU vs kg contratados (diferencias calculadas en BD con columna generada)
+- Al recibir se capturan **Lote** y **Naviera real** del contrato (campos que NO se llenan al crear contrato)
+- Cambiar status del contrato a `Entregado` al completar recepción
+- Tablas ya migradas: `crm.blufin_recepciones` + `crm.blufin_recepcion_lineas` (1 recepción puede tener N líneas)
+- Prototipo de referencia: `prototype/blufin-recepcion.jsx`
+- Después de Recepción: Central de Costos (ya tiene Pagos ✅ que era su dependencia)
+
 ### Foundation ✅
 
 | Pieza | Detalle |
