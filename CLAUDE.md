@@ -1272,13 +1272,12 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 
 ### SIGUIENTE PASO (handoff de sesión)
 
-**Construir tab Recepción de Blufin** siguiendo el patrón de §17 "Cuando crear un módulo Blufin (tab) nuevo":
-- Registrar kg recibidos por SKU vs kg contratados (diferencias calculadas en BD con columna generada)
-- Al recibir se capturan **Lote** y **Naviera real** del contrato (campos que NO se llenan al crear contrato)
-- Cambiar status del contrato a `Entregado` al completar recepción
-- Tablas ya migradas: `crm.blufin_recepciones` + `crm.blufin_recepcion_lineas` (1 recepción puede tener N líneas)
-- Prototipo de referencia: `prototype/blufin-recepcion.jsx`
-- Después de Recepción: Central de Costos (ya tiene Pagos ✅ que era su dependencia)
+**Construir Central de Costos de Blufin** — la pieza estratégica del módulo. Sus dependencias ya están live: Pagos ✅ (TC efectivo ponderado) y Recepción ✅ (kg reales en bodega).
+- Costo promedio ponderado sobre el stock que el usuario tiene en bodega (ver §6 `calcularPromedio` — fuentes ordenadas por `eta_bodega` DESC, de más nuevo a más viejo)
+- TC por contenedor en orden de prioridad (§14 regla 2): pagos reales ponderados → tc_forward → tc_ponderado → tcDelDia (stub null hasta Edge Function Banxico, pendiente de infra #1)
+- Histórico de precios por SKU
+- Prototipo de referencia: `prototype/blufin-costos.jsx`
+- Después: Notas de crédito (ya hay una diferencia de presentación real esperando NC, ver Datos de prueba)
 
 ### Foundation ✅
 
@@ -1287,7 +1286,7 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 | Stack | Vite 5 + React 18 + TS estricto + Tailwind v3 + Supabase JS + React Router v6 + TanStack Query + **Framer Motion 12** + Sonner |
 | Auth | Stub con usuario `admin_total` quemado (`src/lib/auth.tsx`). SSO Google/Microsoft pendiente |
 | Cliente Supabase | `src/lib/supabase.ts` con `db: { schema: 'crm' }` por default |
-| Tipos | `src/types/database.ts` manual con tablas core + Blufin (contratos, productos, pagos, forwards). Regenerar con CLI cuando schema crezca mucho |
+| Tipos | `src/types/database.ts` manual con tablas core + Blufin (contratos, productos, pagos, forwards, recepciones + líneas). Regenerar con CLI cuando schema crezca mucho |
 | Shell | Sidebar con switcher PML/Marlin, topbar con switcher de empresa (popover Framer Motion), AppLayout con Outlet |
 | Migraciones empacadas | `supabase/migrations/*.sql` versionadas para re-aplicar a cualquier proyecto |
 | Context para skills | `PRODUCT.md` y `DESIGN.md` en raíz |
@@ -1298,7 +1297,7 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 |---|---|---|---|
 | **Contratos** | ✅ LIVE | `BlufinContratosListPage.tsx` · `BlufinNuevoContratoPage.tsx` · `BlufinCargaMasivaPage.tsx` (stub PDF) | Auto-cálculos: ETA bodega = ETA puerto + 7d · anticipo 10% · cajas desde kg/kg_caja. Lote y naviera NO se capturan al crear (van en Recepción/Embarque). TC ponderado se llena con `getTcDelDia()` (stub null hasta Edge Function Banxico) |
 | **Pagos** | ✅ LIVE | `BlufinPagosPage.tsx` · `PagoModal.tsx` · `ForwardModal.tsx` · `BlufinPagoMultiplePage.tsx` · `pagos-queries.ts` | Sub-tabs Pendientes / Realizados / Forwards. **3 modos de captura**: (1) Pago individual vía `PagoModal` con auto-fill monto + auto-update flag contrato. (2) Forward vía `ForwardModal` con TC pactado + fecha entrega futura. (3) Pago múltiple vía `BlufinPagoMultiplePage` — página dedicada con checkbox-multiselect, TC/banco/fecha compartidos, override de monto por fila, sticky footer con totales, mutación batch `createPagosMultiples`. **Ejecutar forward**: botón "Ejecutar" en sub-tab Forwards convierte forward Pendiente en pago real (`executeForward`) — inserta pago con TC pactado + referencia `FORWARD ejecutado <fecha>` + cambia status a Ejecutado + recalcula flag. **Bloqueos**: 1 solo forward Pendiente por (contrato, asociado_a) — opción "Cubre anticipo/saldo" se deshabilita en modal si ya existe. **Pendientes con forward** muestran badge "FORWARD CERRADO PARA <fecha entrega>" y CTA cambia a "Pagar spot" para distinguir pago al TC del día vs ejecución del forward. **Realizados** tiene filtros: search · chips tipo · select banco · rango fechas con suma filtrada en vivo. **Liquidado** = `saldo_pagado` (no requiere anticipo_pagado). **Delete con PIN**: cada row tiene botón trash → `DeleteConfirmModal` con PIN 4 dígitos; `deletePago` recalcula flag a la baja. Bloqueo: `deleteContrato` rechaza si tiene pagos o forwards |
-| Recepción | 🔜 Próximo | — | Aquí se capturan **Lote** y **Naviera real** (cuando llega contenedor) |
+| **Recepción** | ✅ LIVE | `BlufinRecepcionPage.tsx` · `BlufinRecepcionRegistrarPage.tsx` · `recepcion-queries.ts` | Lista con KPIs (por recibir / recibidos / kg recibidos / kg faltantes) + sección "Por recibir" (contratos ≠ Entregado sin recepción, orden ETA bodega ASC) + Historial. Registro en **página dedicada** (`recepcion/registrar/:contratoId`, form >10 campos): datos del contenedor (fecha, bodega, presentación recibida vs pactada con warning, **lote**, **naviera real**, entrada Intelisis) + tabla de verificación por SKU (kg contratados vs recibidos con color por estado) + preview de diferencias (faltantes + presentación; copy apunta a capturar NC en Notas de crédito) + sticky footer con totales. `createRecepcion`: 1 recepción por contrato (rechaza duplicado) → líneas en batch (diferencia = columna generada en BD) → actualiza contrato: lote + naviera + llegada_real + bodega_destino + status `Entregado`. `deleteRecepcion` simétrico con PIN: cascade borra líneas + contrato revierte a `En puerto` limpiando lote/naviera/llegada_real. Migración `20260611120000` agregó `entrada_intelisis` y `presentacion_recibida` a `crm.blufin_recepciones` |
 | Notas de crédito | 🔜 | — | Flujo complejo: CFDI timbrado, razón (presentación/descuento/faltante), aplicaciones a contratos, saldo pendiente |
 | Facturas | 🔜 | — | Subir PDF + comparador línea-por-línea vs contrato |
 | Calendario | 🔜 | — | Reutilizable: ETAs + vencimientos pagos |
@@ -1326,9 +1325,10 @@ Logística, Ventas, Cobranza, Administración, Contabilidad, RH, Marlin — side
 
 ### Datos de prueba en BD
 
-- `crm.blufin_contratos`: 2 reales — `MCO-CV-100001` ($24,800), `MCO-CV-003876` ($74,456 con anticipo $7,445.60 ya pagado)
+- `crm.blufin_contratos`: 2 reales — `MCO-CV-100001` ($24,800, status Contratado, lote L-CORRECT-001), `MCO-CV-003876` ($74,456 con anticipo $7,445.60 ya pagado, status **Entregado**)
 - `crm.blufin_pagos`: 1 — anticipo de MCO-CV-003876 vía BANBAJIO con SPEI-TEST-9001
-- Catálogo: 11 SKUs Blufin seedeados desde migración
+- `crm.blufin_recepciones`: 1 real — MCO-CV-003876 recibido 2026-06-11 en FRIZAJAL, Intelisis 143580, lote 125654, naviera CSAV, 22,700 kg completos, presentación **Paletizado → Granel** (capturada por el usuario en vivo; la NC por presentación queda pendiente hasta que exista el módulo de NCs)
+- Catálogo: 11 SKUs Blufin seedeados desde migración · `crm.bodegas` ampliada por el usuario a 6 filas (incluye FRIZAJAL)
 
 ---
 

@@ -271,6 +271,68 @@ export type Database = {
         };
         Relationships: Empty;
       };
+      blufin_recepciones: {
+        Row: {
+          id: string;
+          contrato_id: string | null;
+          fecha_recepcion: string;
+          bodega_id: number | null;
+          entrada_intelisis: string | null;
+          presentacion_recibida: string | null;
+          observaciones: string | null;
+          capturado_por: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          contrato_id?: string | null;
+          fecha_recepcion: string;
+          bodega_id?: number | null;
+          entrada_intelisis?: string | null;
+          presentacion_recibida?: string | null;
+          observaciones?: string | null;
+          capturado_por?: string | null;
+        };
+        Update: {
+          id?: string;
+          contrato_id?: string | null;
+          fecha_recepcion?: string;
+          bodega_id?: number | null;
+          entrada_intelisis?: string | null;
+          presentacion_recibida?: string | null;
+          observaciones?: string | null;
+          capturado_por?: string | null;
+        };
+        Relationships: Empty;
+      };
+      blufin_recepcion_lineas: {
+        Row: {
+          id: string;
+          recepcion_id: string | null;
+          sku_id: string | null;
+          kg_contratados: number;
+          kg_recibidos: number;
+          diferencia: number | null; // generada en BD: kg_recibidos - kg_contratados
+          observaciones: string | null;
+        };
+        Insert: {
+          id?: string;
+          recepcion_id?: string | null;
+          sku_id?: string | null;
+          kg_contratados: number;
+          kg_recibidos: number;
+          observaciones?: string | null;
+        };
+        Update: {
+          id?: string;
+          recepcion_id?: string | null;
+          sku_id?: string | null;
+          kg_contratados?: number;
+          kg_recibidos?: number;
+          observaciones?: string | null;
+        };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -307,4 +369,16 @@ export type BlufinPagoEnriquecido = BlufinPago & {
 export type BlufinForwardEnriquecido = BlufinForward & {
   contrato?: { folio: string } | null;
   banco?: { nombre: string } | null;
+};
+
+export type BlufinRecepcion = Database['crm']['Tables']['blufin_recepciones']['Row'];
+export type BlufinRecepcionInsert = Database['crm']['Tables']['blufin_recepciones']['Insert'];
+export type BlufinRecepcionLinea = Database['crm']['Tables']['blufin_recepcion_lineas']['Row'];
+export type BlufinRecepcionLineaInsert = Database['crm']['Tables']['blufin_recepcion_lineas']['Insert'];
+
+// Recepción + contrato, bodega y líneas con SKU (denormalizado para list view)
+export type BlufinRecepcionEnriquecida = BlufinRecepcion & {
+  contrato?: { folio: string; presentacion: string | null; total_kg: number | null } | null;
+  bodega?: { nombre: string } | null;
+  lineas?: (BlufinRecepcionLinea & { sku?: { code: string; descripcion: string } | null })[];
 };
