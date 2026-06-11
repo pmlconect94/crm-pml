@@ -1256,6 +1256,20 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 | PIN super admin | default `1234`, override en `localStorage.crm_admin_pin` (stub hasta auth real) |
 | Workflow de cierre | al terminar un bloque de trabajo: actualizar §16, commit descriptivo en español, push a `main` |
 
+### Cuentas y sesiones conectadas (LEER ANTES de operar GitHub o Supabase)
+
+| Servicio | Cuenta / sesión | Identificador | Estado |
+|---|---|---|---|
+| **GitHub — repo** | `pmlconect94` | `https://github.com/pmlconect94/crm-pml` (privado) | Push autorizado vía Git Credential Manager de Windows (sin PAT manual). En máquina nueva: el primer push abre el navegador para autorizar |
+| **Git local** | `pml-diego` / `ventas.lizarraga2@gmail.com` | `git config --global` | Identidad de commits configurada |
+| **gh CLI** | sin sesión | instalado en `C:\Users\ddlpm\AppData\Local\gh-cli\bin\gh.exe` | NO logueado y PowerShell no lo encuentra en PATH (funciona desde Git Bash). NO es necesario: usar git puro |
+| **Supabase — cuenta CORRECTA** ✅ | org slug `lznqkeztbfiyxdsujrlw` | proyecto **`crm-pml`** · ref **`xjbhfeqcjjqyjkvdbyxy`** · us-east-1 | Conectada al MCP de Supabase (plugin OAuth). Aquí vive el schema `crm` del CRM |
+| **Supabase — cuenta EQUIVOCADA** ⚠️ | org slug `uftqommephkoszdkzoqb` (`grupo-lizarraga`) | proyecto `grupo-lizarraga-crm` · ref `mipzuzlirylztfjekwtv` · us-west-1 | NO usar. Contiene el WMS del usuario en `public` + un schema `crm` huérfano con datos de prueba que quedó por error (2026-05-26). Pendiente de limpiar algún día con `DROP SCHEMA crm CASCADE` |
+
+**Regla de oro antes de tocar Supabase:** correr `list_projects` del MCP. Si aparece `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`) estás en la cuenta correcta. Si aparece `grupo-lizarraga-crm` (`mipzuzlirylztfjekwtv`) estás en la cuenta equivocada — pedir al usuario reautenticar el MCP (`/mcp` → supabase → re-authenticate con la cuenta correcta en el navegador) antes de aplicar cualquier migración o SQL.
+
+**Nota:** el MCP de Supabase es el plugin oficial OAuth (`mcp.supabase.com`) — se conecta con la cuenta que esté logueada en supabase.com en el navegador al momento de autorizar. El usuario tiene 2+ cuentas Supabase; este fue el origen del incidente del schema huérfano.
+
 ### SIGUIENTE PASO (handoff de sesión)
 
 **Construir tab Recepción de Blufin** siguiendo el patrón de §17 "Cuando crear un módulo Blufin (tab) nuevo":
