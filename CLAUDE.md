@@ -422,7 +422,7 @@ Cada proveedor tiene su propio catálogo de SKUs con: código, descripción, cat
 Este catálogo es el master de productos — se referencia en contratos, facturas, recepciones y costos.
 
 **Categorías por proveedor:**
-- **Blufin:** Tilapia Filete · Tilapia Entera · Camarón · Otros
+- **Blufin:** Tilapia Filete · Tilapia Entera · Camarón · Basa · Otros
 - **Camanchaca:** Salmón Reserva · Salmón Premium · Salmón Café · Ahumados · Otros
 - **Neptuno:** Pez Espada · Merluza · Bacalao · Pulpo · Calamar · Otros
 
@@ -1302,7 +1302,7 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 | Facturas | 🔜 | — | Subir PDF + comparador línea-por-línea vs contrato |
 | Calendario | 🔜 | — | Reutilizable: ETAs + vencimientos pagos |
 | Central de Costos | 🔜 | — | La pieza estratégica: TC efectivo ponderado, costo promedio por kg restante. Necesita Pagos primero ✅ |
-| **Productos** | ✅ LIVE | `BlufinProductosPage.tsx` · `SkuModal.tsx` · `productos-queries.ts` | CRUD del catálogo master de SKUs Blufin (se referencia en contratos, recepciones, costos; servirá para **mapear productos al leer contratos PDF** en carga masiva — pendiente). KPIs por categoría + search + chips de categoría (`CATEGORIAS_BLUFIN`: Tilapia Filete / Tilapia Entera / Camarón / Otros) + tabla. Alta/edición vía `SkuModal` (5 campos: código, categoría, descripción, kg/caja, tipo de cajas; valida duplicado `23505` por unique empresa+proveedor+code). **Sin hard delete**: toggle Activar/Desactivar (`toggleSkuActivo`) — los inactivos desaparecen de los forms de captura (`fetchCatalogos` filtra `activo=true`) y se ven con toggle "Ver inactivos" |
+| **Productos** | ✅ LIVE | `BlufinProductosPage.tsx` · `SkuModal.tsx` · `productos-queries.ts` | CRUD del catálogo master de SKUs Blufin (se referencia en contratos, recepciones, costos; servirá para **mapear productos al leer contratos PDF** en carga masiva — pendiente). KPIs por categoría + search + chips de categoría (`CATEGORIAS_BLUFIN`: Tilapia Filete / Tilapia Entera / Camarón / Basa / Otros) + tabla. Alta/edición vía `SkuModal` (5 campos: código, categoría, descripción, kg/caja, tipo de cajas; valida duplicado `23505` por unique empresa+proveedor+code). **Sin hard delete**: toggle Activar/Desactivar (`toggleSkuActivo`) — los inactivos desaparecen de los forms de captura (`fetchCatalogos` filtra `activo=true`) y se ven con toggle "Ver inactivos" |
 
 ### Importaciones — Camanchaca y Neptuno
 

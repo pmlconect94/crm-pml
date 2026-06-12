@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import type { CatalogoSku } from '@/types/database';
 
-export const CATEGORIAS_BLUFIN = ['Tilapia Filete', 'Tilapia Entera', 'Camarón', 'Otros'];
+export const CATEGORIAS_BLUFIN = ['Tilapia Filete', 'Tilapia Entera', 'Camarón', 'Basa', 'Otros'];
 
 /**
  * Catálogo completo del proveedor (incluye inactivos — la página filtra).
