@@ -42,9 +42,49 @@ export async function fetchForwards(empresaId: string): Promise<BlufinForwardEnr
 }
 
 /**
- * Crear un pago + actualizar el flag anticipo_pagado / saldo_pagado del contrato
- * según el tipo. La lógica de "ya cubrió el monto" se evalúa en cliente para mantener
- * la mutation atómica desde el frontend (no requiere trigger SQL todavía).
+ * Recalcula AMBOS flags del contrato a partir de los pagos registrados.
+ * Única fuente de verdad — la usan create/delete/forward/pago múltiple.
+ *
+ * Regla de negocio: si el saldo quedó liquidado, el anticipo ya no está
+ * pendiente aunque nunca se haya pagado por separado (se pagó directo
+ * junto con el saldo).
+ */
+export async function recalcFlagsContrato(contratoId: string): Promise<void> {
+  const [{ data: pagos, error: pErr }, { data: contrato, error: cErr }] = await Promise.all([
+    supabase.from('blufin_pagos').select('tipo, monto_usd').eq('contrato_id', contratoId),
+    supabase
+      .from('blufin_contratos')
+      .select('anticipo_usd, saldo_usd')
+      .eq('id', contratoId)
+      .single(),
+  ]);
+  if (pErr) throw pErr;
+  if (cErr) throw cErr;
+  if (!contrato) return;
+
+  const acum = (tipo: string) =>
+    (pagos ?? [])
+      .filter((p) => p.tipo === tipo)
+      .reduce((s, p) => s + Number(p.monto_usd), 0);
+
+  const anticipoTarget = Number(contrato.anticipo_usd ?? 0);
+  const saldoTarget = Number(contrato.saldo_usd ?? 0);
+
+  const saldoCubierto = saldoTarget > 0 && acum('saldo') >= saldoTarget - 0.01;
+  const anticipoCubierto =
+    (anticipoTarget > 0 && acum('anticipo') >= anticipoTarget - 0.01) || saldoCubierto;
+
+  const { error: uErr } = await supabase
+    .from('blufin_contratos')
+    .update({ anticipo_pagado: anticipoCubierto, saldo_pagado: saldoCubierto })
+    .eq('id', contratoId);
+  if (uErr) throw uErr;
+}
+
+/**
+ * Crear un pago + recalcular los flags del contrato.
+ * La lógica vive en cliente para mantener la mutation visible/testeable
+ * (no requiere trigger SQL todavía, ver §17).
  */
 export async function createPago(payload: BlufinPagoInsert): Promise<void> {
   const monto_mxn = (payload.monto_usd ?? 0) * (payload.tc ?? 0);
@@ -54,100 +94,25 @@ export async function createPago(payload: BlufinPagoInsert): Promise<void> {
     .insert({ ...payload, monto_mxn });
   if (pagoErr) throw pagoErr;
 
-  if (!payload.contrato_id) return;
-
-  // Refrescar acumulado de pagos por tipo para decidir si flag de contrato cambia
-  const { data: pagosDelTipo, error: pagosErr } = await supabase
-    .from('blufin_pagos')
-    .select('monto_usd, tipo')
-    .eq('contrato_id', payload.contrato_id)
-    .eq('tipo', payload.tipo);
-  if (pagosErr) throw pagosErr;
-
-  const acumulado = (pagosDelTipo ?? []).reduce((s, p) => s + Number(p.monto_usd), 0);
-
-  const { data: contrato, error: cErr } = await supabase
-    .from('blufin_contratos')
-    .select('anticipo_usd, saldo_usd')
-    .eq('id', payload.contrato_id)
-    .single();
-  if (cErr) throw cErr;
-
-  const target =
-    payload.tipo === 'anticipo'
-      ? Number(contrato.anticipo_usd ?? 0)
-      : payload.tipo === 'saldo'
-        ? Number(contrato.saldo_usd ?? 0)
-        : 0;
-
-  if (target > 0 && acumulado >= target - 0.01) {
-    const update =
-      payload.tipo === 'anticipo'
-        ? { anticipo_pagado: true }
-        : { saldo_pagado: true };
-    const { error: updErr } = await supabase
-      .from('blufin_contratos')
-      .update(update)
-      .eq('id', payload.contrato_id);
-    if (updErr) throw updErr;
-  }
+  if (payload.contrato_id) await recalcFlagsContrato(payload.contrato_id);
 }
 
 /**
- * Eliminar un pago + recalcular si el flag anticipo_pagado / saldo_pagado del contrato
- * debe regresar a false (si el acumulado tras borrar ya no cubre el target).
+ * Eliminar un pago + recalcular flags (si el acumulado tras borrar ya no
+ * cubre el target, el flag regresa a false).
  */
 export async function deletePago(id: string): Promise<void> {
-  // 1) Leer el pago antes de borrarlo para saber contrato/tipo
   const { data: pago, error: rErr } = await supabase
     .from('blufin_pagos')
-    .select('contrato_id, tipo')
+    .select('contrato_id')
     .eq('id', id)
     .single();
   if (rErr) throw rErr;
 
-  // 2) Borrar
   const { error: dErr } = await supabase.from('blufin_pagos').delete().eq('id', id);
   if (dErr) throw dErr;
 
-  if (!pago?.contrato_id || !pago.tipo) return;
-
-  // 3) Recalcular flag
-  const [{ data: pagos }, { data: contrato }] = await Promise.all([
-    supabase
-      .from('blufin_pagos')
-      .select('monto_usd')
-      .eq('contrato_id', pago.contrato_id)
-      .eq('tipo', pago.tipo),
-    supabase
-      .from('blufin_contratos')
-      .select('anticipo_usd, saldo_usd')
-      .eq('id', pago.contrato_id)
-      .single(),
-  ]);
-  if (!contrato) return;
-
-  const acumulado = (pagos ?? []).reduce((s, p) => s + Number(p.monto_usd), 0);
-  const target =
-    pago.tipo === 'anticipo'
-      ? Number(contrato.anticipo_usd ?? 0)
-      : pago.tipo === 'saldo'
-        ? Number(contrato.saldo_usd ?? 0)
-        : 0;
-
-  const cubierto = target > 0 && acumulado >= target - 0.01;
-
-  if (pago.tipo === 'anticipo') {
-    await supabase
-      .from('blufin_contratos')
-      .update({ anticipo_pagado: cubierto })
-      .eq('id', pago.contrato_id);
-  } else if (pago.tipo === 'saldo') {
-    await supabase
-      .from('blufin_contratos')
-      .update({ saldo_pagado: cubierto })
-      .eq('id', pago.contrato_id);
-  }
+  if (pago?.contrato_id) await recalcFlagsContrato(pago.contrato_id);
 }
 
 /**
@@ -205,34 +170,8 @@ export async function executeForward(id: string): Promise<void> {
     .eq('id', id);
   if (updErr) throw updErr;
 
-  // 4) Recalcular flag del contrato
-  const [{ data: pagos }, { data: contrato }] = await Promise.all([
-    supabase
-      .from('blufin_pagos')
-      .select('monto_usd')
-      .eq('contrato_id', forward.contrato_id)
-      .eq('tipo', forward.asociado_a),
-    supabase
-      .from('blufin_contratos')
-      .select('anticipo_usd, saldo_usd')
-      .eq('id', forward.contrato_id)
-      .single(),
-  ]);
-  if (!contrato) return;
-
-  const acumulado = (pagos ?? []).reduce((s, p) => s + Number(p.monto_usd), 0);
-  const target =
-    forward.asociado_a === 'anticipo'
-      ? Number(contrato.anticipo_usd ?? 0)
-      : Number(contrato.saldo_usd ?? 0);
-
-  if (target > 0 && acumulado >= target - 0.01) {
-    const update =
-      forward.asociado_a === 'anticipo'
-        ? { anticipo_pagado: true }
-        : { saldo_pagado: true };
-    await supabase.from('blufin_contratos').update(update).eq('id', forward.contrato_id);
-  }
+  // 4) Recalcular flags del contrato
+  await recalcFlagsContrato(forward.contrato_id);
 }
 
 /**
@@ -377,45 +316,9 @@ export async function createPagosMultiples(params: PagoMultipleParams): Promise<
   const { error: insertErr } = await supabase.from('blufin_pagos').insert(rows);
   if (insertErr) throw insertErr;
 
-  // 2) Recalcular flags por cada combinación contrato+tipo afectada (anticipo/saldo)
-  const claves = new Set(
-    params.items
-      .filter((i) => i.tipo === 'anticipo' || i.tipo === 'saldo')
-      .map((i) => `${i.contrato_id}|${i.tipo}`),
-  );
-
-  await Promise.all(
-    Array.from(claves).map(async (clave) => {
-      const [contratoId, tipo] = clave.split('|') as [string, 'anticipo' | 'saldo'];
-
-      const [{ data: pagos }, { data: contrato }] = await Promise.all([
-        supabase
-          .from('blufin_pagos')
-          .select('monto_usd')
-          .eq('contrato_id', contratoId)
-          .eq('tipo', tipo),
-        supabase
-          .from('blufin_contratos')
-          .select('anticipo_usd, saldo_usd')
-          .eq('id', contratoId)
-          .single(),
-      ]);
-
-      if (!contrato) return;
-
-      const acumulado = (pagos ?? []).reduce((s, p) => s + Number(p.monto_usd), 0);
-      const target =
-        tipo === 'anticipo'
-          ? Number(contrato.anticipo_usd ?? 0)
-          : Number(contrato.saldo_usd ?? 0);
-
-      if (target > 0 && acumulado >= target - 0.01) {
-        const update =
-          tipo === 'anticipo' ? { anticipo_pagado: true } : { saldo_pagado: true };
-        await supabase.from('blufin_contratos').update(update).eq('id', contratoId);
-      }
-    }),
-  );
+  // 2) Recalcular flags de cada contrato afectado
+  const contratosAfectados = new Set(params.items.map((i) => i.contrato_id));
+  await Promise.all(Array.from(contratosAfectados).map((id) => recalcFlagsContrato(id)));
 
   return params.items.length;
 }

@@ -50,6 +50,24 @@ export async function fetchContratosPorRecibir(
   );
 }
 
+/**
+ * Reprogramar la llegada a bodega de un contrato.
+ * La ETA bodega se auto-calcula como ETA puerto + 7d al crear el contrato,
+ * pero es un ESTIMADO — cuando el contenedor llega al puerto se acuerda
+ * fecha y lugar con el agente aduanal y aquí se asignan los definitivos.
+ */
+export async function updateLlegadaContrato(params: {
+  contrato_id: string;
+  eta_bodega: string;
+  bodega_destino: string | null;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('blufin_contratos')
+    .update({ eta_bodega: params.eta_bodega, bodega_destino: params.bodega_destino })
+    .eq('id', params.contrato_id);
+  if (error) throw error;
+}
+
 export async function fetchContratoById(id: string): Promise<BlufinContratoConProductos | null> {
   const { data, error } = await supabase
     .from('blufin_contratos')

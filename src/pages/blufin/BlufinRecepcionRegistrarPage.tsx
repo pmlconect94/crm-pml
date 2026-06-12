@@ -14,11 +14,22 @@ type LineaForm = {
   sku_id: string | null;
   descripcion: string;
   kg_contratados: number;
+  kg_caja: number | null;
   kg_recibidos: string;
+  cajas: string;
   observaciones: string;
 };
 
 const hoyISO = () => new Date().toISOString().slice(0, 10);
+
+// Números legibles en inputs: sin ceros colgantes
+const trimNum = (n: number, decimales: number) => String(Number(n.toFixed(decimales)));
+
+const cajasDesdeKg = (kg: number, kgCaja: number | null) =>
+  kgCaja && kgCaja > 0 ? trimNum(kg / kgCaja, 2) : '';
+
+const kgDesdeCajas = (cajas: number, kgCaja: number | null) =>
+  kgCaja && kgCaja > 0 ? trimNum(cajas * kgCaja, 3) : '';
 
 export function BlufinRecepcionRegistrarPage() {
   const { contratoId } = useParams<{ contratoId: string }>();
@@ -45,17 +56,24 @@ export function BlufinRecepcionRegistrarPage() {
   const [obsGenerales, setObsGenerales] = useState('');
   const [lineas, setLineas] = useState<LineaForm[]>([]);
 
-  // Precargar líneas y defaults cuando llega el contrato
+  // Precargar líneas y defaults cuando llega el contrato.
+  // kg recibidos arranca = kg contratados (solo se teclea si difiere).
   useEffect(() => {
     if (!contrato) return;
     setLineas(
-      (contrato.productos ?? []).map((p) => ({
-        sku_id: p.sku_id,
-        descripcion: [p.descripcion, p.marca, p.talla].filter(Boolean).join(' · '),
-        kg_contratados: Number(p.kg ?? 0),
-        kg_recibidos: '',
-        observaciones: '',
-      })),
+      (contrato.productos ?? []).map((p) => {
+        const kg = Number(p.kg ?? 0);
+        const kgCaja = p.kg_caja != null ? Number(p.kg_caja) : null;
+        return {
+          sku_id: p.sku_id,
+          descripcion: [p.descripcion, p.marca, p.talla].filter(Boolean).join(' · '),
+          kg_contratados: kg,
+          kg_caja: kgCaja,
+          kg_recibidos: kg > 0 ? trimNum(kg, 3) : '',
+          cajas: p.cajas != null ? String(p.cajas) : kg > 0 ? cajasDesdeKg(kg, kgCaja) : '',
+          observaciones: '',
+        };
+      }),
     );
     setPresRecibida(contrato.presentacion ?? '');
     setNaviera(contrato.naviera ?? '');
@@ -71,8 +89,35 @@ export function BlufinRecepcionRegistrarPage() {
     }
   }, [cat, contrato, bodegaId]);
 
-  const updateLinea = (idx: number, field: 'kg_recibidos' | 'observaciones', value: string) =>
+  const updateLinea = (idx: number, field: 'observaciones', value: string) =>
     setLineas((prev) => prev.map((l, i) => (i === idx ? { ...l, [field]: value } : l)));
+
+  // Conversión bidireccional kg ↔ cajas usando kg/caja del producto
+  const updateKg = (idx: number, value: string) =>
+    setLineas((prev) =>
+      prev.map((l, i) => {
+        if (i !== idx) return l;
+        const kg = parseFloat(value);
+        return {
+          ...l,
+          kg_recibidos: value,
+          cajas: !Number.isNaN(kg) ? cajasDesdeKg(kg, l.kg_caja) : '',
+        };
+      }),
+    );
+
+  const updateCajas = (idx: number, value: string) =>
+    setLineas((prev) =>
+      prev.map((l, i) => {
+        if (i !== idx) return l;
+        const cajas = parseFloat(value);
+        return {
+          ...l,
+          cajas: value,
+          kg_recibidos: !Number.isNaN(cajas) ? kgDesdeCajas(cajas, l.kg_caja) : l.kg_recibidos,
+        };
+      }),
+    );
 
   const totales = useMemo(() => {
     const contratados = lineas.reduce((s, l) => s + l.kg_contratados, 0);
@@ -95,8 +140,11 @@ export function BlufinRecepcionRegistrarPage() {
     [lineas],
   );
 
+  const faltaIntelisis = intelisis.trim() === '';
+
   const canConfirm =
     !!fecha &&
+    !faltaIntelisis &&
     lineas.length > 0 &&
     lineas.every((l) => l.kg_recibidos !== '' && (parseFloat(l.kg_recibidos) || 0) > 0);
 
@@ -303,13 +351,24 @@ export function BlufinRecepcionRegistrarPage() {
             </div>
           </div>
           <div>
-            <label className="field-label">Entrada de compra Intelisis</label>
+            <label className="field-label">Entrada de compra Intelisis *</label>
             <input
               className="field-input mono"
               value={intelisis}
               onChange={(e) => setIntelisis(e.target.value)}
               placeholder="EC-2026-XXXX"
+              style={{
+                borderColor: !faltaIntelisis ? 'var(--green-500)' : undefined,
+              }}
             />
+            <div
+              className="text-xs"
+              style={{ marginTop: 3, color: faltaIntelisis ? 'var(--amber-500)' : 'var(--ink-500)' }}
+            >
+              {faltaIntelisis
+                ? 'Obligatoria — sin entrada Intelisis no se puede confirmar'
+                : 'Entrada registrada en el ERP'}
+            </div>
           </div>
         </div>
       </div>
@@ -350,8 +409,9 @@ export function BlufinRecepcionRegistrarPage() {
           <thead>
             <tr>
               <th>Producto</th>
-              <th style={{ textAlign: 'right', width: 140 }}>Kg contratados</th>
-              <th style={{ width: 150 }}>Kg recibidos *</th>
+              <th style={{ textAlign: 'right', width: 130 }}>Kg contratados</th>
+              <th style={{ width: 140 }}>Kg recibidos *</th>
+              <th style={{ width: 110 }}>Cajas</th>
               <th>Observaciones</th>
             </tr>
           </thead>
@@ -360,9 +420,21 @@ export function BlufinRecepcionRegistrarPage() {
               const kg = parseFloat(l.kg_recibidos) || 0;
               const hayFaltante = l.kg_recibidos !== '' && kg < l.kg_contratados;
               const completo = l.kg_recibidos !== '' && kg >= l.kg_contratados;
+              const borde = hayFaltante
+                ? 'var(--red-500)'
+                : completo
+                  ? 'var(--green-500)'
+                  : undefined;
               return (
                 <tr key={i}>
-                  <td className="text-sm fw-600">{l.descripcion || 'Producto sin descripción'}</td>
+                  <td>
+                    <div className="text-sm fw-600">
+                      {l.descripcion || 'Producto sin descripción'}
+                    </div>
+                    {l.kg_caja != null && l.kg_caja > 0 && (
+                      <div className="text-xs muted mono">{trimNum(l.kg_caja, 3)} kg/caja</div>
+                    )}
+                  </td>
                   <td style={{ textAlign: 'right' }} className="mono fw-600">
                     {fmtKg(l.kg_contratados)}
                   </td>
@@ -373,16 +445,27 @@ export function BlufinRecepcionRegistrarPage() {
                       min="0"
                       className="field-input mono"
                       value={l.kg_recibidos}
-                      onChange={(e) => updateLinea(i, 'kg_recibidos', e.target.value)}
+                      onChange={(e) => updateKg(i, e.target.value)}
                       placeholder={String(l.kg_contratados)}
-                      style={{
-                        fontWeight: 700,
-                        borderColor: hayFaltante
-                          ? 'var(--red-500)'
-                          : completo
-                            ? 'var(--green-500)'
-                            : undefined,
-                      }}
+                      style={{ fontWeight: 700, borderColor: borde }}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      className="field-input mono"
+                      value={l.cajas}
+                      onChange={(e) => updateCajas(i, e.target.value)}
+                      disabled={!l.kg_caja || l.kg_caja <= 0}
+                      title={
+                        !l.kg_caja || l.kg_caja <= 0
+                          ? 'El producto no tiene kg/caja definido — captura en kg'
+                          : 'Al editar cajas, los kg se calculan automáticamente'
+                      }
+                      placeholder={!l.kg_caja || l.kg_caja <= 0 ? '—' : ''}
+                      style={{ fontWeight: 700, borderColor: borde }}
                     />
                   </td>
                   <td>

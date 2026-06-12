@@ -17,7 +17,7 @@ const TABS: Tab[] = [
   { id: 'facturas',      label: 'Facturas',          href: '/app/importaciones/blufin/facturas',      icon: 'receipt',   enabled: false },
   { id: 'calendario',    label: 'Calendario',        href: '/app/importaciones/blufin/calendario',    icon: 'calendar',  enabled: false },
   { id: 'costos',        label: 'Central de costos', href: '/app/importaciones/blufin/costos',        icon: 'trend-up',  enabled: false },
-  { id: 'productos',     label: 'Productos',         href: '/app/importaciones/blufin/productos',     icon: 'package',   enabled: false },
+  { id: 'productos',     label: 'Productos',         href: '/app/importaciones/blufin/productos',     icon: 'package',   enabled: true  },
 ];
 
 export function BlufinLayout() {
