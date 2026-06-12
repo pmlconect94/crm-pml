@@ -3,6 +3,15 @@ import type { CatalogoSku } from '@/types/database';
 
 export const CATEGORIAS_BLUFIN = ['Tilapia Filete', 'Tilapia Entera', 'Camarón', 'Basa', 'Otros'];
 
+// Sugerencias para la ficha del SKU (datalist — aceptan texto libre)
+export const MARCAS_BLUFIN = [
+  'BLUFIN', 'PML', 'PANGABAY', 'SELECTA', 'MEKONG', 'MEDITERRANEO',
+  'TAMARINDO', 'TIBURON DE ORO', 'BLUFIN SANPEZ', 'KAYFISH',
+  'PANGA SANPEZ', 'CHIAPANECO', 'TIBURON', 'HUASTECA', 'AQUAFISH', 'MUZA', 'LUV',
+];
+export const TALLAS_BLUFIN = ['2-3', '3-5', '5-7', '7-9', '9-11', '100-200', '150-250', '200-300', '250-350', '350-550', '550-750'];
+export const PORCENTAJES_BLUFIN = ['40%', '60%', '70%', '80%', '85%', '90%', '95%', '100%'];
+
 /**
  * Catálogo completo del proveedor (incluye inactivos — la página filtra).
  * Este catálogo es el master: se referencia en contratos, recepciones y costos,
@@ -23,6 +32,9 @@ export type SkuParams = {
   code: string;
   descripcion: string;
   categoria: string | null;
+  marca: string | null;
+  pct: string | null;
+  talla: string | null;
   kg_caja: number;
   cajas_tipo: string | null;
 };

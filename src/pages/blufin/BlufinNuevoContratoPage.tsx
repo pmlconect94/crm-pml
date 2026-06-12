@@ -8,16 +8,11 @@ import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtKg } from '@/lib/format';
 import { getTcDelDia } from '@/lib/tc';
 
-const MARCAS = [
-  'BLUFIN', 'PML', 'PANGABAY', 'SELECTA', 'MEKONG', 'MEDITERRANEO',
-  'TAMARINDO', 'TIBURON DE ORO', 'BLUFIN SANPEZ', 'KAYFISH',
-  'PANGA SANPEZ', 'CHIAPANECO', 'TIBURON', 'HUASTECA', 'AQUAFISH', 'MUZA', 'LUV',
-];
-
-const TALLAS = ['2-3', '3-5', '5-7', '7-9', '9-11', '100-200', '150-250', '200-300', '250-350', '350-550', '550-750'];
-const PORCENTAJES = ['40%', '60%', '70%', '80%', '85%', '90%', '95%', '100%'];
 const STATUS_OPTS = ['Contratado', 'En tránsito', 'En puerto', 'Entregado'];
 
+// La línea solo captura kg/cajas y precio — la ficha (descripción, marca,
+// %, talla, kg/caja) se copia del SKU al elegirlo (snapshot: si el SKU
+// cambia después en el catálogo, los contratos viejos no se alteran).
 type LineaProducto = {
   uid: string;
   sku_id: string | null;
@@ -35,11 +30,11 @@ const emptyLinea = (): LineaProducto => ({
   uid: crypto.randomUUID(),
   sku_id: null,
   descripcion: '',
-  marca: 'BLUFIN',
-  pct: '90%',
-  talla: '350-550',
+  marca: '',
+  pct: '',
+  talla: '',
   kg: '',
-  kg_caja: '10',
+  kg_caja: '',
   cajas: '',
   precio_usd: '',
 });
@@ -105,26 +100,41 @@ export function BlufinNuevoContratoPage() {
       prev.map((l) => {
         if (l.uid !== uid) return l;
         const next = { ...l, ...patch };
-        // auto-recalcular cajas si tenemos kg y kg_caja
-        if ('kg' in patch || 'kg_caja' in patch) {
+        const kgC = toNum(next.kg_caja);
+        // conversión bidireccional kg ↔ cajas usando kg/caja del SKU
+        if (('kg' in patch || 'kg_caja' in patch) && kgC > 0) {
           const kg = toNum(next.kg);
-          const kgC = toNum(next.kg_caja);
-          if (kg > 0 && kgC > 0) next.cajas = String(Math.round(kg / kgC));
+          next.cajas = kg > 0 ? String(Number((kg / kgC).toFixed(2))) : '';
+        } else if ('cajas' in patch && kgC > 0) {
+          const cajas = toNum(next.cajas);
+          next.kg = cajas > 0 ? String(Number((cajas * kgC).toFixed(3))) : '';
         }
         return next;
       }),
     );
   };
 
+  // Al elegir el SKU se copia su ficha completa del catálogo
   const onPickSku = (uid: string, skuId: string) => {
     const sku = cat?.skus.find((s) => s.id === skuId);
     if (!sku) {
-      updateLinea(uid, { sku_id: null });
+      updateLinea(uid, {
+        sku_id: null,
+        descripcion: '',
+        marca: '',
+        pct: '',
+        talla: '',
+        kg_caja: '',
+        cajas: '',
+      });
       return;
     }
     updateLinea(uid, {
       sku_id: sku.id,
       descripcion: sku.descripcion,
+      marca: sku.marca ?? '',
+      pct: sku.pct ?? '',
+      talla: sku.talla ?? '',
       kg_caja: String(sku.kg_caja),
     });
   };
@@ -138,11 +148,10 @@ export function BlufinNuevoContratoPage() {
       if (!folio.trim() || folio.trim() === 'MCO-CV-') {
         throw new Error('Captura el folio del contrato');
       }
-      if (lineas.length === 0 || lineas.every((l) => toNum(l.kg) === 0)) {
-        throw new Error('Agrega al menos una línea de producto con kg');
+      const lineasValidas = lineas.filter((l) => l.sku_id && toNum(l.kg) > 0);
+      if (lineasValidas.length === 0) {
+        throw new Error('Agrega al menos una línea con SKU elegido y kg capturados');
       }
-
-      const lineasValidas = lineas.filter((l) => toNum(l.kg) > 0);
 
       // TC del día (Banxico) — stub por ahora, será Edge Function
       const tcDelDia = await getTcDelDia();
@@ -180,7 +189,7 @@ export function BlufinNuevoContratoPage() {
           talla: l.talla || null,
           kg: toNum(l.kg),
           kg_caja: toNum(l.kg_caja),
-          cajas: parseInt(l.cajas || '0', 10) || null,
+          cajas: Math.round(toNum(l.cajas)) || null,
           precio_usd: toNum(l.precio_usd),
           total_usd: toNum(l.kg) * toNum(l.precio_usd),
         })),
@@ -303,7 +312,9 @@ export function BlufinNuevoContratoPage() {
         <div className="card-header">
           <div>
             <h3 className="card-title">Productos del contrato</h3>
-            <p className="card-subtitle">Detalle por SKU · cajas, peso y precio</p>
+            <p className="card-subtitle">
+              Elige el SKU y su ficha se llena sola — captura únicamente kg (o cajas) y precio
+            </p>
           </div>
           <button className="btn btn-outline btn-sm" onClick={() => setLineas((p) => [...p, emptyLinea()])}>
             <Icon name="plus" size={13} /> Agregar línea
@@ -318,8 +329,8 @@ export function BlufinNuevoContratoPage() {
                 <th>Marca</th>
                 <th>%</th>
                 <th>Talla</th>
-                <th style={{ textAlign: 'right' }}>Kg</th>
                 <th style={{ textAlign: 'right' }}>Kg/caja</th>
+                <th style={{ textAlign: 'right' }}>Kg</th>
                 <th style={{ textAlign: 'right' }}>Cajas</th>
                 <th style={{ textAlign: 'right' }}>Precio USD</th>
                 <th style={{ textAlign: 'right' }}>Total USD</th>
@@ -329,6 +340,7 @@ export function BlufinNuevoContratoPage() {
             <tbody>
               {lineas.map((l, idx) => {
                 const total = toNum(l.kg) * toNum(l.precio_usd);
+                const sinSku = !l.sku_id;
                 return (
                   <tr key={l.uid}>
                     <td className="muted">{idx + 1}</td>
@@ -347,41 +359,17 @@ export function BlufinNuevoContratoPage() {
                         ))}
                       </select>
                     </td>
-                    <td>
-                      <select
-                        className="field-input"
-                        value={l.marca}
-                        onChange={(e) => updateLinea(l.uid, { marca: e.target.value })}
-                        style={{ fontSize: 12, padding: '6px 8px' }}
-                      >
-                        {MARCAS.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
+                    <td className="text-sm">
+                      {l.marca || <span className="muted">—</span>}
                     </td>
-                    <td>
-                      <select
-                        className="field-input"
-                        value={l.pct}
-                        onChange={(e) => updateLinea(l.uid, { pct: e.target.value })}
-                        style={{ fontSize: 12, padding: '6px 8px', width: 70 }}
-                      >
-                        {PORCENTAJES.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
+                    <td className="mono text-sm">
+                      {l.pct || <span className="muted">—</span>}
                     </td>
-                    <td>
-                      <select
-                        className="field-input"
-                        value={l.talla}
-                        onChange={(e) => updateLinea(l.uid, { talla: e.target.value })}
-                        style={{ fontSize: 12, padding: '6px 8px', width: 90 }}
-                      >
-                        {TALLAS.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
+                    <td className="mono text-sm">
+                      {l.talla || <span className="muted">—</span>}
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="mono text-sm">
+                      {l.kg_caja || <span className="muted">—</span>}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <input
@@ -390,6 +378,8 @@ export function BlufinNuevoContratoPage() {
                         step="0.001"
                         value={l.kg}
                         onChange={(e) => updateLinea(l.uid, { kg: e.target.value })}
+                        disabled={sinSku}
+                        title={sinSku ? 'Primero elige el SKU' : undefined}
                         style={{ fontSize: 12, padding: '6px 8px', textAlign: 'right', width: 100 }}
                       />
                     </td>
@@ -397,14 +387,17 @@ export function BlufinNuevoContratoPage() {
                       <input
                         className="field-input mono"
                         type="number"
-                        step="0.01"
-                        value={l.kg_caja}
-                        onChange={(e) => updateLinea(l.uid, { kg_caja: e.target.value })}
+                        step="1"
+                        value={l.cajas}
+                        onChange={(e) => updateLinea(l.uid, { cajas: e.target.value })}
+                        disabled={sinSku || toNum(l.kg_caja) <= 0}
+                        title={
+                          sinSku
+                            ? 'Primero elige el SKU'
+                            : 'Al editar cajas, los kg se calculan automáticamente'
+                        }
                         style={{ fontSize: 12, padding: '6px 8px', textAlign: 'right', width: 80 }}
                       />
-                    </td>
-                    <td style={{ textAlign: 'right' }} className="mono fw-600">
-                      {l.cajas || '—'}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <input
@@ -413,6 +406,8 @@ export function BlufinNuevoContratoPage() {
                         step="0.0001"
                         value={l.precio_usd}
                         onChange={(e) => updateLinea(l.uid, { precio_usd: e.target.value })}
+                        disabled={sinSku}
+                        title={sinSku ? 'Primero elige el SKU' : undefined}
                         style={{ fontSize: 12, padding: '6px 8px', textAlign: 'right', width: 100 }}
                       />
                     </td>
@@ -436,13 +431,13 @@ export function BlufinNuevoContratoPage() {
             </tbody>
             <tfoot>
               <tr style={{ background: 'var(--ink-50)' }}>
-                <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, padding: 12 }}>
+                <td colSpan={6} style={{ textAlign: 'right', fontWeight: 700, padding: 12 }}>
                   Totales
                 </td>
                 <td style={{ textAlign: 'right' }} className="mono fw-700">
                   {fmtKg(totales.totalKg)}
                 </td>
-                <td colSpan={3}></td>
+                <td colSpan={2}></td>
                 <td
                   className="mono fw-700"
                   style={{ textAlign: 'right', fontSize: 14, color: 'var(--blue-500)' }}

@@ -11,6 +11,9 @@ import { SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import {
   CATEGORIAS_BLUFIN,
+  MARCAS_BLUFIN,
+  TALLAS_BLUFIN,
+  PORCENTAJES_BLUFIN,
   createSku,
   updateSku,
   type SkuParams,
@@ -31,6 +34,9 @@ export function SkuModal({ open, onClose, sku }: Props) {
   const [code, setCode] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [categoria, setCategoria] = useState('');
+  const [marca, setMarca] = useState('');
+  const [pct, setPct] = useState('');
+  const [talla, setTalla] = useState('');
   const [kgCaja, setKgCaja] = useState('');
   const [cajasTipo, setCajasTipo] = useState('');
 
@@ -39,6 +45,9 @@ export function SkuModal({ open, onClose, sku }: Props) {
     setCode(sku?.code ?? '');
     setDescripcion(sku?.descripcion ?? '');
     setCategoria(sku?.categoria ?? '');
+    setMarca(sku?.marca ?? '');
+    setPct(sku?.pct ?? '');
+    setTalla(sku?.talla ?? '');
     setKgCaja(sku?.kg_caja != null ? String(sku.kg_caja) : '');
     setCajasTipo(sku?.cajas_tipo ?? '');
   }, [open, sku]);
@@ -51,6 +60,9 @@ export function SkuModal({ open, onClose, sku }: Props) {
         code: code.trim(),
         descripcion: descripcion.trim(),
         categoria: categoria || null,
+        marca: marca.trim() || null,
+        pct: pct.trim() || null,
+        talla: talla.trim() || null,
         kg_caja: parseFloat(kgCaja),
         cajas_tipo: cajasTipo.trim() || null,
       };
@@ -168,8 +180,53 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   className="field-input"
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Ej: TILAPIA FILLET 95% IQF 3-5"
+                  placeholder="Ej: Basa Pangabay 5/7"
                 />
+              </div>
+              <div>
+                <label className="field-label">Marca</label>
+                <input
+                  className="field-input"
+                  list="sku-marcas"
+                  value={marca}
+                  onChange={(e) => setMarca(e.target.value)}
+                  placeholder="Ej: PANGABAY"
+                />
+                <datalist id="sku-marcas">
+                  {MARCAS_BLUFIN.map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="field-label">Talla</label>
+                <input
+                  className="field-input mono"
+                  list="sku-tallas"
+                  value={talla}
+                  onChange={(e) => setTalla(e.target.value)}
+                  placeholder="Ej: 5-7"
+                />
+                <datalist id="sku-tallas">
+                  {TALLAS_BLUFIN.map((t) => (
+                    <option key={t} value={t} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="field-label">% limpieza</label>
+                <input
+                  className="field-input mono"
+                  list="sku-pcts"
+                  value={pct}
+                  onChange={(e) => setPct(e.target.value)}
+                  placeholder="Ej: 90%"
+                />
+                <datalist id="sku-pcts">
+                  {PORCENTAJES_BLUFIN.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="field-label">Kg por caja *</label>

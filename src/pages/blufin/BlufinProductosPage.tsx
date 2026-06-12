@@ -49,7 +49,9 @@ export function BlufinProductosPage() {
       return (
         s.code.toLowerCase().includes(q) ||
         s.descripcion.toLowerCase().includes(q) ||
-        (s.categoria ?? '').toLowerCase().includes(q)
+        (s.categoria ?? '').toLowerCase().includes(q) ||
+        (s.marca ?? '').toLowerCase().includes(q) ||
+        (s.talla ?? '').toLowerCase().includes(q)
       );
     });
   }, [skus, activos, verInactivos, search, catFilter]);
@@ -196,6 +198,9 @@ export function BlufinProductosPage() {
               <tr>
                 <th>Código</th>
                 <th>Descripción</th>
+                <th>Marca</th>
+                <th>Talla</th>
+                <th>%</th>
                 <th>Categoría</th>
                 <th style={{ textAlign: 'right' }}>Kg / caja</th>
                 <th>Cajas tipo</th>
@@ -212,6 +217,9 @@ export function BlufinProductosPage() {
                       {s.code}
                     </td>
                     <td className="text-sm fw-600">{s.descripcion}</td>
+                    <td className="text-sm">{s.marca ?? <span className="muted">—</span>}</td>
+                    <td className="mono text-sm">{s.talla ?? <span className="muted">—</span>}</td>
+                    <td className="mono text-sm">{s.pct ?? <span className="muted">—</span>}</td>
                     <td>
                       {s.categoria ? (
                         <span
