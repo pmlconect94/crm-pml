@@ -27,9 +27,9 @@ export type Database = {
         Relationships: Empty;
       };
       catalogo_sku: {
-        Row: { id: string; empresa_id: string | null; proveedor: string; code: string; descripcion: string; categoria: string | null; marca: string | null; pct: string | null; talla: string | null; kg_caja: number; cajas_tipo: string | null; activo: boolean | null; created_at: string | null };
-        Insert: { id?: string; empresa_id?: string | null; proveedor: string; code: string; descripcion: string; categoria?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja: number; cajas_tipo?: string | null; activo?: boolean | null };
-        Update: { id?: string; empresa_id?: string | null; proveedor?: string; code?: string; descripcion?: string; categoria?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja?: number; cajas_tipo?: string | null; activo?: boolean | null };
+        Row: { id: string; empresa_id: string | null; proveedor: string; code: string; producto: string | null; descripcion: string; categoria: string | null; marca: string | null; pct: string | null; talla: string | null; kg_caja: number; cajas_tipo: string | null; activo: boolean | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; proveedor: string; code: string; producto?: string | null; descripcion: string; categoria?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja: number; cajas_tipo?: string | null; activo?: boolean | null };
+        Update: { id?: string; empresa_id?: string | null; proveedor?: string; code?: string; producto?: string | null; descripcion?: string; categoria?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja?: number; cajas_tipo?: string | null; activo?: boolean | null };
         Relationships: Empty;
       };
       bancos: {

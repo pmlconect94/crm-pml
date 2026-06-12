@@ -3,14 +3,40 @@ import type { CatalogoSku } from '@/types/database';
 
 export const CATEGORIAS_BLUFIN = ['Tilapia Filete', 'Tilapia Entera', 'Camarón', 'Basa', 'Otros'];
 
-// Sugerencias para la ficha del SKU (datalist — aceptan texto libre)
-export const MARCAS_BLUFIN = [
-  'BLUFIN', 'PML', 'PANGABAY', 'SELECTA', 'MEKONG', 'MEDITERRANEO',
-  'TAMARINDO', 'TIBURON DE ORO', 'BLUFIN SANPEZ', 'KAYFISH',
-  'PANGA SANPEZ', 'CHIAPANECO', 'TIBURON', 'HUASTECA', 'AQUAFISH', 'MUZA', 'LUV',
+// Sugerencias para la ficha del SKU (datalist — aceptan texto libre).
+// Derivadas de LISTA PRODUCTOS IMPORTACION.xlsx del usuario (2026-06-12).
+export const PRODUCTOS_BLUFIN = [
+  'Filete Basa', 'Filete Basa Rosa', 'Posta Basa', 'Filete Tilapia', 'Tilapia Entera',
+  'Camaron', 'Atun lomo', 'Atun medallon', 'Aros de calamar', 'Tubo de calamar',
+  'Tubo y tentaculo de calamar', 'Callo de almeja', 'Callo de hacha',
+  'Sopa de mariscos', 'Surimi',
 ];
-export const TALLAS_BLUFIN = ['2-3', '3-5', '5-7', '7-9', '9-11', '100-200', '150-250', '200-300', '250-350', '350-550', '550-750'];
-export const PORCENTAJES_BLUFIN = ['40%', '60%', '70%', '80%', '85%', '90%', '95%', '100%'];
+export const MARCAS_BLUFIN = [
+  'Blufin', 'Blufin Eco.', 'Blufin Sanpez', 'Bulk Blufin', 'Chiapaneco', 'Kayfish',
+  'Mediterraneo', 'Mekong', 'Panga Sanpez', 'Pangabay', 'PML', 'Selecta',
+  'Tamarindo', 'Tiburon de Oro',
+];
+export const TALLAS_BLUFIN = [
+  '2/3 oz', '3/5 oz', '5/7 oz', '7/9 oz', '3/7 oz', '150/250 g', '350/550 g',
+  '550/750 g', '750/1000 g', '500 g', '2.0/4.0 kg', '31/35', '41/50', '61/70', 'U10',
+];
+export const PORCENTAJES_BLUFIN = ['45%', '50%', '70%', '85%', '100%'];
+
+/**
+ * La descripción del SKU no se captura: se genera como
+ * producto + marca + talla + % (omitiendo vacíos; el 100% no se muestra).
+ */
+export function composeDescripcion(
+  producto: string,
+  marca: string,
+  talla: string,
+  pct: string,
+): string {
+  const parts = [producto.trim(), marca.trim(), talla.trim()];
+  const p = pct.trim();
+  if (p && p !== '100%') parts.push(p);
+  return parts.filter(Boolean).join(' ');
+}
 
 /**
  * Catálogo completo del proveedor (incluye inactivos — la página filtra).
@@ -30,7 +56,8 @@ export async function fetchSkusBlufin(empresaId: string): Promise<CatalogoSku[]>
 
 export type SkuParams = {
   code: string;
-  descripcion: string;
+  producto: string;
+  descripcion: string; // generada con composeDescripcion — no se captura
   categoria: string | null;
   marca: string | null;
   pct: string | null;

@@ -49,6 +49,7 @@ export function BlufinProductosPage() {
       return (
         s.code.toLowerCase().includes(q) ||
         s.descripcion.toLowerCase().includes(q) ||
+        (s.producto ?? '').toLowerCase().includes(q) ||
         (s.categoria ?? '').toLowerCase().includes(q) ||
         (s.marca ?? '').toLowerCase().includes(q) ||
         (s.talla ?? '').toLowerCase().includes(q)

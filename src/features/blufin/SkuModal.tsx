@@ -11,9 +11,11 @@ import { SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import {
   CATEGORIAS_BLUFIN,
+  PRODUCTOS_BLUFIN,
   MARCAS_BLUFIN,
   TALLAS_BLUFIN,
   PORCENTAJES_BLUFIN,
+  composeDescripcion,
   createSku,
   updateSku,
   type SkuParams,
@@ -32,7 +34,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
   const qc = useQueryClient();
 
   const [code, setCode] = useState('');
-  const [descripcion, setDescripcion] = useState('');
+  const [producto, setProducto] = useState('');
   const [categoria, setCategoria] = useState('');
   const [marca, setMarca] = useState('');
   const [pct, setPct] = useState('');
@@ -43,7 +45,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
   useEffect(() => {
     if (!open) return;
     setCode(sku?.code ?? '');
-    setDescripcion(sku?.descripcion ?? '');
+    setProducto(sku?.producto ?? '');
     setCategoria(sku?.categoria ?? '');
     setMarca(sku?.marca ?? '');
     setPct(sku?.pct ?? '');
@@ -52,13 +54,17 @@ export function SkuModal({ open, onClose, sku }: Props) {
     setCajasTipo(sku?.cajas_tipo ?? '');
   }, [open, sku]);
 
-  const valid = code.trim() !== '' && descripcion.trim() !== '' && parseFloat(kgCaja) > 0;
+  // La descripción no se captura — se genera en vivo desde la ficha
+  const descripcion = composeDescripcion(producto, marca, talla, pct);
+
+  const valid = code.trim() !== '' && producto.trim() !== '' && parseFloat(kgCaja) > 0;
 
   const mutation = useMutation({
     mutationFn: async () => {
       const params: SkuParams = {
         code: code.trim(),
-        descripcion: descripcion.trim(),
+        producto: producto.trim(),
+        descripcion,
         categoria: categoria || null,
         marca: marca.trim() || null,
         pct: pct.trim() || null,
@@ -175,13 +181,19 @@ export function SkuModal({ open, onClose, sku }: Props) {
                 </select>
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label className="field-label">Descripción *</label>
+                <label className="field-label">Producto (lo que es) *</label>
                 <input
                   className="field-input"
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Ej: Basa Pangabay 5/7"
+                  list="sku-productos"
+                  value={producto}
+                  onChange={(e) => setProducto(e.target.value)}
+                  placeholder="Ej: Filete Basa"
                 />
+                <datalist id="sku-productos">
+                  {PRODUCTOS_BLUFIN.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="field-label">Marca</label>
@@ -190,7 +202,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   list="sku-marcas"
                   value={marca}
                   onChange={(e) => setMarca(e.target.value)}
-                  placeholder="Ej: PANGABAY"
+                  placeholder="Ej: Pangabay"
                 />
                 <datalist id="sku-marcas">
                   {MARCAS_BLUFIN.map((m) => (
@@ -205,7 +217,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   list="sku-tallas"
                   value={talla}
                   onChange={(e) => setTalla(e.target.value)}
-                  placeholder="Ej: 5-7"
+                  placeholder="Ej: 5/7 oz"
                 />
                 <datalist id="sku-tallas">
                   {TALLAS_BLUFIN.map((t) => (
@@ -220,7 +232,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   list="sku-pcts"
                   value={pct}
                   onChange={(e) => setPct(e.target.value)}
-                  placeholder="Ej: 90%"
+                  placeholder="Ej: 70%"
                 />
                 <datalist id="sku-pcts">
                   {PORCENTAJES_BLUFIN.map((p) => (
@@ -248,6 +260,23 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   onChange={(e) => setCajasTipo(e.target.value)}
                   placeholder="Ej: Master"
                 />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 'var(--r-sm)',
+                    background: 'var(--ink-50)',
+                    border: '1px solid var(--ink-200)',
+                  }}
+                >
+                  <div className="text-xs muted" style={{ marginBottom: 2 }}>
+                    Descripción (se genera sola: producto + marca + talla + %)
+                  </div>
+                  <div className="text-sm fw-600" style={{ color: descripcion ? 'var(--ink-900)' : 'var(--ink-400)' }}>
+                    {descripcion || 'Captura el producto para verla…'}
+                  </div>
+                </div>
               </div>
             </div>
 
