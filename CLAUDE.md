@@ -1276,12 +1276,12 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 
 ### SIGUIENTE PASO (handoff de sesión)
 
-**Construir Central de Costos de Blufin** — la pieza estratégica del módulo. Sus dependencias ya están live: Pagos ✅ (TC efectivo ponderado) y Recepción ✅ (kg reales en bodega).
-- Costo promedio ponderado sobre el stock que el usuario tiene en bodega (ver §6 `calcularPromedio` — fuentes ordenadas por `eta_bodega` DESC, de más nuevo a más viejo)
-- TC por contenedor en orden de prioridad (§14 regla 2): pagos reales ponderados → tc_forward → tc_ponderado → tcDelDia (stub null hasta Edge Function Banxico, pendiente de infra #1)
-- Histórico de precios por SKU
-- Prototipo de referencia: `prototype/blufin-costos.jsx`
-- Después: Notas de crédito (ya hay una diferencia de presentación real esperando NC, ver Datos de prueba)
+Con **Central de Costos ✅ LIVE**, los tabs operativos de Blufin que faltan son:
+- **Notas de crédito** — flujo complejo (CFDI timbrado, razón presentación/descuento/faltante, aplicaciones a contratos, saldo pendiente). Ya hay una diferencia de presentación real esperando NC (MCO-CV-003876 Paletizado→Granel, si sigue en BD).
+- **Facturas** — subir PDF + comparador línea-por-línea vs contrato.
+- **Calendario** (tab propio) — reutilizable: ETAs + vencimientos de pagos (ya existe un mini-calendario en Recepción que puede servir de base).
+- Pendiente transversal: extender el borrador `useDraft` a `BlufinRecepcionRegistrarPage` y `BlufinPagoMultiplePage` (ver §17).
+- Infra que desbloquearía MXN reales en costos: Edge Function `tc-del-dia` (Banxico) — pendiente #1.
 
 ### Foundation ✅
 
@@ -1305,7 +1305,7 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 | Notas de crédito | 🔜 | — | Flujo complejo: CFDI timbrado, razón (presentación/descuento/faltante), aplicaciones a contratos, saldo pendiente |
 | Facturas | 🔜 | — | Subir PDF + comparador línea-por-línea vs contrato |
 | Calendario | 🔜 | — | Reutilizable: ETAs + vencimientos pagos |
-| Central de Costos | 🔜 | — | La pieza estratégica: TC efectivo ponderado, costo promedio por kg restante. Necesita Pagos primero ✅ |
+| **Central de Costos** | ✅ LIVE | `BlufinCostosPage.tsx` · `costos-queries.ts` | Sub-tabs **Inventario & Costo Promedio** + **Histórico de Precios**. `fetchCostosData` reutiliza fetchContratos/fetchPagos/fetchForwards/fetchSkusBlufin (sin duplicar queries), agrupa las líneas por `sku_id` y arma las **fuentes** (un contenedor por contrato) ordenadas por `eta_bodega` DESC. **TC efectivo por contenedor** (`tcEfectivo`, orden §14.2): pagos reales ponderados `Σ(tc×monto)/Σ(monto)` → `tc_forward` → `tc_ponderado` → null (TC del día sigue stub; si null se muestra "—" y el costo MXN se omite, no se inventa TC). **Inventario**: buscador de SKU (dropdown custom, no datalist porque no está en tabla con overflow) → últimos 5 contenedores con USD/kg, TC (tooltip de origen) y MXN/kg → input **manual** de kg en bodega (decisión usuario 2026-06-13: solo manual, sin pre-llenado) → `calcularPromedio` (§6: toma del más nuevo al más viejo) devuelve avgUSD, avgTC (ponderado solo sobre kg con TC), avgMXN, valor total y **desglose** con barras de % por contenedor. Avisa si el stock excede el historial o si hay kg sin TC. **Histórico**: por SKU, precio FOB a lo largo de los contratos (fecha ASC) con flechas ▲▼ y cambio % punta a punta — datos reales, no mock |
 | **Productos** | ✅ LIVE | `BlufinProductosPage.tsx` · `SkuModal.tsx` · `productos-queries.ts` | CRUD del catálogo master de SKUs Blufin (se referencia en contratos, recepciones, costos; servirá para **mapear productos al leer contratos PDF** en carga masiva — pendiente). **El catálogo es la ficha completa**: código, **producto** ("lo que es"), marca, **% peso neto** (producto real vs glaseo, NO "limpieza"), talla, kg/caja — cada combinación producto+marca+talla+% es un SKU distinto (104001 = Filete Basa Pangabay 5/7 oz). **Clasificación por `producto`** (decisión 2026-06-13: se eliminaron `categoria` y `cajas_tipo`, migración `20260613120000`): KPIs muestran los productos con más SKUs, chips de filtro **dinámicos** (productos presentes en el catálogo), search por código/descripción/producto/marca/talla. **La descripción NO se captura: se genera** con `composeDescripcion` = `PRODUCTO - MARCA - PESO NETO - TALLA` (separador `" - "`, omite solo vacíos; el 100% SÍ se muestra — migración `20260613130000`) — preview en vivo en el modal. Alta/edición vía `SkuModal` (producto/marca/talla/% con datalist de sugerencias `PRODUCTOS_BLUFIN`/`MARCAS_BLUFIN`/`TALLAS_BLUFIN`/`PORCENTAJES_BLUFIN` pero texto libre; valida duplicado `23505`). **Sin hard delete**: toggle Activar/Desactivar (`toggleSkuActivo`) — los inactivos desaparecen de los forms de captura (`fetchCatalogos` filtra `activo=true`) y se ven con toggle "Ver inactivos" |
 
 ### Importaciones — Camanchaca y Neptuno

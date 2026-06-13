@@ -16,7 +16,7 @@ const TABS: Tab[] = [
   { id: 'notas-credito', label: 'Notas de crédito',  href: '/app/importaciones/blufin/notas-credito', icon: 'note',      enabled: false },
   { id: 'facturas',      label: 'Facturas',          href: '/app/importaciones/blufin/facturas',      icon: 'receipt',   enabled: false },
   { id: 'calendario',    label: 'Calendario',        href: '/app/importaciones/blufin/calendario',    icon: 'calendar',  enabled: false },
-  { id: 'costos',        label: 'Central de costos', href: '/app/importaciones/blufin/costos',        icon: 'trend-up',  enabled: false },
+  { id: 'costos',        label: 'Central de costos', href: '/app/importaciones/blufin/costos',        icon: 'trend-up',  enabled: true  },
   { id: 'productos',     label: 'Productos',         href: '/app/importaciones/blufin/productos',     icon: 'package',   enabled: true  },
 ];
 
