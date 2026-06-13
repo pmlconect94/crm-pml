@@ -1,8 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { CatalogoSku } from '@/types/database';
 
-export const CATEGORIAS_BLUFIN = ['Tilapia Filete', 'Tilapia Entera', 'Camarón', 'Basa', 'Otros'];
-
 // Sugerencias para la ficha del SKU (datalist — aceptan texto libre).
 // Derivadas de LISTA PRODUCTOS IMPORTACION.xlsx del usuario (2026-06-12).
 export const PRODUCTOS_BLUFIN = [
@@ -23,8 +21,9 @@ export const TALLAS_BLUFIN = [
 export const PORCENTAJES_BLUFIN = ['45%', '50%', '70%', '85%', '100%'];
 
 /**
- * La descripción del SKU no se captura: se genera como
- * producto + marca + talla + % (omitiendo vacíos; el 100% no se muestra).
+ * La descripción del SKU no se captura: se genera con el formato
+ * PRODUCTO - MARCA - LIMPIEZA - TALLA (separador " - ", omite campos
+ * vacíos; el 100% de limpieza no se muestra por ser el caso normal).
  */
 export function composeDescripcion(
   producto: string,
@@ -32,10 +31,11 @@ export function composeDescripcion(
   talla: string,
   pct: string,
 ): string {
-  const parts = [producto.trim(), marca.trim(), talla.trim()];
   const p = pct.trim();
-  if (p && p !== '100%') parts.push(p);
-  return parts.filter(Boolean).join(' ');
+  const limpieza = p && p !== '100%' ? p : '';
+  return [producto.trim(), marca.trim(), limpieza, talla.trim()]
+    .filter(Boolean)
+    .join(' - ');
 }
 
 /**
@@ -58,12 +58,10 @@ export type SkuParams = {
   code: string;
   producto: string;
   descripcion: string; // generada con composeDescripcion — no se captura
-  categoria: string | null;
   marca: string | null;
   pct: string | null;
   talla: string | null;
   kg_caja: number;
-  cajas_tipo: string | null;
 };
 
 export async function createSku(empresaId: string, params: SkuParams): Promise<void> {

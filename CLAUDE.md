@@ -417,16 +417,15 @@ Para logos con fondo blanco sobre fondos oscuros, envolver en un `div` blanco co
 
 ## 10. Catálogo de SKUs (componente compartido)
 
-Cada proveedor tiene su propio catálogo de SKUs con: código, descripción, categoría, kg/caja, tipo de cajas (opcional).
+Cada SKU es la ficha completa del producto: código, **producto** ("lo que es"), marca, % de limpieza, talla y kg/caja. **La descripción NO se captura: se genera** con formato `PRODUCTO - MARCA - LIMPIEZA - TALLA` (omite vacíos y el 100%).
 
 Este catálogo es el master de productos — se referencia en contratos, facturas, recepciones y costos.
 
-**Categorías por proveedor:**
-- **Blufin:** Tilapia Filete · Tilapia Entera · Camarón · Basa · Otros
-- **Camanchaca:** Salmón Reserva · Salmón Premium · Salmón Café · Ahumados · Otros
-- **Neptuno:** Pez Espada · Merluza · Bacalao · Pulpo · Calamar · Otros
+**Clasificación por `producto`** (decisión del usuario 2026-06-13): no hay campo `categoria` ni `cajas_tipo` — el "producto" ES la clasificación. La página filtra por los productos presentes en el catálogo (chips dinámicos) y los KPIs muestran los productos con más SKUs.
+- **Blufin (productos reales):** Filete Basa · Filete Basa Rosa · Posta Basa · Filete Tilapia · Tilapia Entera · Camaron · Atun lomo · Atun medallon · Aros/Tubo/Tentaculo de calamar · Callo de almeja/hacha · Sopa de mariscos · Surimi
+- **Camanchaca / Neptuno:** cuando se construyan, mismo modelo (clasificar por producto).
 
-El prototipo tiene un componente `SkuCatalogo` reutilizable en `catalogo.jsx` con búsqueda, filtro por categoría y edición inline.
+El prototipo `catalogo.jsx` es referencia visual, pero el modelo de datos vigente es el de arriba (ficha estructurada + descripción generada).
 
 ---
 
@@ -527,14 +526,19 @@ create table catalogo_sku (
   empresa_id  text references empresas(id),
   proveedor   text not null,  -- 'blufin' | 'camanchaca' | 'neptuno'
   code        text not null,
-  descripcion text not null,
-  categoria   text,           -- 'Tilapia Filete' | 'Salmón Premium' | 'Pulpo' | etc
+  producto    text,           -- "lo que es": 'Filete Basa' | 'Tilapia Entera' | etc — ESTA es la clasificación
+  marca       text,           -- 'Pangabay' | 'Mekong' | 'Blufin' | etc
+  pct         text,           -- % de limpieza: '70%' | '85%' | '100%'
+  talla       text,           -- '5/7 oz' | '350/550 g' | '41/50' | etc
+  descripcion text not null,  -- GENERADA, no se captura: producto - marca - limpieza - talla
   kg_caja     numeric(8,3) not null,
-  cajas_tipo  text,
   activo      boolean default true,
   created_at  timestamptz default now(),
   unique(empresa_id, proveedor, code)
 );
+-- NOTA: ya NO hay columnas `categoria` ni `cajas_tipo` (eliminadas 2026-06-13).
+-- La clasificación se hace por `producto`. Cada combinación producto+marca+talla+%
+-- es un SKU distinto (ej. 104001 = Filete Basa Pangabay 5/7 oz).
 
 -- ─────────────────────────────────────────────
 -- CATÁLOGOS DE REFERENCIA
@@ -1302,7 +1306,7 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 | Facturas | 🔜 | — | Subir PDF + comparador línea-por-línea vs contrato |
 | Calendario | 🔜 | — | Reutilizable: ETAs + vencimientos pagos |
 | Central de Costos | 🔜 | — | La pieza estratégica: TC efectivo ponderado, costo promedio por kg restante. Necesita Pagos primero ✅ |
-| **Productos** | ✅ LIVE | `BlufinProductosPage.tsx` · `SkuModal.tsx` · `productos-queries.ts` | CRUD del catálogo master de SKUs Blufin (se referencia en contratos, recepciones, costos; servirá para **mapear productos al leer contratos PDF** en carga masiva — pendiente). KPIs por categoría + search + chips de categoría (`CATEGORIAS_BLUFIN`: Tilapia Filete / Tilapia Entera / Camarón / Basa / Otros) + tabla. **El catálogo es la ficha completa del producto** (2026-06-12): código, categoría, **producto** ("lo que es": Filete Basa, Tilapia Entera…, migración `20260612130000`), **marca, % limpieza, talla** (migración `20260612120000`), kg/caja, tipo de cajas — cada combinación producto+marca+talla+% es un SKU distinto (así opera el negocio: 104001 = Filete Basa Pangabay 5/7 oz). **La descripción NO se captura: se genera** con `composeDescripcion` = producto + marca + talla + % (omite vacíos y el 100%) — preview en vivo en el modal. Alta/edición vía `SkuModal` (producto/marca/talla/% con datalist de sugerencias `PRODUCTOS_BLUFIN`/`MARCAS_BLUFIN`/`TALLAS_BLUFIN`/`PORCENTAJES_BLUFIN` pero texto libre; valida duplicado `23505`). **Sin hard delete**: toggle Activar/Desactivar (`toggleSkuActivo`) — los inactivos desaparecen de los forms de captura (`fetchCatalogos` filtra `activo=true`) y se ven con toggle "Ver inactivos" |
+| **Productos** | ✅ LIVE | `BlufinProductosPage.tsx` · `SkuModal.tsx` · `productos-queries.ts` | CRUD del catálogo master de SKUs Blufin (se referencia en contratos, recepciones, costos; servirá para **mapear productos al leer contratos PDF** en carga masiva — pendiente). **El catálogo es la ficha completa**: código, **producto** ("lo que es"), marca, % limpieza, talla, kg/caja — cada combinación producto+marca+talla+% es un SKU distinto (104001 = Filete Basa Pangabay 5/7 oz). **Clasificación por `producto`** (decisión 2026-06-13: se eliminaron `categoria` y `cajas_tipo`, migración `20260613...`): KPIs muestran los productos con más SKUs, chips de filtro **dinámicos** (productos presentes en el catálogo), search por código/descripción/producto/marca/talla. **La descripción NO se captura: se genera** con `composeDescripcion` = `PRODUCTO - MARCA - LIMPIEZA - TALLA` (separador `" - "`, omite vacíos y el 100%) — preview en vivo en el modal. Alta/edición vía `SkuModal` (producto/marca/talla/% con datalist de sugerencias `PRODUCTOS_BLUFIN`/`MARCAS_BLUFIN`/`TALLAS_BLUFIN`/`PORCENTAJES_BLUFIN` pero texto libre; valida duplicado `23505`). **Sin hard delete**: toggle Activar/Desactivar (`toggleSkuActivo`) — los inactivos desaparecen de los forms de captura (`fetchCatalogos` filtra `activo=true`) y se ven con toggle "Ver inactivos" |
 
 ### Importaciones — Camanchaca y Neptuno
 
@@ -1326,7 +1330,7 @@ Logística, Ventas, Cobranza, Administración, Contabilidad, RH, Marlin — side
 ### Datos en BD (capturados EN VIVO por el usuario — no asumir que son desechables)
 
 - **2026-06-12: el usuario limpió la BD para arrancar con datos reales** — 0 contratos, 0 pagos, 0 recepciones
-- Catálogo: **58 SKUs reales importados** de `LISTA PRODUCTOS IMPORTACION.xlsx` del usuario (OneDrive → Programacion mercancia) con ficha completa: producto/marca/%/talla/kg-caja y descripción generada. Upsert idempotente versionado en `supabase/seed/seed_catalogo_blufin.sql`. Categorías: Tilapia Filete (17) · Tilapia Entera (5) · Basa (22) · Camarón (3) · Otros (11)
+- Catálogo: **58 SKUs reales importados** de `LISTA PRODUCTOS IMPORTACION.xlsx` del usuario (OneDrive → Programacion mercancia) con ficha completa: producto/marca/%/talla/kg-caja y descripción generada (`PRODUCTO - MARCA - LIMPIEZA - TALLA`). Upsert idempotente versionado en `supabase/seed/seed_catalogo_blufin.sql`. Productos con más SKUs: Filete Basa (18) · Filete Tilapia (17) · Tilapia Entera (5) · Camaron (3)
 - `crm.bodegas` ampliada por el usuario (incluye FRIZAJAL)
 - **Regla aprendida**: el usuario opera la app en vivo sobre el preview mientras se desarrolla — verificar el origen de cualquier dato antes de borrarlo
 

@@ -5,11 +5,7 @@ import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import { fmtNum } from '@/lib/format';
-import {
-  CATEGORIAS_BLUFIN,
-  fetchSkusBlufin,
-  toggleSkuActivo,
-} from '@/features/blufin/productos-queries';
+import { fetchSkusBlufin, toggleSkuActivo } from '@/features/blufin/productos-queries';
 import { SkuModal } from '@/features/blufin/SkuModal';
 import type { CatalogoSku } from '@/types/database';
 
@@ -17,7 +13,7 @@ export function BlufinProductosPage() {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
-  const [catFilter, setCatFilter] = useState('Todos');
+  const [prodFilter, setProdFilter] = useState('Todos');
   const [verInactivos, setVerInactivos] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editSku, setEditSku] = useState<CatalogoSku | null>(null);
@@ -40,22 +36,34 @@ export function BlufinProductosPage() {
   const activos = useMemo(() => skus.filter((s) => s.activo !== false), [skus]);
   const inactivos = skus.length - activos.length;
 
+  // Clasificamos por "producto" (lo que es). Lista derivada del catálogo,
+  // con su conteo, ordenada por más SKUs primero.
+  const productos = useMemo(() => {
+    const conteo = new Map<string, number>();
+    for (const s of activos) {
+      const p = s.producto ?? '—';
+      conteo.set(p, (conteo.get(p) ?? 0) + 1);
+    }
+    return Array.from(conteo.entries())
+      .map(([nombre, count]) => ({ nombre, count }))
+      .sort((a, b) => b.count - a.count || a.nombre.localeCompare(b.nombre));
+  }, [activos]);
+
   const filtrados = useMemo(() => {
     const base = verInactivos ? skus : activos;
     const q = search.toLowerCase();
     return base.filter((s) => {
-      if (catFilter !== 'Todos' && s.categoria !== catFilter) return false;
+      if (prodFilter !== 'Todos' && (s.producto ?? '—') !== prodFilter) return false;
       if (!q) return true;
       return (
         s.code.toLowerCase().includes(q) ||
         s.descripcion.toLowerCase().includes(q) ||
         (s.producto ?? '').toLowerCase().includes(q) ||
-        (s.categoria ?? '').toLowerCase().includes(q) ||
         (s.marca ?? '').toLowerCase().includes(q) ||
         (s.talla ?? '').toLowerCase().includes(q)
       );
     });
-  }, [skus, activos, verInactivos, search, catFilter]);
+  }, [skus, activos, verInactivos, search, prodFilter]);
 
   const abrir = (sku: CatalogoSku | null) => {
     setEditSku(sku);
@@ -87,11 +95,11 @@ export function BlufinProductosPage() {
             {inactivos > 0 ? `${inactivos} inactivo${inactivos !== 1 ? 's' : ''}` : 'Catálogo completo'}
           </span>
         </div>
-        {CATEGORIAS_BLUFIN.slice(0, 3).map((c) => (
-          <div className="kpi" key={c}>
-            <span className="kpi-label">{c}</span>
-            <span className="kpi-value">{activos.filter((s) => s.categoria === c).length}</span>
-            <span className="kpi-delta">SKUs en la categoría</span>
+        {productos.slice(0, 3).map((p) => (
+          <div className="kpi" key={p.nombre}>
+            <span className="kpi-label">{p.nombre}</span>
+            <span className="kpi-value">{p.count}</span>
+            <span className="kpi-delta">SKUs de este producto</span>
           </div>
         ))}
       </div>
@@ -136,16 +144,16 @@ export function BlufinProductosPage() {
           </div>
 
           <div className="hstack" style={{ gap: 4, flexWrap: 'wrap' }}>
-            {['Todos', ...CATEGORIAS_BLUFIN].map((c) => (
+            {['Todos', ...productos.map((p) => p.nombre)].map((c) => (
               <button
                 key={c}
-                onClick={() => setCatFilter(c)}
+                onClick={() => setProdFilter(c)}
                 style={{
                   padding: '5px 10px',
                   borderRadius: 999,
-                  border: '1px solid ' + (catFilter === c ? 'var(--blue-500)' : 'var(--ink-200)'),
-                  background: catFilter === c ? 'var(--blue-500)' : 'white',
-                  color: catFilter === c ? 'white' : 'var(--ink-700)',
+                  border: '1px solid ' + (prodFilter === c ? 'var(--blue-500)' : 'var(--ink-200)'),
+                  background: prodFilter === c ? 'var(--blue-500)' : 'white',
+                  color: prodFilter === c ? 'white' : 'var(--ink-700)',
                   fontSize: 11,
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -181,7 +189,7 @@ export function BlufinProductosPage() {
             <p className="muted">
               {skus.length === 0
                 ? 'Da de alta el primer producto del proveedor.'
-                : 'Ajusta la búsqueda o el filtro de categoría.'}
+                : 'Ajusta la búsqueda o el filtro de producto.'}
             </p>
             {skus.length === 0 && (
               <button
@@ -198,13 +206,12 @@ export function BlufinProductosPage() {
             <thead>
               <tr>
                 <th>Código</th>
+                <th>Producto</th>
                 <th>Descripción</th>
                 <th>Marca</th>
                 <th>Talla</th>
                 <th>%</th>
-                <th>Categoría</th>
                 <th style={{ textAlign: 'right' }}>Kg / caja</th>
-                <th>Cajas tipo</th>
                 <th>Status</th>
                 <th style={{ width: 170 }}></th>
               </tr>
@@ -217,32 +224,16 @@ export function BlufinProductosPage() {
                     <td className="mono fw-700" style={{ color: 'var(--blue-500)' }}>
                       {s.code}
                     </td>
-                    <td className="text-sm fw-600">{s.descripcion}</td>
+                    <td className="text-sm fw-600">
+                      {s.producto ?? <span className="muted">—</span>}
+                    </td>
+                    <td className="text-sm">{s.descripcion}</td>
                     <td className="text-sm">{s.marca ?? <span className="muted">—</span>}</td>
                     <td className="mono text-sm">{s.talla ?? <span className="muted">—</span>}</td>
                     <td className="mono text-sm">{s.pct ?? <span className="muted">—</span>}</td>
-                    <td>
-                      {s.categoria ? (
-                        <span
-                          style={{
-                            padding: '2px 9px',
-                            borderRadius: 999,
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            background: 'color-mix(in srgb, var(--blue-500) 10%, white)',
-                            color: 'var(--blue-500)',
-                          }}
-                        >
-                          {s.categoria}
-                        </span>
-                      ) : (
-                        <span className="text-xs muted">—</span>
-                      )}
-                    </td>
                     <td style={{ textAlign: 'right' }} className="mono fw-600">
                       {fmtNum(s.kg_caja, 3)}
                     </td>
-                    <td className="text-sm">{s.cajas_tipo ?? <span className="muted">—</span>}</td>
                     <td>
                       {inactivo ? (
                         <span className="badge badge-red">Inactivo</span>

@@ -1,6 +1,6 @@
 /**
  * Modal de alta/edición de SKU del catálogo Blufin.
- * Form de 5 campos — cabe en modal (ver §17).
+ * La descripción no se captura: se genera con composeDescripcion.
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,7 +10,6 @@ import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import {
-  CATEGORIAS_BLUFIN,
   PRODUCTOS_BLUFIN,
   MARCAS_BLUFIN,
   TALLAS_BLUFIN,
@@ -35,23 +34,19 @@ export function SkuModal({ open, onClose, sku }: Props) {
 
   const [code, setCode] = useState('');
   const [producto, setProducto] = useState('');
-  const [categoria, setCategoria] = useState('');
   const [marca, setMarca] = useState('');
   const [pct, setPct] = useState('');
   const [talla, setTalla] = useState('');
   const [kgCaja, setKgCaja] = useState('');
-  const [cajasTipo, setCajasTipo] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setCode(sku?.code ?? '');
     setProducto(sku?.producto ?? '');
-    setCategoria(sku?.categoria ?? '');
     setMarca(sku?.marca ?? '');
     setPct(sku?.pct ?? '');
     setTalla(sku?.talla ?? '');
     setKgCaja(sku?.kg_caja != null ? String(sku.kg_caja) : '');
-    setCajasTipo(sku?.cajas_tipo ?? '');
   }, [open, sku]);
 
   // La descripción no se captura — se genera en vivo desde la ficha
@@ -65,12 +60,10 @@ export function SkuModal({ open, onClose, sku }: Props) {
         code: code.trim(),
         producto: producto.trim(),
         descripcion,
-        categoria: categoria || null,
         marca: marca.trim() || null,
         pct: pct.trim() || null,
         talla: talla.trim() || null,
         kg_caja: parseFloat(kgCaja),
-        cajas_tipo: cajasTipo.trim() || null,
       };
       if (sku) await updateSku(sku.id, params);
       else await createSku(empresaId, params);
@@ -156,30 +149,6 @@ export function SkuModal({ open, onClose, sku }: Props) {
                 gap: 12,
               }}
             >
-              <div>
-                <label className="field-label">Código SKU *</label>
-                <input
-                  className="field-input mono"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="Ej: 202010"
-                />
-              </div>
-              <div>
-                <label className="field-label">Categoría</label>
-                <select
-                  className="field-input"
-                  value={categoria}
-                  onChange={(e) => setCategoria(e.target.value)}
-                >
-                  <option value="">Sin categoría</option>
-                  {CATEGORIAS_BLUFIN.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <label className="field-label">Producto (lo que es) *</label>
                 <input
@@ -194,6 +163,27 @@ export function SkuModal({ open, onClose, sku }: Props) {
                     <option key={p} value={p} />
                   ))}
                 </datalist>
+              </div>
+              <div>
+                <label className="field-label">Código SKU *</label>
+                <input
+                  className="field-input mono"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="Ej: 202010"
+                />
+              </div>
+              <div>
+                <label className="field-label">Kg por caja *</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  className="field-input mono"
+                  value={kgCaja}
+                  onChange={(e) => setKgCaja(e.target.value)}
+                  placeholder="10.000"
+                />
               </div>
               <div>
                 <label className="field-label">Marca</label>
@@ -225,7 +215,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   ))}
                 </datalist>
               </div>
-              <div>
+              <div style={{ gridColumn: '1 / -1' }}>
                 <label className="field-label">% limpieza</label>
                 <input
                   className="field-input mono"
@@ -240,27 +230,6 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   ))}
                 </datalist>
               </div>
-              <div>
-                <label className="field-label">Kg por caja *</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  min="0"
-                  className="field-input mono"
-                  value={kgCaja}
-                  onChange={(e) => setKgCaja(e.target.value)}
-                  placeholder="10.000"
-                />
-              </div>
-              <div>
-                <label className="field-label">Tipo de cajas (opcional)</label>
-                <input
-                  className="field-input"
-                  value={cajasTipo}
-                  onChange={(e) => setCajasTipo(e.target.value)}
-                  placeholder="Ej: Master"
-                />
-              </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <div
                   style={{
@@ -271,7 +240,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   }}
                 >
                   <div className="text-xs muted" style={{ marginBottom: 2 }}>
-                    Descripción (se genera sola: producto + marca + talla + %)
+                    Descripción (se genera sola: producto - marca - limpieza - talla)
                   </div>
                   <div className="text-sm fw-600" style={{ color: descripcion ? 'var(--ink-900)' : 'var(--ink-400)' }}>
                     {descripcion || 'Captura el producto para verla…'}
