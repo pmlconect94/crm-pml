@@ -22,8 +22,9 @@ export const PORCENTAJES_BLUFIN = ['45%', '50%', '70%', '85%', '100%'];
 
 /**
  * La descripción del SKU no se captura: se genera con el formato
- * PRODUCTO - MARCA - LIMPIEZA - TALLA (separador " - ", omite campos
- * vacíos; el 100% de limpieza no se muestra por ser el caso normal).
+ * PRODUCTO - MARCA - PESO NETO - TALLA (separador " - ", omite campos
+ * vacíos). El % es el peso neto del producto (producto real vs glaseo),
+ * así que el 100% SÍ se muestra — es un dato del producto, no un default.
  */
 export function composeDescripcion(
   producto: string,
@@ -31,9 +32,7 @@ export function composeDescripcion(
   talla: string,
   pct: string,
 ): string {
-  const p = pct.trim();
-  const limpieza = p && p !== '100%' ? p : '';
-  return [producto.trim(), marca.trim(), limpieza, talla.trim()]
+  return [producto.trim(), marca.trim(), pct.trim(), talla.trim()]
     .filter(Boolean)
     .join(' - ');
 }

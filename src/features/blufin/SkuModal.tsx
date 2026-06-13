@@ -216,7 +216,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                 </datalist>
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label className="field-label">% limpieza</label>
+                <label className="field-label">% peso neto</label>
                 <input
                   className="field-input mono"
                   list="sku-pcts"
@@ -240,7 +240,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
                   }}
                 >
                   <div className="text-xs muted" style={{ marginBottom: 2 }}>
-                    Descripción (se genera sola: producto - marca - limpieza - talla)
+                    Descripción (se genera sola: producto - marca - peso neto - talla)
                   </div>
                   <div className="text-sm fw-600" style={{ color: descripcion ? 'var(--ink-900)' : 'var(--ink-400)' }}>
                     {descripcion || 'Captura el producto para verla…'}

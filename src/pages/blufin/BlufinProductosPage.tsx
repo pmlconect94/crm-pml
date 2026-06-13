@@ -210,7 +210,7 @@ export function BlufinProductosPage() {
                 <th>Descripción</th>
                 <th>Marca</th>
                 <th>Talla</th>
-                <th>%</th>
+                <th>% Neto</th>
                 <th style={{ textAlign: 'right' }}>Kg / caja</th>
                 <th>Status</th>
                 <th style={{ width: 170 }}></th>
