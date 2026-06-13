@@ -81,12 +81,115 @@ export async function recalcFlagsContrato(contratoId: string): Promise<void> {
   if (uErr) throw uErr;
 }
 
+const EPS = 0.01;
+
+/**
+ * Estado de pago de un contrato: targets de anticipo/saldo/total y lo
+ * acumulado por tipo. Una sola lectura, reutilizable para validar y liberar.
+ */
+type EstadoPago = {
+  anticipo_usd: number;
+  saldo_usd: number;
+  total_usd: number;
+  acumAnticipo: number;
+  acumSaldo: number;
+  acumTotal: number;
+};
+
+async function leerEstadoPago(contratoId: string): Promise<EstadoPago | null> {
+  const [{ data: c, error: cErr }, { data: pagos, error: pErr }] = await Promise.all([
+    supabase
+      .from('blufin_contratos')
+      .select('anticipo_usd, saldo_usd, total_usd')
+      .eq('id', contratoId)
+      .single(),
+    supabase.from('blufin_pagos').select('tipo, monto_usd').eq('contrato_id', contratoId),
+  ]);
+  if (cErr) throw cErr;
+  if (pErr) throw pErr;
+  if (!c) return null;
+  const acum = (tipo: string) =>
+    (pagos ?? []).filter((p) => p.tipo === tipo).reduce((s, p) => s + Number(p.monto_usd), 0);
+  return {
+    anticipo_usd: Number(c.anticipo_usd ?? 0),
+    saldo_usd: Number(c.saldo_usd ?? 0),
+    total_usd: Number(c.total_usd ?? 0),
+    acumAnticipo: acum('anticipo'),
+    acumSaldo: acum('saldo'),
+    acumTotal: (pagos ?? []).reduce((s, p) => s + Number(p.monto_usd), 0),
+  };
+}
+
+// Mismo criterio de "cubierto" que recalcFlagsContrato: si el saldo está
+// cubierto, el anticipo se considera saldado aunque no se haya pagado aparte.
+function cubiertos(e: EstadoPago) {
+  const saldoCubierto = e.saldo_usd > 0 && e.acumSaldo >= e.saldo_usd - EPS;
+  const anticipoCubierto =
+    (e.anticipo_usd > 0 && e.acumAnticipo >= e.anticipo_usd - EPS) || saldoCubierto;
+  const totalCubierto = e.total_usd > 0 && e.acumTotal >= e.total_usd - EPS;
+  const contratoSaldado = (saldoCubierto && anticipoCubierto) || totalCubierto;
+  return { saldoCubierto, anticipoCubierto, contratoSaldado };
+}
+
+/**
+ * Valida que un nuevo pago no caiga sobre algo ya saldado (evita dobles pagos).
+ * Lanza con mensaje claro; `folio` lo antepone (útil en pago múltiple).
+ */
+function validarNuevoPago(
+  estado: EstadoPago,
+  tipo: 'anticipo' | 'saldo' | 'abono',
+  folio?: string,
+): void {
+  const { saldoCubierto, anticipoCubierto, contratoSaldado } = cubiertos(estado);
+  const f = folio ? `${folio}: ` : '';
+  if (contratoSaldado) {
+    throw new Error(`${f}El contrato ya está saldado por completo — no se puede registrar otro pago.`);
+  }
+  if (tipo === 'anticipo' && anticipoCubierto) {
+    throw new Error(`${f}El anticipo de este contrato ya está cubierto.`);
+  }
+  if (tipo === 'saldo' && saldoCubierto) {
+    throw new Error(`${f}El saldo de este contrato ya está cubierto.`);
+  }
+}
+
+/**
+ * Tras un pago spot que cubre un tipo, libera los forwards Pendientes de ese
+ * tipo: quedan cerrados con el banco pero ya NO asignados al contenedor
+ * (status 'Liberado'), así no generan un doble pago si después se "ejecutan".
+ */
+async function liberarForwardsCubiertos(contratoId: string): Promise<void> {
+  const estado = await leerEstadoPago(contratoId);
+  if (!estado) return;
+  const { saldoCubierto, anticipoCubierto } = cubiertos(estado);
+  const tipos: ('anticipo' | 'saldo')[] = [];
+  if (anticipoCubierto) tipos.push('anticipo');
+  if (saldoCubierto) tipos.push('saldo');
+  if (tipos.length === 0) return;
+  const { error } = await supabase
+    .from('blufin_forwards')
+    .update({ status: 'Liberado' })
+    .eq('contrato_id', contratoId)
+    .in('asociado_a', tipos)
+    .eq('status', 'Pendiente');
+  if (error) throw error;
+}
+
 /**
  * Crear un pago + recalcular los flags del contrato.
+ * Antes de insertar valida que no sea un doble pago sobre algo ya saldado.
+ * Si el pago spot cubre el tipo, libera el forward pendiente de ese tipo.
  * La lógica vive en cliente para mantener la mutation visible/testeable
  * (no requiere trigger SQL todavía, ver §17).
  */
 export async function createPago(payload: BlufinPagoInsert): Promise<void> {
+  if (payload.contrato_id) {
+    const estado = await leerEstadoPago(payload.contrato_id);
+    if (estado) {
+      validarNuevoPago(estado, payload.tipo as 'anticipo' | 'saldo' | 'abono');
+    }
+  }
+
   const monto_mxn = (payload.monto_usd ?? 0) * (payload.tc ?? 0);
 
   const { error: pagoErr } = await supabase
@@ -94,7 +197,10 @@ export async function createPago(payload: BlufinPagoInsert): Promise<void> {
     .insert({ ...payload, monto_mxn });
   if (pagoErr) throw pagoErr;
 
-  if (payload.contrato_id) await recalcFlagsContrato(payload.contrato_id);
+  if (payload.contrato_id) {
+    await recalcFlagsContrato(payload.contrato_id);
+    await liberarForwardsCubiertos(payload.contrato_id);
+  }
 }
 
 /**
@@ -143,8 +249,27 @@ export async function executeForward(id: string): Promise<void> {
   if (forward.status === 'Ejecutado') {
     throw new Error('Este forward ya fue ejecutado');
   }
+  if (forward.status === 'Liberado') {
+    throw new Error('Este forward fue liberado (el contenedor ya se pagó spot) — ya no se ejecuta.');
+  }
+  if (forward.status !== 'Pendiente') {
+    throw new Error(`No se puede ejecutar un forward en estado "${forward.status}".`);
+  }
   if (!forward.contrato_id || !forward.asociado_a || forward.monto_usd == null || forward.tc_forward == null) {
     throw new Error('Forward incompleto — no se puede ejecutar');
+  }
+
+  // Defensa contra doble pago: si el tipo ya quedó cubierto (p. ej. se pagó
+  // spot), ejecutar el forward duplicaría el pago.
+  const estado = await leerEstadoPago(forward.contrato_id);
+  if (estado) {
+    const { saldoCubierto, anticipoCubierto } = cubiertos(estado);
+    const yaCubierto = forward.asociado_a === 'anticipo' ? anticipoCubierto : saldoCubierto;
+    if (yaCubierto) {
+      throw new Error(
+        `El ${forward.asociado_a} de este contrato ya está cubierto — el forward ya no aplica. Libéralo o elimínalo.`,
+      );
+    }
   }
 
   // 2) Insertar pago con referencia que identifica que vino de forward
@@ -301,6 +426,28 @@ export type PagoMultipleParams = {
 export async function createPagosMultiples(params: PagoMultipleParams): Promise<number> {
   if (params.items.length === 0) throw new Error('No hay pagos para registrar');
 
+  const contratosAfectados = Array.from(new Set(params.items.map((i) => i.contrato_id)));
+
+  // 0) Validar cada ítem contra el estado actual (evita dobles pagos). Si algún
+  //    contrato ya está saldado, todo el batch falla con mensaje claro.
+  const estados = new Map<string, EstadoPago>();
+  await Promise.all(
+    contratosAfectados.map(async (id) => {
+      const e = await leerEstadoPago(id);
+      if (e) estados.set(id, e);
+    }),
+  );
+  for (const it of params.items) {
+    const estado = estados.get(it.contrato_id);
+    if (!estado) continue;
+    const { data: c } = await supabase
+      .from('blufin_contratos')
+      .select('folio')
+      .eq('id', it.contrato_id)
+      .single();
+    validarNuevoPago(estado, it.tipo, c?.folio);
+  }
+
   // 1) Insert masivo de los pagos
   const rows: BlufinPagoInsert[] = params.items.map((it) => ({
     contrato_id: it.contrato_id,
@@ -316,9 +463,13 @@ export async function createPagosMultiples(params: PagoMultipleParams): Promise<
   const { error: insertErr } = await supabase.from('blufin_pagos').insert(rows);
   if (insertErr) throw insertErr;
 
-  // 2) Recalcular flags de cada contrato afectado
-  const contratosAfectados = new Set(params.items.map((i) => i.contrato_id));
-  await Promise.all(Array.from(contratosAfectados).map((id) => recalcFlagsContrato(id)));
+  // 2) Recalcular flags y liberar forwards cubiertos de cada contrato afectado
+  await Promise.all(
+    contratosAfectados.map(async (id) => {
+      await recalcFlagsContrato(id);
+      await liberarForwardsCubiertos(id);
+    }),
+  );
 
   return params.items.length;
 }

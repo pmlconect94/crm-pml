@@ -184,6 +184,8 @@ export function BlufinPagoMultiplePage() {
       qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_forwards'] });
+      qc.invalidateQueries({ queryKey: ['blufin_forwards_activos'] });
       navigate('/app/importaciones/blufin/pagos');
     },
     onError: (err: Error) => toast.error(err.message),

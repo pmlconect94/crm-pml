@@ -113,6 +113,9 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
       qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      // un pago spot puede liberar un forward → refrescar las vistas de forwards
+      qc.invalidateQueries({ queryKey: ['blufin_forwards'] });
+      qc.invalidateQueries({ queryKey: ['blufin_forwards_activos'] });
       onClose();
     },
     onError: (err: Error) => toast.error(err.message),

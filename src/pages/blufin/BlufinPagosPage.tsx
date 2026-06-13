@@ -893,8 +893,16 @@ function ForwardsView({
                 <td>
                   {f.status === 'Pendiente' ? (
                     <span className="badge badge-amber">Pendiente</span>
-                  ) : (
+                  ) : f.status === 'Ejecutado' ? (
                     <span className="badge badge-green">Ejecutado</span>
+                  ) : (
+                    <span
+                      className="badge"
+                      style={{ background: 'var(--ink-100)', color: 'var(--ink-600)' }}
+                      title="Cerrado con el banco pero ya no asignado al contenedor: se pagó spot. El forward sigue vigente con el banco; no genera pago para este contrato."
+                    >
+                      Liberado
+                    </span>
                   )}
                 </td>
                 <td>
