@@ -5,17 +5,21 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { createContrato, fetchCatalogos } from '@/features/blufin/queries';
 import { useAuth } from '@/lib/auth';
+import { useDraft } from '@/lib/useDraft';
 import { fmtUSD, fmtKg } from '@/lib/format';
 import { getTcDelDia } from '@/lib/tc';
 
 const STATUS_OPTS = ['Contratado', 'En tránsito', 'En puerto', 'Entregado'];
+const FOLIO_INICIAL = 'MCO-CV-';
 
 // La línea solo captura kg/cajas y precio — la ficha (descripción, marca,
 // %, talla, kg/caja) se copia del SKU al elegirlo (snapshot: si el SKU
 // cambia después en el catálogo, los contratos viejos no se alteran).
+// `skuText` es lo que se escribe en el buscador de SKU de la línea.
 type LineaProducto = {
   uid: string;
   sku_id: string | null;
+  skuText: string;
   descripcion: string;
   marca: string;
   pct: string;
@@ -29,6 +33,7 @@ type LineaProducto = {
 const emptyLinea = (): LineaProducto => ({
   uid: crypto.randomUUID(),
   sku_id: null,
+  skuText: '',
   descripcion: '',
   marca: '',
   pct: '',
@@ -44,6 +49,24 @@ const toNum = (s: string) => {
   return isNaN(n) ? 0 : n;
 };
 
+const hoyISO = () => new Date().toISOString().slice(0, 10);
+
+type ContratoDraft = {
+  folio: string;
+  fecha: string;
+  status: string;
+  etaPuerto: string;
+  etaBodegaOverride: string | null;
+  bodegaDestino: string;
+  presentacion: 'Paletizado' | 'Granel';
+  contenedor: string;
+  anticipoUsdOverride: string | null;
+  anticipoFecha: string;
+  saldoFecha: string;
+  observaciones: string;
+  lineas: LineaProducto[];
+};
+
 export function BlufinNuevoContratoPage() {
   const { empresaId } = useAuth();
   const navigate = useNavigate();
@@ -55,8 +78,8 @@ export function BlufinNuevoContratoPage() {
   });
 
   // Cabecera del contrato
-  const [folio, setFolio] = useState('MCO-CV-');
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [folio, setFolio] = useState(FOLIO_INICIAL);
+  const [fecha, setFecha] = useState(hoyISO());
   const [status, setStatus] = useState('Contratado');
   const [etaPuerto, setEtaPuerto] = useState('');
   // etaBodega se calcula automáticamente como etaPuerto + 7 días pero queda editable
@@ -73,6 +96,76 @@ export function BlufinNuevoContratoPage() {
 
   // Líneas
   const [lineas, setLineas] = useState<LineaProducto[]>([emptyLinea()]);
+
+  // ── Borrador automático: nada de lo capturado se pierde al salir ──
+  const draftKey = `crm:draft:blufin-nuevo-contrato:${empresaId}`;
+
+  const draftSnapshot = useMemo<ContratoDraft>(
+    () => ({
+      folio,
+      fecha,
+      status,
+      etaPuerto,
+      etaBodegaOverride,
+      bodegaDestino,
+      presentacion,
+      contenedor,
+      anticipoUsdOverride,
+      anticipoFecha,
+      saldoFecha,
+      observaciones,
+      lineas,
+    }),
+    [
+      folio, fecha, status, etaPuerto, etaBodegaOverride, bodegaDestino,
+      presentacion, contenedor, anticipoUsdOverride, anticipoFecha, saldoFecha,
+      observaciones, lineas,
+    ],
+  );
+
+  const applyDraft = (d: ContratoDraft) => {
+    setFolio(d.folio ?? FOLIO_INICIAL);
+    setFecha(d.fecha ?? hoyISO());
+    setStatus(d.status ?? 'Contratado');
+    setEtaPuerto(d.etaPuerto ?? '');
+    setEtaBodegaOverride(d.etaBodegaOverride ?? null);
+    setBodegaDestino(d.bodegaDestino ?? '');
+    setPresentacion(d.presentacion ?? 'Paletizado');
+    setContenedor(d.contenedor ?? '');
+    setAnticipoUsdOverride(d.anticipoUsdOverride ?? null);
+    setAnticipoFecha(d.anticipoFecha ?? '');
+    setSaldoFecha(d.saldoFecha ?? '');
+    setObservaciones(d.observaciones ?? '');
+    setLineas(d.lineas?.length ? d.lineas : [emptyLinea()]);
+  };
+
+  const draft = useDraft(draftKey, draftSnapshot, applyDraft);
+
+  const resetForm = () => {
+    draft.clear();
+    setFolio(FOLIO_INICIAL);
+    setFecha(hoyISO());
+    setStatus('Contratado');
+    setEtaPuerto('');
+    setEtaBodegaOverride(null);
+    setBodegaDestino('');
+    setPresentacion('Paletizado');
+    setContenedor('');
+    setAnticipoUsdOverride(null);
+    setAnticipoFecha('');
+    setSaldoFecha('');
+    setObservaciones('');
+    setLineas([emptyLinea()]);
+  };
+
+  // ¿Hay algo capturado que valga la pena conservar como borrador?
+  const hasContent =
+    folio.trim() !== FOLIO_INICIAL ||
+    etaPuerto !== '' ||
+    bodegaDestino !== '' ||
+    contenedor !== '' ||
+    observaciones !== '' ||
+    lineas.some((l) => l.sku_id || l.skuText || toNum(l.kg) > 0 || toNum(l.precio_usd) > 0);
 
   const totales = useMemo(() => {
     const totalKg = lineas.reduce((s, l) => s + toNum(l.kg), 0);
@@ -114,11 +207,32 @@ export function BlufinNuevoContratoPage() {
     );
   };
 
-  // Al elegir el SKU se copia su ficha completa del catálogo
-  const onPickSku = (uid: string, skuId: string) => {
-    const sku = cat?.skus.find((s) => s.id === skuId);
-    if (!sku) {
+  // Etiqueta canónica del SKU en el buscador
+  const skuLabel = (s: { code: string; descripcion: string }) => `${s.code} — ${s.descripcion}`;
+
+  // Resuelve el texto escrito a un SKU (match exacto por etiqueta o por código)
+  const resolveSku = (text: string) => {
+    const t = text.trim();
+    return cat?.skus.find((s) => skuLabel(s) === t || s.code === t) ?? null;
+  };
+
+  // El buscador de SKU: al escribir se filtra (datalist nativo); al coincidir
+  // con un SKU se copia su ficha completa del catálogo.
+  const onSkuText = (uid: string, text: string) => {
+    const sku = resolveSku(text);
+    if (sku) {
       updateLinea(uid, {
+        skuText: skuLabel(sku),
+        sku_id: sku.id,
+        descripcion: sku.descripcion,
+        marca: sku.marca ?? '',
+        pct: sku.pct ?? '',
+        talla: sku.talla ?? '',
+        kg_caja: String(sku.kg_caja),
+      });
+    } else {
+      updateLinea(uid, {
+        skuText: text,
         sku_id: null,
         descripcion: '',
         marca: '',
@@ -127,16 +241,7 @@ export function BlufinNuevoContratoPage() {
         kg_caja: '',
         cajas: '',
       });
-      return;
     }
-    updateLinea(uid, {
-      sku_id: sku.id,
-      descripcion: sku.descripcion,
-      marca: sku.marca ?? '',
-      pct: sku.pct ?? '',
-      talla: sku.talla ?? '',
-      kg_caja: String(sku.kg_caja),
-    });
   };
 
   const removeLinea = (uid: string) => {
@@ -197,6 +302,7 @@ export function BlufinNuevoContratoPage() {
     },
     onSuccess: () => {
       toast.success(`Contrato ${folio} creado correctamente`);
+      draft.clear();
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       navigate('/app/importaciones/blufin/contratos');
     },
@@ -212,9 +318,41 @@ export function BlufinNuevoContratoPage() {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Nuevo contrato</h2>
           <p className="page-subtitle">Captura manual de una orden de compra Blufin</p>
         </div>
-        <Link to="/app/importaciones/blufin/contratos" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
-          <Icon name="arrow-left" size={13} /> Volver a contratos
-        </Link>
+        <div className="hstack" style={{ gap: 10 }}>
+          {hasContent && (
+            <div
+              className="hstack"
+              style={{
+                gap: 8,
+                padding: '4px 6px 4px 10px',
+                borderRadius: 999,
+                background: 'color-mix(in srgb, var(--green-500) 8%, white)',
+                border: '1px solid color-mix(in srgb, var(--green-500) 28%, white)',
+              }}
+              title="Lo capturado se guarda como borrador automáticamente — si sales y vuelves, sigue aquí"
+            >
+              <span
+                className="text-xs fw-600"
+                style={{ color: '#065F46', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <Icon name="check" size={12} /> Borrador guardado
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  if (window.confirm('¿Descartar el borrador y limpiar el formulario?')) resetForm();
+                }}
+                style={{ padding: '2px 8px', fontSize: 11 }}
+              >
+                Descartar
+              </button>
+            </div>
+          )}
+          <Link to="/app/importaciones/blufin/contratos" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+            <Icon name="arrow-left" size={13} /> Volver a contratos
+          </Link>
+        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
@@ -320,6 +458,12 @@ export function BlufinNuevoContratoPage() {
             <Icon name="plus" size={13} /> Agregar línea
           </button>
         </div>
+        {/* Buscador de SKU compartido por todas las líneas (autocompletado nativo) */}
+        <datalist id="sku-catalog">
+          {cat?.skus.map((s) => (
+            <option key={s.id} value={`${s.code} — ${s.descripcion}`} />
+          ))}
+        </datalist>
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl" style={{ minWidth: 1000 }}>
             <thead>
@@ -345,19 +489,23 @@ export function BlufinNuevoContratoPage() {
                   <tr key={l.uid}>
                     <td className="muted">{idx + 1}</td>
                     <td style={{ minWidth: 240 }}>
-                      <select
+                      <input
                         className="field-input"
-                        value={l.sku_id ?? ''}
-                        onChange={(e) => onPickSku(l.uid, e.target.value)}
-                        style={{ fontSize: 12, padding: '6px 8px' }}
-                      >
-                        <option value="">— Selecciona SKU —</option>
-                        {cat?.skus.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.code} — {s.descripcion}
-                          </option>
-                        ))}
-                      </select>
+                        list="sku-catalog"
+                        value={l.skuText}
+                        onChange={(e) => onSkuText(l.uid, e.target.value)}
+                        placeholder="Escribe código o nombre…"
+                        style={{
+                          fontSize: 12,
+                          padding: '6px 8px',
+                          width: '100%',
+                          borderColor: l.sku_id
+                            ? 'var(--green-500)'
+                            : l.skuText
+                              ? 'var(--amber-500)'
+                              : undefined,
+                        }}
+                      />
                     </td>
                     <td className="text-sm">
                       {l.marca || <span className="muted">—</span>}
@@ -590,8 +738,13 @@ export function BlufinNuevoContratoPage() {
           </div>
         </div>
         <div className="hstack" style={{ gap: 8 }}>
-          <Link to="/app/importaciones/blufin/contratos" className="btn btn-outline" style={{ textDecoration: 'none' }}>
-            Cancelar
+          <Link
+            to="/app/importaciones/blufin/contratos"
+            className="btn btn-outline"
+            style={{ textDecoration: 'none' }}
+            title="Salir sin perder lo capturado — queda guardado como borrador"
+          >
+            Salir
           </Link>
           <button
             className="btn btn-primary"
