@@ -5,6 +5,7 @@ import { Icon } from '@/components/Icon';
 import { PageEnter, SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import { fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import {
   fetchCostosData,
   calcularPromedio,
@@ -868,6 +869,7 @@ function MiniLineChart({
 /* ─── Tarjeta de detalle de precios por SKU ───────────────────────── */
 
 function SkuPrecioDetalle({ sku, onClose }: { sku: SkuCosto | null; onClose: () => void }) {
+  const backdrop = useBackdropDismiss(onClose);
   // Compras ordenadas por fecha de entrega (más reciente primero) para la tabla,
   // y ASC para las gráficas.
   const ordenadasDesc = sku
@@ -891,7 +893,7 @@ function SkuPrecioDetalle({ sku, onClose }: { sku: SkuCosto | null; onClose: () 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

@@ -6,6 +6,7 @@ import { SPRING } from '@/components/motion';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratoDetalle } from '@/features/blufin/queries';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 const NC_STATUS_COLOR: Record<string, string> = {
   'Sin monto': 'var(--ink-500)',
@@ -41,6 +42,7 @@ export function ContratoDetalleModal({
     enabled: !!contratoId,
   });
 
+  const backdrop = useBackdropDismiss(onClose);
   const c = data?.contrato;
   const restante =
     c && !(c.anticipo_pagado && c.saldo_pagado)
@@ -55,7 +57,7 @@ export function ContratoDetalleModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

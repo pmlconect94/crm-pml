@@ -18,6 +18,7 @@ import {
   type ContratoConPendiente,
 } from '@/features/blufin/pagos-queries';
 import { useAuth } from '@/lib/auth';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import { fmtUSD, fmtMXN, fmtFechaCorta } from '@/lib/format';
 
 type Tipo = 'anticipo' | 'saldo' | 'abono';
@@ -44,6 +45,7 @@ const toNum = (s: string) => {
 export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Props) {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
 
   const { data: cat } = useQuery({
     queryKey: ['blufin_catalogos', empresaId],
@@ -151,7 +153,7 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

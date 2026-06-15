@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { fmtUSD } from '@/lib/format';
 import { fetchContratosConPendiente } from '@/features/blufin/pagos-queries';
 import { aplicarNC, NC_RAZON_META, type NcRazon } from '@/features/blufin/nc-queries';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import type { BlufinNotaCreditoEnriquecida } from '@/types/database';
 
 const hoyISO = () => new Date().toISOString().slice(0, 10);
@@ -26,6 +27,7 @@ export function AplicarNCModal({
 }) {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
 
   // Solo contratos con saldo pendiente: una NC no se aplica a lo ya pagado.
   const { data: contratos = [] } = useQuery({
@@ -101,7 +103,7 @@ export function AplicarNCModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

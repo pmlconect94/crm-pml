@@ -6,6 +6,7 @@ import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { fmtUSD, fmtMXN } from '@/lib/format';
 import { capturarMontoNC, NC_RAZON_META, type NcRazon } from '@/features/blufin/nc-queries';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import type { BlufinNotaCreditoEnriquecida } from '@/types/database';
 
 const toNum = (s: string) => {
@@ -21,6 +22,7 @@ export function CapturarMontoNCModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
   const [montoUsd, setMontoUsd] = useState('');
   const [tc, setTc] = useState('');
 
@@ -52,7 +54,7 @@ export function CapturarMontoNCModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

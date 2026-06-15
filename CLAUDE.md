@@ -1417,6 +1417,9 @@ Usar `<input list="...">` + un `<datalist>` compartido (renderizado una sola vez
 **Cuando un modal/form debe elegir un contrato (o similar) escribiendo:**
 Usar `<Combobox>` (`src/components/Combobox.tsx`) — input+datalist genérico que recibe `options: {id,label}[]`, `value`, `onChange(id|null)`. Resuelve el texto a id por etiqueta exacta; el usuario escribe el número/folio y el popup nativo filtra. Ya aplicado en PagoModal, AplicarNCModal, NuevaNCModal, AsignarForwardModal.
 
+**Cuando un modal/overlay se cierra al hacer clic en el backdrop:**
+NUNCA poner `onClick={onClose}` directo en el `motion.div` del overlay. Si el usuario arrastra para seleccionar el texto de un input y **suelta el cursor sobre el fondo**, el navegador dispara un `click` cuyo `target` es el overlay y el modal se cierra solo ("seleccionar texto me saca de la ventana", bug 2026-06-15). Usar `useBackdropDismiss` (`src/lib/useBackdropDismiss.ts`): un hook que devuelve `{ onMouseDown, onClick }` y solo cierra cuando el gesto **empezó Y terminó sobre el propio overlay** (`e.target === e.currentTarget` en mousedown **y** en click). Patrón: (1) `const backdrop = useBackdropDismiss(onClose)` al **tope del componente** (regla de hooks — antes de cualquier render condicional `{open && …}`); (2) esparcir `<motion.div {...backdrop} style={overlay}>` en el overlay; (3) dejar el `onClick={(e) => e.stopPropagation()}` del contenido interno como está. Ya aplicado en los 11 modales (PagoModal, ForwardModal, SkuModal, CapturarMontoNCModal, AplicarNCModal, NuevaNCModal, AsignarForwardModal, ContratoDetalleModal, DeleteConfirmModal, ProgramarLlegadaModal en Recepción, SkuPrecioDetalle en Costos). Click-outside con `document.addEventListener('mousedown', …)` + `ref.contains()` es **seguro** (no se dispara en un arrastre que empieza dentro) — no requiere cambio.
+
 ### Animación / motion checklist
 
 - [ ] `<PageEnter>` solo en header del módulo, no en data
@@ -1444,3 +1447,4 @@ Usar `<Combobox>` (`src/components/Combobox.tsx`) — input+datalist genérico q
 - `border-left: 3px var(--accent)` como side-stripe → use badge o full border
 - Glow/neon outer shadow → use plain shadow tinted to surface
 - Emojis en cualquier lado → Icon component o badge
+- `onClick={onClose}` directo en el overlay/backdrop de un modal → usar `{...useBackdropDismiss(onClose)}` (si no, seleccionar texto de un input y soltar sobre el fondo cierra el modal)

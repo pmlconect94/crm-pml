@@ -20,6 +20,7 @@ import {
   type SkuParams,
 } from '@/features/blufin/productos-queries';
 import type { CatalogoSku } from '@/types/database';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 type Props = {
   open: boolean;
@@ -31,6 +32,7 @@ type Props = {
 export function SkuModal({ open, onClose, sku }: Props) {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
 
   const [code, setCode] = useState('');
   const [producto, setProducto] = useState('');
@@ -85,7 +87,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

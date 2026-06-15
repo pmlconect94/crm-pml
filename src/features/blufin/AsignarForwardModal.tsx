@@ -18,6 +18,7 @@ import {
   reassignForward,
 } from '@/features/blufin/pagos-queries';
 import type { BlufinForwardEnriquecido } from '@/types/database';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 type Props = {
   open: boolean;
@@ -30,6 +31,7 @@ type Destino = { contratoId: string; folio: string; tipo: 'anticipo' | 'saldo'; 
 export function AsignarForwardModal({ open, onClose, forward }: Props) {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
   const [seleccion, setSeleccion] = useState('');
 
   const { data: pendientes = [] } = useQuery({
@@ -87,7 +89,7 @@ export function AsignarForwardModal({ open, onClose, forward }: Props) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

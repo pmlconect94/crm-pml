@@ -17,6 +17,7 @@ import {
   updateLlegadaContrato,
 } from '@/features/blufin/recepcion-queries';
 import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida } from '@/types/database';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 type View = 'por-recibir' | 'historial' | 'calendario';
 
@@ -399,6 +400,7 @@ function ProgramarLlegadaModal({
   const qc = useQueryClient();
   const [fecha, setFecha] = useState('');
   const [bodega, setBodega] = useState('');
+  const backdrop = useBackdropDismiss(onClose);
 
   const { data: cat } = useQuery({
     queryKey: ['blufin_catalogos', empresaId],
@@ -436,7 +438,7 @@ function ProgramarLlegadaModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 import { SPRING } from './motion';
 import { verifyPin } from '@/lib/pin';
 import { useAuth } from '@/lib/auth';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 type Props = {
   open: boolean;
@@ -34,6 +35,7 @@ export function DeleteConfirmModal({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const backdrop = useBackdropDismiss(onClose);
 
   const canDelete = user?.rol === 'admin_total';
 
@@ -78,7 +80,7 @@ export function DeleteConfirmModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.12 }}
-          onClick={onClose}
+          {...backdrop}
           style={{
             position: 'fixed',
             inset: 0,

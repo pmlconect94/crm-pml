@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtMXN } from '@/lib/format';
 import { fetchContratos } from '@/features/blufin/queries';
 import { createNotaCredito, NC_RAZON_META, type NcRazon } from '@/features/blufin/nc-queries';
+import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 const toNum = (s: string) => {
@@ -19,6 +20,7 @@ const toNum = (s: string) => {
 export function NuevaNCModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
 
   const { data: contratos = [] } = useQuery({
     queryKey: ['blufin_contratos', empresaId],
@@ -91,7 +93,7 @@ export function NuevaNCModal({ open, onClose }: { open: boolean; onClose: () => 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onClick={onClose}
+          {...backdrop}
           style={overlay}
         >
           <motion.div
