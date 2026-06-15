@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import type {
   BlufinContratoConProductos,
   BlufinRecepcionEnriquecida,
+  BlufinNotaCreditoInsert,
 } from '@/types/database';
 
 /**
@@ -86,12 +87,14 @@ export type RecepcionLineaParam = {
 };
 
 export type RecepcionParams = {
+  empresa_id: string;
   contrato_id: string;
   fecha_recepcion: string;
   bodega_id: number | null;
   bodega_nombre: string | null; // para actualizar bodega_destino del contrato
   entrada_intelisis: string | null;
   presentacion_recibida: string | null;
+  presentacion_pactada: string | null; // del contrato, para detectar diferencia
   observaciones: string | null;
   lote: string | null; // se captura AL RECIBIR — actualiza el contrato
   naviera: string | null; // naviera real — actualiza el contrato
@@ -104,9 +107,12 @@ export type RecepcionParams = {
  *   2. Inserta las líneas por SKU (diferencia se calcula en BD, columna generada)
  *   3. Actualiza el contrato: lote + naviera real + llegada_real + bodega_destino
  *      + status = 'Entregado'
+ *   4. Auto-genera NCs "Sin monto" por las diferencias detectadas (presentación
+ *      distinta o kg faltantes) — quedan en "Por aplicar" para capturar el monto
+ *      cuando el proveedor lo confirme. Devuelve cuántas NCs generó.
  * Si algún paso falla, lanza error (el patrón de flags vive en frontend, ver §17).
  */
-export async function createRecepcion(params: RecepcionParams): Promise<void> {
+export async function createRecepcion(params: RecepcionParams): Promise<number> {
   if (params.lineas.length === 0) throw new Error('La recepción no tiene líneas');
 
   // 1) Una recepción por contrato
@@ -158,6 +164,53 @@ export async function createRecepcion(params: RecepcionParams): Promise<void> {
     })
     .eq('id', params.contrato_id);
   if (updErr) throw updErr;
+
+  // 5) NCs automáticas "Sin monto" por las diferencias de la recepción.
+  //    El monto lo confirma el proveedor después → se captura en Notas de crédito.
+  const ncs: BlufinNotaCreditoInsert[] = [];
+
+  const presDif =
+    params.presentacion_recibida &&
+    params.presentacion_pactada &&
+    params.presentacion_recibida !== params.presentacion_pactada;
+  if (presDif) {
+    ncs.push({
+      empresa_id: params.empresa_id,
+      razon: 'presentacion',
+      contrato_origen_id: params.contrato_id,
+      recepcion_origen_id: recepcion.id,
+      monto_usd: 0,
+      status: 'Sin monto',
+      saldo_pendiente_usd: 0,
+      fecha: params.fecha_recepcion,
+      nota: `Pactado ${params.presentacion_pactada}, llegó ${params.presentacion_recibida} — generada automáticamente desde la recepción`,
+    });
+  }
+
+  const faltanteTotal = params.lineas.reduce(
+    (s, l) => s + Math.max(0, l.kg_contratados - l.kg_recibidos),
+    0,
+  );
+  if (faltanteTotal > 0.001) {
+    ncs.push({
+      empresa_id: params.empresa_id,
+      razon: 'faltante',
+      contrato_origen_id: params.contrato_id,
+      recepcion_origen_id: recepcion.id,
+      monto_usd: 0,
+      status: 'Sin monto',
+      saldo_pendiente_usd: 0,
+      fecha: params.fecha_recepcion,
+      nota: `${faltanteTotal.toLocaleString('es-MX')} kg faltantes vs lo contratado — generada automáticamente desde la recepción`,
+    });
+  }
+
+  if (ncs.length > 0) {
+    const { error: ncErr } = await supabase.from('blufin_notas_credito').insert(ncs);
+    if (ncErr) throw ncErr;
+  }
+
+  return ncs.length;
 }
 
 /**
@@ -172,6 +225,15 @@ export async function deleteRecepcion(id: string): Promise<void> {
     .eq('id', id)
     .single();
   if (rErr) throw rErr;
+
+  // Borrar las NCs automáticas que siguen "Sin monto" (sin tocar). Si el usuario
+  // ya les capturó monto o las aplicó, se conservan (acción deliberada suya).
+  const { error: ncErr } = await supabase
+    .from('blufin_notas_credito')
+    .delete()
+    .eq('recepcion_origen_id', id)
+    .eq('status', 'Sin monto');
+  if (ncErr) throw ncErr;
 
   const { error: dErr } = await supabase.from('blufin_recepciones').delete().eq('id', id);
   if (dErr) throw dErr;

@@ -152,12 +152,14 @@ export function BlufinRecepcionRegistrarPage() {
     mutationFn: () => {
       const bodega = cat?.bodegas.find((b) => String(b.id) === bodegaId) ?? null;
       return createRecepcion({
+        empresa_id: empresaId,
         contrato_id: contrato!.id,
         fecha_recepcion: fecha,
         bodega_id: bodega?.id ?? null,
         bodega_nombre: bodega?.nombre ?? null,
         entrada_intelisis: intelisis.trim() || null,
         presentacion_recibida: presRecibida || null,
+        presentacion_pactada: contrato?.presentacion ?? null,
         observaciones: obsGenerales.trim() || null,
         lote: lote.trim() || null,
         naviera: naviera || null,
@@ -169,12 +171,17 @@ export function BlufinRecepcionRegistrarPage() {
         })),
       });
     },
-    onSuccess: () => {
-      toast.success(`Recepción de ${contrato?.folio} registrada — contrato Entregado`);
+    onSuccess: (ncCount) => {
+      toast.success(
+        ncCount > 0
+          ? `Recepción registrada — ${ncCount} NC${ncCount > 1 ? 's' : ''} por aplicar generada${ncCount > 1 ? 's' : ''}`
+          : `Recepción de ${contrato?.folio} registrada — contrato Entregado`,
+      );
       qc.invalidateQueries({ queryKey: ['blufin_recepciones'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_por_recibir'] });
       qc.invalidateQueries({ queryKey: ['blufin_contrato', contratoId] });
+      qc.invalidateQueries({ queryKey: ['blufin_notas_credito'] });
       navigate('/app/importaciones/blufin/recepcion');
     },
     onError: (e: Error) => toast.error(e.message),
@@ -524,8 +531,9 @@ export function BlufinRecepcionRegistrarPage() {
             ))}
           </div>
           <div className="text-xs muted" style={{ marginTop: 8 }}>
-            Captura la nota de crédito en la pestaña Notas de crédito cuando el proveedor confirme
-            el monto.
+            Al confirmar la recepción se generará una nota de crédito <strong>«Sin monto»</strong>{' '}
+            por cada diferencia, lista en <strong>Notas de crédito → Por aplicar</strong>. Captúrale
+            el monto cuando el proveedor lo confirme y aplícala.
           </div>
         </div>
       )}
