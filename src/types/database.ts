@@ -333,6 +333,78 @@ export type Database = {
         };
         Relationships: Empty;
       };
+      blufin_notas_credito: {
+        Row: {
+          id: string;
+          empresa_id: string | null;
+          folio_interno: string;
+          folio_timbrado: string | null;
+          razon: string; // 'presentacion' | 'descuento' | 'faltante'
+          contrato_origen_id: string | null;
+          recepcion_origen_id: string | null;
+          monto_usd: number;
+          tc: number | null;
+          monto_mxn: number | null;
+          status: string | null; // 'Sin monto' | 'Pendiente' | 'Parcial' | 'Aplicada'
+          saldo_pendiente_usd: number | null;
+          fecha: string | null;
+          nota: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          empresa_id?: string | null;
+          folio_interno?: string; // default crm.next_blufin_nc_folio()
+          folio_timbrado?: string | null;
+          razon: string;
+          contrato_origen_id?: string | null;
+          recepcion_origen_id?: string | null;
+          monto_usd: number;
+          tc?: number | null;
+          monto_mxn?: number | null;
+          status?: string | null;
+          saldo_pendiente_usd?: number | null;
+          fecha?: string | null;
+          nota?: string | null;
+        };
+        Update: {
+          folio_timbrado?: string | null;
+          razon?: string;
+          monto_usd?: number;
+          tc?: number | null;
+          monto_mxn?: number | null;
+          status?: string | null;
+          saldo_pendiente_usd?: number | null;
+          fecha?: string | null;
+          nota?: string | null;
+        };
+        Relationships: Empty;
+      };
+      blufin_nc_aplicaciones: {
+        Row: {
+          id: string;
+          nc_id: string | null;
+          contrato_destino_id: string | null;
+          monto_usd: number;
+          fecha: string;
+          nota: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          nc_id?: string | null;
+          contrato_destino_id?: string | null;
+          monto_usd: number;
+          fecha: string;
+          nota?: string | null;
+        };
+        Update: {
+          monto_usd?: number;
+          fecha?: string;
+          nota?: string | null;
+        };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -353,6 +425,16 @@ export type Banco = Database['crm']['Tables']['bancos']['Row'];
 
 export type BlufinContratoConProductos = BlufinContrato & {
   productos?: BlufinProducto[];
+};
+
+export type BlufinNotaCredito = Database['crm']['Tables']['blufin_notas_credito']['Row'];
+export type BlufinNotaCreditoInsert = Database['crm']['Tables']['blufin_notas_credito']['Insert'];
+export type BlufinNcAplicacion = Database['crm']['Tables']['blufin_nc_aplicaciones']['Row'];
+
+// NC + contrato origen y aplicaciones (con folio de contrato destino)
+export type BlufinNotaCreditoEnriquecida = BlufinNotaCredito & {
+  contrato_origen?: { folio: string } | null;
+  aplicaciones?: (BlufinNcAplicacion & { contrato_destino?: { folio: string } | null })[];
 };
 
 export type BlufinPago = Database['crm']['Tables']['blufin_pagos']['Row'];
