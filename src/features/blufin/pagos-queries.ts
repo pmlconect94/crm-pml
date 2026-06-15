@@ -370,6 +370,45 @@ export async function createForward(payload: BlufinForwardInsert): Promise<void>
 }
 
 /**
+ * Reasignar un forward Liberado a otro contenedor: como ya está pactado con el
+ * banco y de todos modos se tiene que pagar, se vuelve a poner Pendiente
+ * apuntando al nuevo contrato + tipo. Valida que el destino no esté ya cubierto
+ * ni tenga otro forward Pendiente para ese tipo.
+ */
+export async function reassignForward(
+  forwardId: string,
+  contratoId: string,
+  asociadoA: 'anticipo' | 'saldo',
+): Promise<void> {
+  // El tipo destino no debe estar ya cubierto
+  const estado = await leerEstadoPago(contratoId);
+  if (estado) {
+    const { saldoCubierto, anticipoCubierto } = cubiertos(estado);
+    const yaCubierto = asociadoA === 'anticipo' ? anticipoCubierto : saldoCubierto;
+    if (yaCubierto) {
+      throw new Error(`El ${asociadoA} de ese contrato ya está cubierto — no necesita forward.`);
+    }
+  }
+
+  // No debe existir ya un forward Pendiente para ese (contrato, tipo)
+  const { data: existentes, error: chkErr } = await supabase
+    .from('blufin_forwards')
+    .select('id, status')
+    .eq('contrato_id', contratoId)
+    .eq('asociado_a', asociadoA);
+  if (chkErr) throw chkErr;
+  if ((existentes ?? []).some((f) => f.status === 'Pendiente')) {
+    throw new Error(`Ese contrato ya tiene un forward pendiente para ${asociadoA}.`);
+  }
+
+  const { error } = await supabase
+    .from('blufin_forwards')
+    .update({ contrato_id: contratoId, asociado_a: asociadoA, status: 'Pendiente' })
+    .eq('id', forwardId);
+  if (error) throw error;
+}
+
+/**
  * Retorna los forwards Pendientes con info para badge.
  * Usado por el modal para deshabilitar opciones y por Pendientes para mostrar
  * "FORWARD CERRADO PARA <fecha entrega>".

@@ -20,6 +20,7 @@ import {
 import { fetchCatalogos } from '@/features/blufin/queries';
 import { PagoModal } from '@/features/blufin/PagoModal';
 import { ForwardModal } from '@/features/blufin/ForwardModal';
+import { AsignarForwardModal } from '@/features/blufin/AsignarForwardModal';
 import type { BlufinPagoEnriquecido, BlufinForwardEnriquecido } from '@/types/database';
 
 type View = 'pendientes' | 'realizados' | 'forwards';
@@ -85,6 +86,7 @@ export function BlufinPagosPage() {
     | { kind: 'forward'; id: string; description: string }
     | null
   >(null);
+  const [asignarTarget, setAsignarTarget] = useState<BlufinForwardEnriquecido | null>(null);
   const qc = useQueryClient();
 
   const deletePagoMut = useMutation({
@@ -297,10 +299,17 @@ export function BlufinPagosPage() {
             })
           }
           onExecute={(f) => executeForwardMut.mutate(f.id)}
+          onAsignar={(f) => setAsignarTarget(f)}
           executingId={executeForwardMut.variables ?? null}
           isExecuting={executeForwardMut.isPending}
         />
       )}
+
+      <AsignarForwardModal
+        open={!!asignarTarget}
+        onClose={() => setAsignarTarget(null)}
+        forward={asignarTarget}
+      />
 
       <PagoModal
         open={modalOpen}
@@ -798,6 +807,7 @@ function ForwardsView({
   onNew,
   onDelete,
   onExecute,
+  onAsignar,
   executingId,
   isExecuting,
 }: {
@@ -806,6 +816,7 @@ function ForwardsView({
   onNew: () => void;
   onDelete: (f: BlufinForwardEnriquecido) => void;
   onExecute: (f: BlufinForwardEnriquecido) => void;
+  onAsignar: (f: BlufinForwardEnriquecido) => void;
   executingId: string | null;
   isExecuting: boolean;
 }) {
@@ -923,6 +934,15 @@ function ForwardsView({
                             <Icon name="check" size={11} /> Ejecutar
                           </>
                         )}
+                      </button>
+                    )}
+                    {f.status === 'Liberado' && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => onAsignar(f)}
+                        title="Reasignar este forward (ya pactado) a otro contenedor pendiente"
+                      >
+                        <Icon name="arrow-right" size={11} /> Asignar
                       </button>
                     )}
                     <button

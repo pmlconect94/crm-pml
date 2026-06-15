@@ -13,6 +13,7 @@ import { fetchCatalogos } from '@/features/blufin/queries';
 import {
   createPago,
   fetchContratosConPendiente,
+  fetchPagos,
   type ContratoConPendiente,
 } from '@/features/blufin/pagos-queries';
 import { useAuth } from '@/lib/auth';
@@ -22,7 +23,7 @@ type Tipo = 'anticipo' | 'saldo' | 'abono';
 
 const TIPOS: { id: Tipo; label: string; descripcion: string; icon: IconName; color: string }[] = [
   { id: 'anticipo', label: 'Anticipo', descripcion: '10% del contrato', icon: 'banknote', color: 'var(--blue-500)' },
-  { id: 'saldo',    label: 'Saldo',    descripcion: '90% restante',     icon: 'check',    color: 'var(--violet-500)' },
+  { id: 'saldo',    label: 'Saldo',    descripcion: 'Resto por pagar',  icon: 'check',    color: 'var(--violet-500)' },
   { id: 'abono',    label: 'Abono',    descripcion: 'Pago parcial libre', icon: 'coins',  color: 'var(--amber-500)' },
 ];
 
@@ -55,6 +56,22 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
     enabled: open,
   });
 
+  // Todos los pagos para saber cuánto se ha pagado por contrato → el "saldo"
+  // sugerido es lo que REALMENTE falta (total − pagado), no un 90% fijo.
+  const { data: pagosAll = [] } = useQuery({
+    queryKey: ['blufin_pagos', empresaId],
+    queryFn: () => fetchPagos(empresaId),
+    enabled: open,
+  });
+  const pagadoPorContrato = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of pagosAll) {
+      if (!p.contrato_id) continue;
+      m.set(p.contrato_id, (m.get(p.contrato_id) ?? 0) + Number(p.monto_usd));
+    }
+    return m;
+  }, [pagosAll]);
+
   const [tipo, setTipo] = useState<Tipo>(prefillTipo ?? 'anticipo');
   const [contratoId, setContratoId] = useState<string>(prefillContratoId ?? '');
   const [montoUsd, setMontoUsd] = useState('');
@@ -69,13 +86,19 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
     [contratos, contratoId],
   );
 
+  // Lo que falta por pagar del contrato = total − todo lo ya pagado
+  // (cubre: todo, o el resto tras un anticipo, o el resto tras un abono).
+  const restantePorPagar = contrato
+    ? Math.max(0, Number(contrato.total_usd ?? 0) - (pagadoPorContrato.get(contrato.id) ?? 0))
+    : 0;
+
   // Sugerir monto cuando cambia contrato o tipo (a menos que ya esté override)
   useEffect(() => {
     if (!contrato || montoUsdOverride) return;
     if (tipo === 'anticipo') setMontoUsd(String(contrato.anticipo_usd ?? ''));
-    else if (tipo === 'saldo') setMontoUsd(String(contrato.saldo_usd ?? ''));
+    else if (tipo === 'saldo') setMontoUsd(restantePorPagar > 0 ? restantePorPagar.toFixed(2) : '');
     else setMontoUsd('');
-  }, [contrato, tipo, montoUsdOverride]);
+  }, [contrato, tipo, montoUsdOverride, restantePorPagar]);
 
   // Reset al abrir
   useEffect(() => {
@@ -298,6 +321,12 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
                     <span>
                       Saldo: <strong className="mono">{fmtUSD(contrato.saldo_usd)}</strong>
                       {contrato.saldo_pagado && ' ✓'}
+                    </span>
+                    <span style={{ color: 'var(--ink-900)' }}>
+                      Falta por pagar:{' '}
+                      <strong className="mono" style={{ color: 'var(--violet-500)' }}>
+                        {fmtUSD(restantePorPagar)}
+                      </strong>
                     </span>
                     {contrato.saldo_fecha && (
                       <span>Vence: {fmtFechaCorta(contrato.saldo_fecha)}</span>

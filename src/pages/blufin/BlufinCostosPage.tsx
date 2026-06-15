@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/components/Icon';
-import { PageEnter } from '@/components/motion';
+import { PageEnter, SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import { fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import {
@@ -89,6 +90,7 @@ export function BlufinCostosPage() {
 
 function InventarioView({ skus }: { skus: SkuCosto[] }) {
   const [query, setQuery] = useState('');
+  const [prodFilter, setProdFilter] = useState('Todos');
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [stockInput, setStockInput] = useState('');
@@ -102,18 +104,25 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  const productos = useMemo(
+    () => Array.from(new Set(skus.map((s) => s.producto ?? '—'))).sort(),
+    [skus],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return skus;
-    return skus.filter(
-      (s) =>
+    return skus.filter((s) => {
+      if (prodFilter !== 'Todos' && (s.producto ?? '—') !== prodFilter) return false;
+      if (!q) return true;
+      return (
         s.descripcion.toLowerCase().includes(q) ||
         s.code.toLowerCase().includes(q) ||
         (s.producto ?? '').toLowerCase().includes(q) ||
         (s.marca ?? '').toLowerCase().includes(q) ||
-        (s.talla ?? '').toLowerCase().includes(q),
-    );
-  }, [skus, query]);
+        (s.talla ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [skus, query, prodFilter]);
 
   const activeSku = selectedId ? skus.find((s) => s.sku_id === selectedId) ?? null : null;
   const last5 = activeSku ? activeSku.fuentes.slice(0, 5) : [];
@@ -134,6 +143,32 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
 
   return (
     <div className="vstack" style={{ gap: 12 }}>
+      {/* Filtro por producto */}
+      <div className="hstack" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <span className="text-xs muted fw-600" style={{ alignSelf: 'center' }}>
+          Producto:
+        </span>
+        <select
+          className="field-input"
+          value={prodFilter}
+          onChange={(e) => {
+            setProdFilter(e.target.value);
+            if (e.target.value !== 'Todos') {
+              setSelectedId(null);
+              setQuery('');
+            }
+          }}
+          style={{ width: 'auto', minWidth: 180, padding: '6px 10px', fontSize: 12 }}
+        >
+          <option value="Todos">Todos los productos</option>
+          {productos.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Buscador */}
       <div ref={boxRef} style={{ position: 'relative', maxWidth: 560 }}>
         <div
@@ -620,6 +655,8 @@ function ResultKpi({
 /* ─── Tab 2 — Histórico de Precios ────────────────────────────────── */
 
 function PreciosView({ skus }: { skus: SkuCosto[] }) {
+  const [detalle, setDetalle] = useState<SkuCosto | null>(null);
+
   // Por SKU: precios a lo largo del tiempo (fuentes ordenadas por fecha ASC).
   const filas = useMemo(() => {
     return skus
@@ -658,8 +695,10 @@ function PreciosView({ skus }: { skus: SkuCosto[] }) {
         }}
       >
         <span className="fw-700">Tendencia de precio FOB (USD/kg)</span> — evolución del precio por
-        compra. Si el proveedor sube más rápido que el mercado, conviene cotizar con otros.
+        compra. Haz clic en una fila para ver las gráficas en USD y MXN y el detalle de compras.
       </div>
+
+      <SkuPrecioDetalle sku={detalle} onClose={() => setDetalle(null)} />
 
       <div className="card">
         <table className="tbl">
@@ -671,6 +710,7 @@ function PreciosView({ skus }: { skus: SkuCosto[] }) {
               <th style={{ textAlign: 'right' }}>Último precio</th>
               <th>Trayectoria</th>
               <th style={{ textAlign: 'right' }}>Cambio</th>
+              <th style={{ width: 32 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -679,7 +719,12 @@ function PreciosView({ skus }: { skus: SkuCosto[] }) {
               const ultimo = puntos[puntos.length - 1].precio_usd;
               const cambio = primero > 0 ? ((ultimo - primero) / primero) * 100 : 0;
               return (
-                <tr key={sku.sku_id}>
+                <tr
+                  key={sku.sku_id}
+                  onClick={() => setDetalle(sku)}
+                  className="costos-precio-row"
+                  style={{ cursor: 'pointer' }}
+                >
                   <td className="mono fw-600 text-sm" style={{ color: 'var(--blue-500)' }}>
                     {sku.code}
                   </td>
@@ -737,6 +782,9 @@ function PreciosView({ skus }: { skus: SkuCosto[] }) {
                       <span className="text-xs muted">1 compra</span>
                     )}
                   </td>
+                  <td style={{ textAlign: 'right', color: 'var(--ink-400)' }}>
+                    <Icon name="chevron-right" size={14} />
+                  </td>
                 </tr>
               );
             })}
@@ -744,5 +792,225 @@ function PreciosView({ skus }: { skus: SkuCosto[] }) {
         </table>
       </div>
     </>
+  );
+}
+
+/* ─── Mini gráfica de líneas (SVG, sin dependencias) ──────────────── */
+
+function MiniLineChart({
+  data,
+  color,
+  fmtY,
+}: {
+  data: { label: string; y: number }[];
+  color: string;
+  fmtY: (n: number) => string;
+}) {
+  if (data.length === 0) {
+    return (
+      <div className="text-xs muted" style={{ padding: 20, textAlign: 'center' }}>
+        Sin datos
+      </div>
+    );
+  }
+  const W = 360;
+  const H = 140;
+  const padL = 6;
+  const padR = 6;
+  const padT = 16;
+  const padB = 24;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const ys = data.map((d) => d.y);
+  const min = Math.min(...ys);
+  const max = Math.max(...ys);
+  const span = max - min || Math.abs(max) || 1;
+  const xFor = (i: number) =>
+    data.length <= 1 ? padL + innerW / 2 : padL + (i / (data.length - 1)) * innerW;
+  const yFor = (v: number) => padT + innerH - ((v - min) / span) * innerH;
+  const path = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(1)} ${yFor(d.y).toFixed(1)}`).join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {/* línea base */}
+      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="var(--ink-200)" strokeWidth={1} />
+      {/* etiquetas max/min */}
+      <text x={padL} y={padT - 4} fontSize={9} fill="var(--ink-400)" fontFamily="var(--font-mono)">
+        {fmtY(max)}
+      </text>
+      <text x={padL} y={padT + innerH + 13} fontSize={9} fill="var(--ink-400)" fontFamily="var(--font-mono)">
+        {fmtY(min)}
+      </text>
+      {data.length > 1 && (
+        <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      )}
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={xFor(i)} cy={yFor(d.y)} r={3.5} fill={color} />
+          {(i === 0 || i === data.length - 1) && (
+            <text
+              x={xFor(i)}
+              y={H - 8}
+              fontSize={9}
+              fill="var(--ink-500)"
+              textAnchor={i === 0 ? 'start' : 'end'}
+              fontFamily="var(--font-mono)"
+            >
+              {d.label}
+            </text>
+          )}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+/* ─── Tarjeta de detalle de precios por SKU ───────────────────────── */
+
+function SkuPrecioDetalle({ sku, onClose }: { sku: SkuCosto | null; onClose: () => void }) {
+  // Compras ordenadas por fecha de entrega (más reciente primero) para la tabla,
+  // y ASC para las gráficas.
+  const ordenadasDesc = sku
+    ? [...sku.fuentes].sort((a, b) => (b.eta_bodega ?? '').localeCompare(a.eta_bodega ?? ''))
+    : [];
+  const ultimas6 = ordenadasDesc.slice(0, 6);
+  const asc = [...ordenadasDesc].reverse();
+  const puntosUSD = asc.filter((f) => f.precio_usd > 0).map((f) => ({
+    label: fmtFechaCorta(f.eta_bodega ?? f.fecha_contrato),
+    y: f.precio_usd,
+  }));
+  const puntosMXN = asc
+    .filter((f) => f.precio_usd > 0 && f.tc != null)
+    .map((f) => ({ label: fmtFechaCorta(f.eta_bodega ?? f.fecha_contrato), y: f.precio_usd * (f.tc as number) }));
+
+  return (
+    <AnimatePresence>
+      {sku && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          onClick={onClose}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(10, 37, 64, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            zIndex: 100,
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={SPRING.snappy}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: 'var(--r-lg)',
+              boxShadow: 'var(--shadow-xl)',
+              maxWidth: 820,
+              width: '100%',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                padding: '18px 22px',
+                borderBottom: '1px solid var(--ink-100)',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 16,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>
+                  <span className="mono" style={{ color: 'var(--blue-500)' }}>
+                    {sku.code}
+                  </span>{' '}
+                  {sku.descripcion}
+                </h2>
+                <p className="card-subtitle" style={{ marginTop: 4 }}>
+                  {sku.fuentes.length} compra{sku.fuentes.length !== 1 ? 's' : ''} en historial ·
+                  evolución del precio por fecha de entrega
+                </p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+
+            <div style={{ padding: 22 }}>
+              {/* Gráficas */}
+              <div className="grid grid-2" style={{ gap: 12, marginBottom: 16 }}>
+                <div className="card" style={{ padding: 14 }}>
+                  <div className="text-xs fw-700" style={{ marginBottom: 6, color: 'var(--blue-500)' }}>
+                    Precio FOB — USD/kg
+                  </div>
+                  <MiniLineChart data={puntosUSD} color="var(--blue-500)" fmtY={(n) => fmtUSD4(n)} />
+                </div>
+                <div className="card" style={{ padding: 14 }}>
+                  <div className="text-xs fw-700" style={{ marginBottom: 6, color: 'var(--ink-900)' }}>
+                    Costo — MXN/kg
+                  </div>
+                  {puntosMXN.length > 0 ? (
+                    <MiniLineChart data={puntosMXN} color="var(--navy-900)" fmtY={(n) => fmtMXN(n)} />
+                  ) : (
+                    <div className="text-xs muted" style={{ padding: 20, textAlign: 'center' }}>
+                      Sin TC en las compras — captura pagos o forwards para ver el costo en MXN.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Últimas compras */}
+              <div className="text-xs fw-700" style={{ marginBottom: 8, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Últimas {ultimas6.length} compra{ultimas6.length !== 1 ? 's' : ''}
+              </div>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Folio</th>
+                    <th>Entrega</th>
+                    <th style={{ textAlign: 'right' }}>Kg</th>
+                    <th style={{ textAlign: 'right' }}>USD/kg</th>
+                    <th style={{ textAlign: 'right' }}>TC</th>
+                    <th style={{ textAlign: 'right' }}>MXN/kg</th>
+                    <th>Nota de crédito</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ultimas6.map((f) => (
+                    <tr key={f.contrato_id}>
+                      <td className="mono fw-600 text-sm">{f.folio}</td>
+                      <td className="text-sm">{fmtFechaCorta(f.eta_bodega ?? f.fecha_contrato)}</td>
+                      <td style={{ textAlign: 'right' }} className="mono fw-600">
+                        {fmtKg(f.kg)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-700">
+                        {fmtUSD4(f.precio_usd)}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="mono">
+                        {f.tc != null ? f.tc.toFixed(4) : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right' }} className="mono fw-700">
+                        {f.tc != null ? fmtMXN(f.precio_usd * f.tc) : '—'}
+                      </td>
+                      <td className="text-xs muted">— (módulo NC pendiente)</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
