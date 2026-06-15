@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { recalcFlagsContrato } from '@/features/blufin/pagos-queries';
 import type { BlufinNotaCreditoEnriquecida } from '@/types/database';
 
 export type NcRazon = 'presentacion' | 'descuento' | 'faltante';
@@ -166,6 +167,10 @@ export async function aplicarNC(params: {
     .update({ saldo_pendiente_usd: nuevoSaldo, status })
     .eq('id', params.ncId);
   if (updErr) throw updErr;
+
+  // La NC reduce el saldo del contrato destino → recalcular sus flags de pago
+  // para que se refleje en Pagos, contenedores y pendientes.
+  await recalcFlagsContrato(params.contrato_destino_id);
 }
 
 export async function setFolioTimbrado(ncId: string, folio: string): Promise<void> {
@@ -176,10 +181,22 @@ export async function setFolioTimbrado(ncId: string, folio: string): Promise<voi
   if (error) throw error;
 }
 
-/** Eliminar una NC + sus aplicaciones (delete con PIN). */
+/** Eliminar una NC + sus aplicaciones (delete con PIN). Revierte el saldo de
+ * los contratos donde estaba aplicada (recalcula sus flags). */
 export async function deleteNotaCredito(ncId: string): Promise<void> {
+  // Contratos afectados por las aplicaciones, para recalcular tras borrar
+  const { data: aps } = await supabase
+    .from('blufin_nc_aplicaciones')
+    .select('contrato_destino_id')
+    .eq('nc_id', ncId);
+  const afectados = Array.from(
+    new Set((aps ?? []).map((a) => a.contrato_destino_id).filter(Boolean) as string[]),
+  );
+
   const { error: apErr } = await supabase.from('blufin_nc_aplicaciones').delete().eq('nc_id', ncId);
   if (apErr) throw apErr;
   const { error } = await supabase.from('blufin_notas_credito').delete().eq('id', ncId);
   if (error) throw error;
+
+  await Promise.all(afectados.map((id) => recalcFlagsContrato(id)));
 }

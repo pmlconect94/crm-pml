@@ -50,35 +50,14 @@ export async function fetchForwards(empresaId: string): Promise<BlufinForwardEnr
  * junto con el saldo).
  */
 export async function recalcFlagsContrato(contratoId: string): Promise<void> {
-  const [{ data: pagos, error: pErr }, { data: contrato, error: cErr }] = await Promise.all([
-    supabase.from('blufin_pagos').select('tipo, monto_usd').eq('contrato_id', contratoId),
-    supabase
-      .from('blufin_contratos')
-      .select('anticipo_usd, saldo_usd')
-      .eq('id', contratoId)
-      .single(),
-  ]);
-  if (pErr) throw pErr;
-  if (cErr) throw cErr;
-  if (!contrato) return;
-
-  const acum = (tipo: string) =>
-    (pagos ?? [])
-      .filter((p) => p.tipo === tipo)
-      .reduce((s, p) => s + Number(p.monto_usd), 0);
-
-  const anticipoTarget = Number(contrato.anticipo_usd ?? 0);
-  const saldoTarget = Number(contrato.saldo_usd ?? 0);
-
-  const saldoCubierto = saldoTarget > 0 && acum('saldo') >= saldoTarget - 0.01;
-  const anticipoCubierto =
-    (anticipoTarget > 0 && acum('anticipo') >= anticipoTarget - 0.01) || saldoCubierto;
-
-  const { error: uErr } = await supabase
+  const estado = await leerEstadoPago(contratoId);
+  if (!estado) return;
+  const { saldoCubierto, anticipoCubierto } = cubiertos(estado);
+  const { error } = await supabase
     .from('blufin_contratos')
     .update({ anticipo_pagado: anticipoCubierto, saldo_pagado: saldoCubierto })
     .eq('id', contratoId);
-  if (uErr) throw uErr;
+  if (error) throw error;
 }
 
 const EPS = 0.01;
@@ -94,19 +73,26 @@ type EstadoPago = {
   acumAnticipo: number;
   acumSaldo: number;
   acumTotal: number;
+  ncAplicado: number; // NCs aplicadas a este contrato — reducen lo que se debe
 };
 
 async function leerEstadoPago(contratoId: string): Promise<EstadoPago | null> {
-  const [{ data: c, error: cErr }, { data: pagos, error: pErr }] = await Promise.all([
+  const [
+    { data: c, error: cErr },
+    { data: pagos, error: pErr },
+    { data: ncAps, error: nErr },
+  ] = await Promise.all([
     supabase
       .from('blufin_contratos')
       .select('anticipo_usd, saldo_usd, total_usd')
       .eq('id', contratoId)
       .single(),
     supabase.from('blufin_pagos').select('tipo, monto_usd').eq('contrato_id', contratoId),
+    supabase.from('blufin_nc_aplicaciones').select('monto_usd').eq('contrato_destino_id', contratoId),
   ]);
   if (cErr) throw cErr;
   if (pErr) throw pErr;
+  if (nErr) throw nErr;
   if (!c) return null;
   const acum = (tipo: string) =>
     (pagos ?? []).filter((p) => p.tipo === tipo).reduce((s, p) => s + Number(p.monto_usd), 0);
@@ -117,18 +103,64 @@ async function leerEstadoPago(contratoId: string): Promise<EstadoPago | null> {
     acumAnticipo: acum('anticipo'),
     acumSaldo: acum('saldo'),
     acumTotal: (pagos ?? []).reduce((s, p) => s + Number(p.monto_usd), 0),
+    ncAplicado: (ncAps ?? []).reduce((s, a) => s + Number(a.monto_usd), 0),
   };
 }
 
-// Mismo criterio de "cubierto" que recalcFlagsContrato: si el saldo está
-// cubierto, el anticipo se considera saldado aunque no se haya pagado aparte.
+// Criterio de "cubierto". Reglas:
+//  - Las NCs reducen lo que se debe imputándose al saldo (no implican que el
+//    anticipo esté pagado).
+//  - El saldo cubierto POR PAGOS sí implica anticipo saldado (regla de negocio:
+//    el pago del saldo suele incluir el anticipo, feedback 2026-06-11).
+//  - El contrato está saldado cuando pagos + NCs cubren el total.
 function cubiertos(e: EstadoPago) {
-  const saldoCubierto = e.saldo_usd > 0 && e.acumSaldo >= e.saldo_usd - EPS;
+  const saldoCubiertoPorPagos = e.saldo_usd > 0 && e.acumSaldo >= e.saldo_usd - EPS;
+  const totalCubierto = e.total_usd > 0 && e.acumTotal + e.ncAplicado >= e.total_usd - EPS;
+  const saldoCubierto =
+    (e.saldo_usd > 0 && e.acumSaldo + e.ncAplicado >= e.saldo_usd - EPS) || totalCubierto;
   const anticipoCubierto =
-    (e.anticipo_usd > 0 && e.acumAnticipo >= e.anticipo_usd - EPS) || saldoCubierto;
-  const totalCubierto = e.total_usd > 0 && e.acumTotal >= e.total_usd - EPS;
+    (e.anticipo_usd > 0 && e.acumAnticipo >= e.anticipo_usd - EPS) ||
+    saldoCubiertoPorPagos ||
+    totalCubierto;
   const contratoSaldado = (saldoCubierto && anticipoCubierto) || totalCubierto;
   return { saldoCubierto, anticipoCubierto, contratoSaldado };
+}
+
+/** Suma de pagos + NCs aplicadas por contrato (para mostrar el saldo restante). */
+export type SaldoContrato = { pagado: number; ncAplicado: number };
+
+export async function fetchSaldosPorContrato(
+  empresaId: string,
+): Promise<Map<string, SaldoContrato>> {
+  const [{ data: pagos, error: pErr }, { data: ncAps, error: nErr }] = await Promise.all([
+    supabase
+      .from('blufin_pagos')
+      .select('contrato_id, monto_usd, contrato:blufin_contratos!inner(empresa_id)')
+      .eq('contrato.empresa_id', empresaId),
+    supabase
+      .from('blufin_nc_aplicaciones')
+      .select('contrato_destino_id, monto_usd, contrato:blufin_contratos!inner(empresa_id)')
+      .eq('contrato.empresa_id', empresaId),
+  ]);
+  if (pErr) throw pErr;
+  if (nErr) throw nErr;
+
+  const map = new Map<string, SaldoContrato>();
+  const get = (id: string) => {
+    let v = map.get(id);
+    if (!v) {
+      v = { pagado: 0, ncAplicado: 0 };
+      map.set(id, v);
+    }
+    return v;
+  };
+  for (const p of pagos ?? []) {
+    if (p.contrato_id) get(p.contrato_id as string).pagado += Number(p.monto_usd);
+  }
+  for (const a of ncAps ?? []) {
+    if (a.contrato_destino_id) get(a.contrato_destino_id as string).ncAplicado += Number(a.monto_usd);
+  }
+  return map;
 }
 
 /**

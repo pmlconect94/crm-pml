@@ -20,9 +20,9 @@ import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida } from '@/t
 
 type View = 'por-recibir' | 'historial' | 'calendario';
 
-// Ventana operativa de "Por recibir": ETA bodega entre hoy−3d y hoy+7d.
-// Contratos sin ETA siempre se muestran (necesitan que se les programe llegada).
-const VENTANA_ATRAS = -3;
+// Ventana operativa de "Por recibir": ETA bodega hasta hoy+7d (incluye
+// vencidos/atrasados, que también hay que recibir). Contratos sin ETA siempre
+// se muestran (necesitan que se les programe llegada).
 const VENTANA_ADELANTE = 7;
 
 export function BlufinRecepcionPage() {
@@ -214,7 +214,7 @@ function PorRecibirView({
     const enVentana = (c: BlufinContratoConProductos) => {
       if (!c.eta_bodega) return true; // sin ETA: necesita programarse, siempre visible
       const dias = diasDesde(c.eta_bodega);
-      return dias !== null && dias >= VENTANA_ATRAS && dias <= VENTANA_ADELANTE;
+      return dias !== null && dias <= VENTANA_ADELANTE;
     };
     const visibles = verTodos ? contratos : contratos.filter(enVentana);
     return { visibles, ocultos: contratos.length - visibles.length };
@@ -239,7 +239,7 @@ function PorRecibirView({
             Por recibir
           </span>
           <span className="text-xs muted">
-            ETA bodega de hace {-VENTANA_ATRAS} días a {VENTANA_ADELANTE} días adelante
+            ETA bodega hasta {VENTANA_ADELANTE} días adelante
           </span>
         </div>
         {(ocultos > 0 || verTodos) && (

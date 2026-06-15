@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
+import { Combobox } from '@/components/Combobox';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD } from '@/lib/format';
 import { fetchContratosConPendiente } from '@/features/blufin/pagos-queries';
@@ -80,6 +81,11 @@ export function AplicarNCModal({
     onSuccess: () => {
       toast.success(`NC aplicada por ${fmtUSD(monto)}`);
       qc.invalidateQueries({ queryKey: ['blufin_notas_credito'] });
+      // La NC bajó el saldo del contrato → refrescar Pagos, contenedores y pendientes
+      qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
       onClose();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -202,19 +208,15 @@ export function AplicarNCModal({
                   </div>
                 ) : (
                   <>
-                    <select
-                      className="field-input mono"
-                      value={destinoId}
-                      onChange={(e) => setDestinoId(e.target.value)}
-                    >
-                      <option value="">— Selecciona contrato con saldo pendiente —</option>
-                      {contratos.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.folio} · {fmtUSD(c.total_usd)} · {c.status}
-                          {c.id === nc.contrato_origen_id ? ' (origen)' : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <Combobox
+                      options={contratos.map((c) => ({
+                        id: c.id,
+                        label: `${c.folio} · ${fmtUSD(c.total_usd)} · ${c.status}${c.id === nc.contrato_origen_id ? ' (origen)' : ''}`,
+                      }))}
+                      value={destinoId || null}
+                      onChange={(id) => setDestinoId(id ?? '')}
+                      placeholder="Escribe el número de contrato…"
+                    />
                     {destinoFolio && (
                       <div className="text-xs muted" style={{ marginTop: 4 }}>
                         Se descuenta en <span className="mono fw-600">{destinoFolio}</span>{' '}

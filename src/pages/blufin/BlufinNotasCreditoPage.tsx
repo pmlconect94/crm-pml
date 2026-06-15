@@ -19,7 +19,7 @@ import { CapturarMontoNCModal } from '@/features/blufin/CapturarMontoNCModal';
 import { AplicarNCModal } from '@/features/blufin/AplicarNCModal';
 import type { BlufinNotaCreditoEnriquecida } from '@/types/database';
 
-type View = 'sinmonto' | 'poraplicar' | 'aplicadas' | 'todas';
+type View = 'poraplicar' | 'aplicadas' | 'todas';
 
 function RazonPill({ razon }: { razon: string }) {
   const m = NC_RAZON_META[razon as NcRazon];
@@ -69,11 +69,12 @@ export function BlufinNotasCreditoPage() {
     queryFn: () => fetchNotasCredito(empresaId),
   });
 
-  const sinMonto = ncs.filter((n) => n.status === 'Sin monto');
-  const porAplicar = ncs.filter((n) => n.status === 'Pendiente' || n.status === 'Parcial');
+  const sinMonto = ncs.filter((n) => n.status === 'Sin monto'); // solo para el KPI
+  // "Por aplicar" agrupa todo lo que aún no está aplicado (incluye Sin monto):
+  // ahí mismo se captura el monto y se aplica a un contrato.
+  const porAplicar = ncs.filter((n) => n.status !== 'Aplicada');
   const aplicadas = ncs.filter((n) => n.status === 'Aplicada');
-  const visibles =
-    view === 'sinmonto' ? sinMonto : view === 'poraplicar' ? porAplicar : view === 'aplicadas' ? aplicadas : ncs;
+  const visibles = view === 'poraplicar' ? porAplicar : view === 'aplicadas' ? aplicadas : ncs;
 
   const kpis = useMemo(() => {
     const saldo = porAplicar.reduce((s, n) => s + Number(n.saldo_pendiente_usd ?? 0), 0);
@@ -97,6 +98,10 @@ export function BlufinNotasCreditoPage() {
     onSuccess: () => {
       toast.success('Nota de crédito eliminada');
       qc.invalidateQueries({ queryKey: ['blufin_notas_credito'] });
+      // si estaba aplicada, el saldo del contrato vuelve a subir
+      qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -109,7 +114,6 @@ export function BlufinNotasCreditoPage() {
     });
 
   const TABS: { id: View; label: string; count: number; accent?: 'amber' | 'gray' }[] = [
-    { id: 'sinmonto', label: 'Sin monto', count: sinMonto.length, accent: 'gray' },
     { id: 'poraplicar', label: 'Por aplicar', count: porAplicar.length, accent: 'amber' },
     { id: 'aplicadas', label: 'Aplicadas', count: aplicadas.length },
     { id: 'todas', label: 'Todas', count: ncs.length },

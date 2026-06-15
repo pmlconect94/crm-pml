@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
+import { Combobox } from '@/components/Combobox';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtMXN } from '@/lib/format';
 import { fetchContratos } from '@/features/blufin/queries';
@@ -150,19 +151,16 @@ export function NuevaNCModal({ open, onClose }: { open: boolean; onClose: () => 
 
               {/* Contrato origen */}
               <div>
-                <label className="field-label">Contrato origen *</label>
-                <select
-                  className="field-input mono"
-                  value={contratoId}
-                  onChange={(e) => setContratoId(e.target.value)}
-                >
-                  <option value="">— Selecciona —</option>
-                  {contratos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.folio} · {fmtUSD(c.total_usd)} · {c.status}
-                    </option>
-                  ))}
-                </select>
+                <label className="field-label">Contrato origen * (escribe el número)</label>
+                <Combobox
+                  options={contratos.map((c) => ({
+                    id: c.id,
+                    label: `${c.folio} · ${fmtUSD(c.total_usd)} · ${c.status}`,
+                  }))}
+                  value={contratoId || null}
+                  onChange={(id) => setContratoId(id ?? '')}
+                  placeholder="MCO-CV-003502…"
+                />
                 {contrato && (
                   <div
                     className="text-xs"

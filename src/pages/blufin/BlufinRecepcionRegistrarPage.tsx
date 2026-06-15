@@ -52,7 +52,6 @@ export function BlufinRecepcionRegistrarPage() {
   const [presRecibida, setPresRecibida] = useState('');
   const [intelisis, setIntelisis] = useState('');
   const [lote, setLote] = useState('');
-  const [naviera, setNaviera] = useState('');
   const [obsGenerales, setObsGenerales] = useState('');
   const [lineas, setLineas] = useState<LineaForm[]>([]);
 
@@ -76,7 +75,6 @@ export function BlufinRecepcionRegistrarPage() {
       }),
     );
     setPresRecibida(contrato.presentacion ?? '');
-    setNaviera(contrato.naviera ?? '');
     setLote(contrato.lote ?? '');
   }, [contrato]);
 
@@ -162,7 +160,6 @@ export function BlufinRecepcionRegistrarPage() {
         presentacion_pactada: contrato?.presentacion ?? null,
         observaciones: obsGenerales.trim() || null,
         lote: lote.trim() || null,
-        naviera: naviera || null,
         lineas: lineas.map((l) => ({
           sku_id: l.sku_id,
           kg_contratados: l.kg_contratados,
@@ -335,24 +332,6 @@ export function BlufinRecepcionRegistrarPage() {
               onChange={(e) => setLote(e.target.value)}
               placeholder="Lote del contenedor"
             />
-            <div className="text-xs muted" style={{ marginTop: 3 }}>
-              Se captura al recibir — actualiza el contrato
-            </div>
-          </div>
-          <div>
-            <label className="field-label">Naviera real</label>
-            <select
-              className="field-input"
-              value={naviera}
-              onChange={(e) => setNaviera(e.target.value)}
-            >
-              <option value="">Sin asignar</option>
-              {(cat?.navieras ?? []).map((n) => (
-                <option key={n.id} value={n.nombre}>
-                  {n.nombre}
-                </option>
-              ))}
-            </select>
             <div className="text-xs muted" style={{ marginTop: 3 }}>
               Se captura al recibir — actualiza el contrato
             </div>

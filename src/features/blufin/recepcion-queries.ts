@@ -97,7 +97,6 @@ export type RecepcionParams = {
   presentacion_pactada: string | null; // del contrato, para detectar diferencia
   observaciones: string | null;
   lote: string | null; // se captura AL RECIBIR — actualiza el contrato
-  naviera: string | null; // naviera real — actualiza el contrato
   lineas: RecepcionLineaParam[];
 };
 
@@ -157,7 +156,6 @@ export async function createRecepcion(params: RecepcionParams): Promise<number> 
     .from('blufin_contratos')
     .update({
       lote: params.lote,
-      naviera: params.naviera,
       llegada_real: params.fecha_recepcion,
       bodega_destino: params.bodega_nombre,
       status: 'Entregado',

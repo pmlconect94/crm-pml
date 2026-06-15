@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
+import { Combobox } from '@/components/Combobox';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD } from '@/lib/format';
 import {
@@ -158,18 +159,16 @@ export function AsignarForwardModal({ open, onClose, forward }: Props) {
                   primero.
                 </div>
               ) : (
-                <select
+                <Combobox
+                  options={destinos.map((d) => ({
+                    id: `${d.contratoId}|${d.tipo}`,
+                    label: `${d.folio} · ${d.tipo} · ${fmtUSD(d.monto)} pendiente`,
+                  }))}
+                  value={seleccion || null}
+                  onChange={(id) => setSeleccion(id ?? '')}
+                  placeholder="Escribe el número de contrato…"
                   className="field-input"
-                  value={seleccion}
-                  onChange={(e) => setSeleccion(e.target.value)}
-                >
-                  <option value="">— Selecciona contrato y tipo —</option>
-                  {destinos.map((d) => (
-                    <option key={`${d.contratoId}|${d.tipo}`} value={`${d.contratoId}|${d.tipo}`}>
-                      {d.folio} · {d.tipo} · {fmtUSD(d.monto)} pendiente
-                    </option>
-                  ))}
-                </select>
+                />
               )}
             </div>
 

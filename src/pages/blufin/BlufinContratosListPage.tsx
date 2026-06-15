@@ -5,8 +5,9 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { fetchContratos } from '@/features/blufin/queries';
-import { deleteContrato } from '@/features/blufin/pagos-queries';
+import { deleteContrato, fetchSaldosPorContrato } from '@/features/blufin/pagos-queries';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
+import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtKg, fmtFecha, fmtFechaCorta, diasDesde } from '@/lib/format';
 import type { BlufinContratoConProductos } from '@/types/database';
@@ -25,10 +26,22 @@ export function BlufinContratosListPage() {
     queryKey: ['blufin_contratos', empresaId],
     queryFn: () => fetchContratos(empresaId),
   });
+  const { data: saldos } = useQuery({
+    queryKey: ['blufin_saldos', empresaId],
+    queryFn: () => fetchSaldosPorContrato(empresaId),
+  });
+  const saldoDe = (c: BlufinContratoConProductos) => {
+    // Liquidado solo si AMBOS flags están cubiertos (anticipo + saldo). Si solo
+    // el saldo se cubrió por NC, el anticipo puede seguir pendiente.
+    if (c.anticipo_pagado && c.saldo_pagado) return 0;
+    const s = saldos?.get(c.id);
+    return Math.max(0, Number(c.total_usd ?? 0) - (s?.pagado ?? 0) - (s?.ncAplicado ?? 0));
+  };
 
   const [filter, setFilter] = useState('todos');
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<BlufinContratoConProductos | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const deleteMut = useMutation({
@@ -240,7 +253,8 @@ export function BlufinContratosListPage() {
                 <th>Llegada puerto</th>
                 <th>Status</th>
                 <th>Contenedor</th>
-                <th style={{ textAlign: 'right' }}>USD</th>
+                <th style={{ textAlign: 'right' }}>Costo USD</th>
+                <th style={{ textAlign: 'right' }}>Saldo</th>
                 <th style={{ textAlign: 'right' }}>Pagos</th>
                 <th style={{ width: 40 }}></th>
               </tr>
@@ -251,7 +265,12 @@ export function BlufinContratosListPage() {
                 const numProductos = c.productos?.length ?? 0;
                 const dias = diasDesde(c.eta_puerto);
                 return (
-                  <tr key={c.id}>
+                  <tr
+                    key={c.id}
+                    onClick={() => setDetalleId(c.id)}
+                    style={{ cursor: 'pointer' }}
+                    title="Ver ficha del contrato"
+                  >
                     <td>
                       <div className="mono fw-600" style={{ fontSize: 13 }}>{c.folio}</div>
                       <div className="text-xs muted">
@@ -298,6 +317,13 @@ export function BlufinContratosListPage() {
                     <td style={{ textAlign: 'right' }} className="fw-600 mono">
                       {fmtUSD(c.total_usd)}
                     </td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-700">
+                      {saldoDe(c) <= 0.01 ? (
+                        <span style={{ color: 'var(--green-500)' }}>Liquidado</span>
+                      ) : (
+                        <span style={{ color: 'var(--amber-500)' }}>{fmtUSD(saldoDe(c))}</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="hstack" style={{ gap: 4, justifyContent: 'flex-end' }}>
                         <span
@@ -329,11 +355,13 @@ export function BlufinContratosListPage() {
                         />
                       </div>
                       <div className="text-xs muted" style={{ marginTop: 2 }}>
-                        {c.saldo_pagado
+                        {c.anticipo_pagado && c.saldo_pagado
                           ? 'Liquidado'
-                          : c.anticipo_pagado
-                            ? 'Saldo pdte'
-                            : 'Anticipo pdte'}
+                          : c.saldo_pagado
+                            ? 'Falta anticipo'
+                            : c.anticipo_pagado
+                              ? 'Saldo pdte'
+                              : 'Anticipo pdte'}
                       </div>
                     </td>
                     <td>
@@ -464,6 +492,8 @@ export function BlufinContratosListPage() {
           </div>
         </Link>
       </div>
+
+      <ContratoDetalleModal contratoId={detalleId} onClose={() => setDetalleId(null)} />
 
       <DeleteConfirmModal
         open={!!deleteTarget}

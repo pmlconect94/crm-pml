@@ -9,11 +9,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon, type IconName } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
+import { Combobox } from '@/components/Combobox';
 import { fetchCatalogos } from '@/features/blufin/queries';
 import {
   createPago,
   fetchContratosConPendiente,
-  fetchPagos,
+  fetchSaldosPorContrato,
   type ContratoConPendiente,
 } from '@/features/blufin/pagos-queries';
 import { useAuth } from '@/lib/auth';
@@ -56,21 +57,13 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
     enabled: open,
   });
 
-  // Todos los pagos para saber cuánto se ha pagado por contrato → el "saldo"
-  // sugerido es lo que REALMENTE falta (total − pagado), no un 90% fijo.
-  const { data: pagosAll = [] } = useQuery({
-    queryKey: ['blufin_pagos', empresaId],
-    queryFn: () => fetchPagos(empresaId),
+  // Lo pagado + NCs aplicadas por contrato → el "saldo" sugerido es lo que
+  // REALMENTE falta (total − pagado − NCs), no un 90% fijo.
+  const { data: saldos } = useQuery({
+    queryKey: ['blufin_saldos', empresaId],
+    queryFn: () => fetchSaldosPorContrato(empresaId),
     enabled: open,
   });
-  const pagadoPorContrato = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const p of pagosAll) {
-      if (!p.contrato_id) continue;
-      m.set(p.contrato_id, (m.get(p.contrato_id) ?? 0) + Number(p.monto_usd));
-    }
-    return m;
-  }, [pagosAll]);
 
   const [tipo, setTipo] = useState<Tipo>(prefillTipo ?? 'anticipo');
   const [contratoId, setContratoId] = useState<string>(prefillContratoId ?? '');
@@ -86,10 +79,15 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
     [contratos, contratoId],
   );
 
-  // Lo que falta por pagar del contrato = total − todo lo ya pagado
-  // (cubre: todo, o el resto tras un anticipo, o el resto tras un abono).
+  // Lo que falta por pagar = total − pagado − NCs aplicadas (cubre: todo, el
+  // resto tras un anticipo/abono, o lo que reste tras aplicar una NC).
   const restantePorPagar = contrato
-    ? Math.max(0, Number(contrato.total_usd ?? 0) - (pagadoPorContrato.get(contrato.id) ?? 0))
+    ? Math.max(
+        0,
+        Number(contrato.total_usd ?? 0) -
+          (saldos?.get(contrato.id)?.pagado ?? 0) -
+          (saldos?.get(contrato.id)?.ncAplicado ?? 0),
+      )
     : 0;
 
   // Sugerir monto cuando cambia contrato o tipo (a menos que ya esté override)
@@ -136,6 +134,7 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
       qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
       // un pago spot puede liberar un forward → refrescar las vistas de forwards
       qc.invalidateQueries({ queryKey: ['blufin_forwards'] });
       qc.invalidateQueries({ queryKey: ['blufin_forwards_activos'] });
@@ -273,34 +272,19 @@ export function PagoModal({ open, onClose, prefillContratoId, prefillTipo }: Pro
               style={{ padding: 24, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}
             >
               <div style={{ gridColumn: 'span 2' }}>
-                <label className="field-label">Contrato *</label>
-                <select
-                  className="field-input mono"
-                  value={contratoId}
-                  onChange={(e) => {
-                    setContratoId(e.target.value);
+                <label className="field-label">Contrato * (escribe el número)</label>
+                <Combobox
+                  options={contratos.map((c) => ({
+                    id: c.id,
+                    label: `${c.folio} · ${c.status} · ${fmtUSD(c.total_usd)}`,
+                  }))}
+                  value={contratoId || null}
+                  onChange={(id) => {
+                    setContratoId(id ?? '');
                     setMontoUsdOverride(false);
                   }}
-                >
-                  <option value="">— Selecciona contrato con pendiente —</option>
-                  {contratos.map((c) => {
-                    const flag =
-                      tipo === 'anticipo'
-                        ? c.anticipo_pagado
-                          ? ' (anticipo pagado)'
-                          : ''
-                        : tipo === 'saldo'
-                          ? c.saldo_pagado
-                            ? ' (saldo pagado)'
-                            : ''
-                          : '';
-                    return (
-                      <option key={c.id} value={c.id}>
-                        {c.folio} · {c.status} · {fmtUSD(c.total_usd)}{flag}
-                      </option>
-                    );
-                  })}
-                </select>
+                  placeholder="MCO-CV-003502…"
+                />
                 {contrato && (
                   <div
                     className="text-xs muted"
