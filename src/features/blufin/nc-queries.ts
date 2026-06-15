@@ -132,6 +132,19 @@ export async function aplicarNC(params: {
     throw new Error('El monto excede el saldo disponible de la NC.');
   }
 
+  // Solo se aplica a contratos con saldo pendiente: lo ya pagado no recibe NC.
+  const { data: dest, error: dErr } = await supabase
+    .from('blufin_contratos')
+    .select('folio, anticipo_pagado, saldo_pagado')
+    .eq('id', params.contrato_destino_id)
+    .single();
+  if (dErr) throw dErr;
+  if (dest.anticipo_pagado && dest.saldo_pagado) {
+    throw new Error(
+      `El contrato ${dest.folio} ya está pagado por completo — no se le puede aplicar la NC.`,
+    );
+  }
+
   const { error: insErr } = await supabase.from('blufin_nc_aplicaciones').insert({
     nc_id: params.ncId,
     contrato_destino_id: params.contrato_destino_id,

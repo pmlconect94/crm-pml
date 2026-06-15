@@ -6,7 +6,7 @@ import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD } from '@/lib/format';
-import { fetchContratos } from '@/features/blufin/queries';
+import { fetchContratosConPendiente } from '@/features/blufin/pagos-queries';
 import { aplicarNC, NC_RAZON_META, type NcRazon } from '@/features/blufin/nc-queries';
 import type { BlufinNotaCreditoEnriquecida } from '@/types/database';
 
@@ -26,9 +26,10 @@ export function AplicarNCModal({
   const { empresaId } = useAuth();
   const qc = useQueryClient();
 
+  // Solo contratos con saldo pendiente: una NC no se aplica a lo ya pagado.
   const { data: contratos = [] } = useQuery({
-    queryKey: ['blufin_contratos', empresaId],
-    queryFn: () => fetchContratos(empresaId),
+    queryKey: ['blufin_contratos_pendientes', empresaId],
+    queryFn: () => fetchContratosConPendiente(empresaId),
     enabled: !!nc,
   });
 
@@ -41,12 +42,21 @@ export function AplicarNCModal({
 
   useEffect(() => {
     if (nc) {
-      setDestinoId(nc.contrato_origen_id ?? '');
+      setDestinoId('');
       setMontoAplicar(saldo > 0 ? saldo.toFixed(2) : '');
       setFecha(hoyISO());
       setNota('');
     }
   }, [nc?.id]);
+
+  // Prefill al contrato origen solo si todavía tiene saldo pendiente
+  useEffect(() => {
+    if (nc && contratos.length > 0 && !destinoId) {
+      const origenPendiente = contratos.some((c) => c.id === nc.contrato_origen_id);
+      if (origenPendiente) setDestinoId(nc.contrato_origen_id ?? '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contratos, nc?.id]);
 
   const meta = nc ? NC_RAZON_META[nc.razon as NcRazon] : null;
   const monto = toNum(montoAplicar);
@@ -177,26 +187,43 @@ export function AplicarNCModal({
             <div style={{ padding: '16px 22px', display: 'grid', gap: 12 }}>
               <div>
                 <label className="field-label">¿A qué contrato aplicar?</label>
-                <select
-                  className="field-input mono"
-                  value={destinoId}
-                  onChange={(e) => setDestinoId(e.target.value)}
-                >
-                  <option value="">— Selecciona contrato destino —</option>
-                  {contratos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.folio} · {fmtUSD(c.total_usd)} · {c.status}
-                      {c.id === nc.contrato_origen_id ? ' (origen)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {destinoFolio && (
-                  <div className="text-xs muted" style={{ marginTop: 4 }}>
-                    Se descuenta en <span className="mono fw-600">{destinoFolio}</span>{' '}
-                    <span className={`badge ${esMismo ? 'badge-gray' : 'badge-blue'}`} style={{ fontSize: 10 }}>
-                      {esMismo ? 'mismo contrato' : 'otro contrato'}
-                    </span>
+                {contratos.length === 0 ? (
+                  <div
+                    className="text-sm muted"
+                    style={{
+                      padding: 12,
+                      background: 'var(--ink-50)',
+                      borderRadius: 'var(--r-sm)',
+                      border: '1px solid var(--ink-200)',
+                    }}
+                  >
+                    No hay contratos con saldo pendiente. Una NC solo se aplica a contenedores que
+                    aún deban — los ya pagados por completo no la pueden recibir.
                   </div>
+                ) : (
+                  <>
+                    <select
+                      className="field-input mono"
+                      value={destinoId}
+                      onChange={(e) => setDestinoId(e.target.value)}
+                    >
+                      <option value="">— Selecciona contrato con saldo pendiente —</option>
+                      {contratos.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.folio} · {fmtUSD(c.total_usd)} · {c.status}
+                          {c.id === nc.contrato_origen_id ? ' (origen)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {destinoFolio && (
+                      <div className="text-xs muted" style={{ marginTop: 4 }}>
+                        Se descuenta en <span className="mono fw-600">{destinoFolio}</span>{' '}
+                        <span className={`badge ${esMismo ? 'badge-gray' : 'badge-blue'}`} style={{ fontSize: 10 }}>
+                          {esMismo ? 'mismo contrato' : 'otro contrato'}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
