@@ -16,6 +16,8 @@ import { BlufinRecepcionRegistrarPage } from '@/pages/blufin/BlufinRecepcionRegi
 import { BlufinProductosPage } from '@/pages/blufin/BlufinProductosPage';
 import { BlufinCostosPage } from '@/pages/blufin/BlufinCostosPage';
 import { BlufinNotasCreditoPage } from '@/pages/blufin/BlufinNotasCreditoPage';
+import { BlufinFacturasPage } from '@/pages/blufin/BlufinFacturasPage';
+import { BlufinFacturaRevisarPage } from '@/pages/blufin/BlufinFacturaRevisarPage';
 
 export default function App() {
   return (
@@ -44,6 +46,8 @@ export default function App() {
             <Route path="productos" element={<BlufinProductosPage />} />
             <Route path="costos" element={<BlufinCostosPage />} />
             <Route path="notas-credito" element={<BlufinNotasCreditoPage />} />
+            <Route path="facturas" element={<BlufinFacturasPage />} />
+            <Route path="facturas/revisar" element={<BlufinFacturaRevisarPage />} />
           </Route>
 
           {/* Stubs */}

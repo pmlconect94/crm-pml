@@ -405,6 +405,86 @@ export type Database = {
         };
         Relationships: Empty;
       };
+      blufin_facturas: {
+        Row: {
+          id: string;
+          contrato_id: string | null;
+          fecha_subida: string | null;
+          nombre_archivo: string | null;
+          storage_path: string | null;
+          status: string | null; // 'Pendiente revisión' | 'Aprobada'
+          total_contrato: number | null;
+          total_factura: number | null;
+          diferencia_monto: number | null; // generada en BD: total_factura - total_contrato
+          revisado_por: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          contrato_id?: string | null;
+          fecha_subida?: string | null;
+          nombre_archivo?: string | null;
+          storage_path?: string | null;
+          status?: string | null;
+          total_contrato?: number | null;
+          total_factura?: number | null;
+          revisado_por?: string | null;
+        };
+        Update: {
+          fecha_subida?: string | null;
+          nombre_archivo?: string | null;
+          storage_path?: string | null;
+          status?: string | null;
+          total_contrato?: number | null;
+          total_factura?: number | null;
+          revisado_por?: string | null;
+        };
+        Relationships: Empty;
+      };
+      blufin_factura_lineas: {
+        Row: {
+          id: string;
+          factura_id: string | null;
+          sku_factura: string | null;
+          descripcion_factura: string | null;
+          kg_factura: number | null;
+          precio_factura: number | null;
+          total_factura: number | null;
+          sku_contrato: string | null;
+          descripcion_contrato: string | null;
+          kg_contrato: number | null;
+          precio_contrato: number | null;
+          total_contrato: number | null;
+          match: string | null; // 'ok' | 'diferente'
+          diferencias: Record<string, unknown>[] | null; // jsonb
+          aceptado: boolean | null;
+          nota_revision: string | null;
+        };
+        Insert: {
+          id?: string;
+          factura_id?: string | null;
+          sku_factura?: string | null;
+          descripcion_factura?: string | null;
+          kg_factura?: number | null;
+          precio_factura?: number | null;
+          total_factura?: number | null;
+          sku_contrato?: string | null;
+          descripcion_contrato?: string | null;
+          kg_contrato?: number | null;
+          precio_contrato?: number | null;
+          total_contrato?: number | null;
+          match?: string | null;
+          diferencias?: Record<string, unknown>[] | null;
+          aceptado?: boolean | null;
+          nota_revision?: string | null;
+        };
+        Update: {
+          match?: string | null;
+          aceptado?: boolean | null;
+          nota_revision?: string | null;
+        };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -441,6 +521,16 @@ export type BlufinPago = Database['crm']['Tables']['blufin_pagos']['Row'];
 export type BlufinPagoInsert = Database['crm']['Tables']['blufin_pagos']['Insert'];
 export type BlufinForward = Database['crm']['Tables']['blufin_forwards']['Row'];
 export type BlufinForwardInsert = Database['crm']['Tables']['blufin_forwards']['Insert'];
+
+export type BlufinFactura = Database['crm']['Tables']['blufin_facturas']['Row'];
+export type BlufinFacturaInsert = Database['crm']['Tables']['blufin_facturas']['Insert'];
+export type BlufinFacturaLinea = Database['crm']['Tables']['blufin_factura_lineas']['Row'];
+export type BlufinFacturaLineaInsert = Database['crm']['Tables']['blufin_factura_lineas']['Insert'];
+
+// Factura + datos del contrato (denormalizado para la lista)
+export type BlufinFacturaEnriquecida = BlufinFactura & {
+  contrato?: { folio: string; total_usd: number | null; status: string } | null;
+};
 
 // Pago + datos del contrato y banco (denormalizado para list view)
 export type BlufinPagoEnriquecido = BlufinPago & {
