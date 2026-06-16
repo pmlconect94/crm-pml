@@ -7,7 +7,9 @@ import { StatusPill } from '@/features/blufin/StatusPill';
 import { fetchContratos } from '@/features/blufin/queries';
 import { deleteContrato, fetchSaldosPorContrato } from '@/features/blufin/pagos-queries';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
+import { ExportMenu } from '@/components/ExportMenu';
 import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
+import { exportContratos, exportProductosPorContrato } from '@/features/blufin/blufin-export';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtKg, fmtFecha, fmtFechaCorta, diasDesde } from '@/lib/format';
 import type { BlufinContratoConProductos } from '@/types/database';
@@ -90,6 +92,22 @@ export function BlufinContratosListPage() {
           </p>
         </div>
         <div className="hstack" style={{ gap: 8 }}>
+          {contratos.length > 0 && (
+            <ExportMenu
+              items={[
+                {
+                  label: 'Contratos',
+                  hint: 'Folios, fechas de llegada, totales y estado de pago',
+                  onSelect: () => exportContratos(contratos, saldoDe),
+                },
+                {
+                  label: 'Productos por contrato',
+                  hint: 'Cada producto con su contrato y fechas de llegada',
+                  onSelect: () => exportProductosPorContrato(contratos),
+                },
+              ]}
+            />
+          )}
           <Link to="/app/importaciones/blufin/contratos/carga-masiva" className="btn btn-outline btn-sm" style={{ textDecoration: 'none' }}>
             <Icon name="download" size={13} /> Carga masiva PDF
           </Link>

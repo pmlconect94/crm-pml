@@ -6,6 +6,7 @@ import { PageEnter } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import { fmtNum } from '@/lib/format';
 import { fetchSkusBlufin, toggleSkuActivo } from '@/features/blufin/productos-queries';
+import { exportProductos } from '@/features/blufin/blufin-export';
 import { SkuModal } from '@/features/blufin/SkuModal';
 import type { CatalogoSku } from '@/types/database';
 
@@ -81,9 +82,19 @@ export function BlufinProductosPage() {
             Master de SKUs Blufin — se referencia en contratos, recepciones y costos
           </p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => abrir(null)}>
-          <Icon name="plus" size={13} /> Nuevo SKU
-        </button>
+        <div className="hstack" style={{ gap: 8 }}>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={() => exportProductos(skus)}
+            disabled={skus.length === 0}
+            title="Descargar el catálogo completo en Excel"
+          >
+            <Icon name="download" size={13} /> Exportar Excel
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => abrir(null)}>
+            <Icon name="plus" size={13} /> Nuevo SKU
+          </button>
+        </div>
       </PageEnter>
 
       {/* KPIs — mount instantáneo */}
