@@ -110,10 +110,18 @@ export function ContratoDetalleModal({
                       <StatusPill status={c.status} />
                     </div>
                     <div className="text-xs muted">
-                      Fecha {fmtFechaCorta(c.fecha)} · ETA puerto {fmtFechaCorta(c.eta_puerto)} · ETA
-                      bodega {fmtFechaCorta(c.eta_bodega)} ·{' '}
-                      {c.contenedor ? <span className="mono">{c.contenedor}</span> : 'sin contenedor'} ·{' '}
-                      {c.presentacion ?? '—'}
+                      Fecha {fmtFechaCorta(c.fecha)}
+                      {c.eta_puerto ? ` · ETA puerto ${fmtFechaCorta(c.eta_puerto)}` : ''}
+                      {c.eta_bodega ? ` · ETA bodega ${fmtFechaCorta(c.eta_bodega)}` : ''}
+                      {c.llegada_real ? ` · llegó ${fmtFechaCorta(c.llegada_real)}` : ''}
+                      {c.bodega_destino ? ` · ${c.bodega_destino}` : ''}
+                      {` · ${c.presentacion ?? '—'}`}
+                      {c.contenedor ? (
+                        <>
+                          {' · '}
+                          <span className="mono">{c.contenedor}</span>
+                        </>
+                      ) : ''}
                       {c.lote ? ` · lote ${c.lote}` : ''}
                     </div>
                   </div>
@@ -143,6 +151,26 @@ export function ContratoDetalleModal({
                         <div className="mono fw-700" style={{ fontSize: 15, color: k.color }}>
                           {k.value}
                         </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Logística y fechas clave */}
+                  <div
+                    className="hstack"
+                    style={{ gap: 18, marginTop: 12, flexWrap: 'wrap', fontSize: 12 }}
+                  >
+                    {[
+                      { label: 'Naviera', value: c.naviera ?? '—' },
+                      { label: 'Contenedor', value: c.contenedor ?? '—', mono: true },
+                      { label: 'ETA puerto', value: fmtFechaCorta(c.eta_puerto) },
+                      { label: 'Llegó a bodega', value: fmtFechaCorta(c.llegada_real ?? c.eta_bodega) },
+                      { label: 'Fecha anticipo', value: fmtFechaCorta(c.anticipo_fecha) },
+                      { label: 'Fecha pago saldo', value: fmtFechaCorta(c.saldo_fecha) },
+                    ].map((it) => (
+                      <div key={it.label}>
+                        <div className="text-xs muted">{it.label}</div>
+                        <div className={`fw-600 ${it.mono ? 'mono' : ''}`}>{it.value}</div>
                       </div>
                     ))}
                   </div>

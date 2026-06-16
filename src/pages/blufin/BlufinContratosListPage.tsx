@@ -11,16 +11,18 @@ import { ExportMenu } from '@/components/ExportMenu';
 import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
 import { exportContratos, exportProductosPorContrato } from '@/features/blufin/blufin-export';
 import { useAuth } from '@/lib/auth';
-import { fmtUSD, fmtKg, fmtFecha, fmtFechaCorta, diasDesde } from '@/lib/format';
+import { fmtUSD, fmtKg, fmtFecha, fmtFechaCorta } from '@/lib/format';
 import type { BlufinContratoConProductos } from '@/types/database';
 
-const STATUS_FILTERS = [
+const FILTROS = [
+  { id: 'activos', label: 'Activos' },
+  { id: 'terminados', label: 'Terminados' },
   { id: 'todos', label: 'Todos' },
-  { id: 'Contratado', label: 'Contratados' },
-  { id: 'En tránsito', label: 'En tránsito' },
-  { id: 'En puerto', label: 'En puerto' },
-  { id: 'Entregado', label: 'Entregados' },
 ];
+
+/** Terminado = ya llegó (Entregado) y está liquidado (saldo pagado). */
+const esTerminado = (c: BlufinContratoConProductos) =>
+  c.status === 'Entregado' && c.saldo_pagado === true;
 
 export function BlufinContratosListPage() {
   const { empresaId } = useAuth();
@@ -40,7 +42,7 @@ export function BlufinContratosListPage() {
     return Math.max(0, Number(c.total_usd ?? 0) - (s?.pagado ?? 0) - (s?.ncAplicado ?? 0));
   };
 
-  const [filter, setFilter] = useState('todos');
+  const [filter, setFilter] = useState('activos');
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<BlufinContratoConProductos | null>(null);
   const [detalleId, setDetalleId] = useState<string | null>(null);
@@ -58,7 +60,8 @@ export function BlufinContratosListPage() {
 
   const filtered = useMemo(() => {
     return contratos.filter((c) => {
-      if (filter !== 'todos' && c.status !== filter) return false;
+      if (filter === 'activos' && esTerminado(c)) return false;
+      if (filter === 'terminados' && !esTerminado(c)) return false;
       if (search) {
         const s = search.toLowerCase();
         const folioMatch = c.folio.toLowerCase().includes(s);
@@ -76,10 +79,17 @@ export function BlufinContratosListPage() {
 
   const kpis = useMemo(() => {
     const enTransito = contratos.filter((c) => c.status === 'En tránsito').length;
-    const enPuerto = contratos.filter((c) => c.status === 'En puerto').length;
+    const terminados = contratos.filter(esTerminado).length;
     const totalUsd = contratos.reduce((s, c) => s + (Number(c.total_usd) || 0), 0);
     const totalKg = contratos.reduce((s, c) => s + (Number(c.total_kg) || 0), 0);
-    return { enTransito, enPuerto, totalUsd, totalKg, count: contratos.length };
+    return {
+      enTransito,
+      terminados,
+      activos: contratos.length - terminados,
+      totalUsd,
+      totalKg,
+      count: contratos.length,
+    };
   }, [contratos]);
 
   return (
@@ -117,28 +127,34 @@ export function BlufinContratosListPage() {
         </div>
       </div>
 
-      {/* KPIs — mount instantáneo, son data */}
-      <div className="grid grid-4" style={{ marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="kpi-label">Contratos activos</span>
-          <span className="kpi-value">{kpis.count}</span>
-          <span className="kpi-delta">Total en el sistema</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">En tránsito</span>
-          <span className="kpi-value">{kpis.enTransito}</span>
-          <span className="kpi-delta">Contenedores en mar</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">En puerto</span>
-          <span className="kpi-value">{kpis.enPuerto}</span>
-          <span className="kpi-delta">Pendientes de descargar</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">USD comprometido</span>
-          <span className="kpi-value mono" style={{ fontSize: 18 }}>{fmtUSD(kpis.totalUsd)}</span>
-          <span className="kpi-delta">{fmtKg(kpis.totalKg)}</span>
-        </div>
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      <div
+        className="hstack"
+        style={{ gap: 14, marginBottom: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--ink-500)' }}
+      >
+        <span>
+          <strong className="mono" style={{ color: 'var(--ink-900)', fontSize: 13 }}>
+            {kpis.count}
+          </strong>{' '}
+          contratos
+        </span>
+        <span style={{ color: 'var(--ink-300)' }}>·</span>
+        <span>
+          <strong className="mono" style={{ color: 'var(--amber-500)' }}>{kpis.enTransito}</strong> en
+          tránsito
+        </span>
+        <span style={{ color: 'var(--ink-300)' }}>·</span>
+        <span>
+          <strong className="mono" style={{ color: 'var(--green-500)' }}>{kpis.terminados}</strong>{' '}
+          terminados
+        </span>
+        <span style={{ color: 'var(--ink-300)' }}>·</span>
+        <span>
+          <strong className="mono" style={{ color: 'var(--ink-900)' }}>{fmtUSD(kpis.totalUsd)}</strong>{' '}
+          comprometido
+        </span>
+        <span style={{ color: 'var(--ink-300)' }}>·</span>
+        <span className="mono">{fmtKg(kpis.totalKg)}</span>
       </div>
 
       {/* Filtros */}
@@ -165,24 +181,44 @@ export function BlufinContratosListPage() {
             />
           </div>
           <div className="hstack" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {STATUS_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setFilter(f.id)}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 999,
-                  border: '1px solid ' + (filter === f.id ? 'var(--blue-500)' : 'var(--ink-200)'),
-                  background: filter === f.id ? 'var(--blue-500)' : 'white',
-                  color: filter === f.id ? 'white' : 'var(--ink-700)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {f.label}
-              </button>
-            ))}
+            {FILTROS.map((f) => {
+              const activo = filter === f.id;
+              const n =
+                f.id === 'todos' ? kpis.count : f.id === 'terminados' ? kpis.terminados : kpis.activos;
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(f.id)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 999,
+                    border: '1px solid ' + (activo ? 'var(--blue-500)' : 'var(--ink-200)'),
+                    background: activo ? 'var(--blue-500)' : 'white',
+                    color: activo ? 'white' : 'var(--ink-700)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  {f.label}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '0 6px',
+                      borderRadius: 999,
+                      background: activo ? 'rgba(255,255,255,0.25)' : 'var(--ink-100)',
+                      color: activo ? 'white' : 'var(--ink-500)',
+                    }}
+                  >
+                    {n}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -197,7 +233,7 @@ export function BlufinContratosListPage() {
                 background: 'var(--ink-50)',
                 borderBottom: '1px solid var(--ink-200)',
                 display: 'grid',
-                gridTemplateColumns: '1fr 2fr 80px 100px 90px 120px 90px 60px',
+                gridTemplateColumns: '1fr 2fr 100px 90px 120px 90px 60px',
                 gap: 16,
                 fontSize: 11,
                 fontWeight: 600,
@@ -208,8 +244,7 @@ export function BlufinContratosListPage() {
             >
               <div>Contrato</div>
               <div>Producto principal</div>
-              <div style={{ textAlign: 'right' }}>Kg</div>
-              <div>Llegada puerto</div>
+              <div>Llegada</div>
               <div>Status</div>
               <div>Contenedor</div>
               <div style={{ textAlign: 'right' }}>USD</div>
@@ -225,7 +260,6 @@ export function BlufinContratosListPage() {
                   <div className="skeleton-bar" style={{ width: '85%', marginBottom: 6 }} />
                   <div className="skeleton-bar" style={{ width: '50%', height: 10 }} />
                 </div>
-                <div className="skeleton-bar" style={{ marginLeft: 'auto', width: 60 }} />
                 <div>
                   <div className="skeleton-bar" style={{ width: '80%', marginBottom: 6 }} />
                   <div className="skeleton-bar" style={{ width: '60%', height: 10 }} />
@@ -267,8 +301,7 @@ export function BlufinContratosListPage() {
               <tr>
                 <th>Contrato</th>
                 <th>Producto principal</th>
-                <th style={{ textAlign: 'right' }}>Kg</th>
-                <th>Llegada puerto</th>
+                <th>Llegada</th>
                 <th>Status</th>
                 <th>Contenedor</th>
                 <th style={{ textAlign: 'right' }}>Costo USD</th>
@@ -281,7 +314,7 @@ export function BlufinContratosListPage() {
               {filtered.map((c) => {
                 const principal = c.productos?.[0];
                 const numProductos = c.productos?.length ?? 0;
-                const dias = diasDesde(c.eta_puerto);
+                const llegada = c.llegada_real ?? c.eta_bodega;
                 return (
                   <tr
                     key={c.id}
@@ -310,15 +343,22 @@ export function BlufinContratosListPage() {
                         <span className="text-xs muted">— Sin productos —</span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right' }} className="fw-600 mono">
-                      {fmtKg(c.total_kg)}
-                    </td>
                     <td>
-                      <div className="fw-600">{fmtFechaCorta(c.eta_puerto)}</div>
-                      {dias != null && (
-                        <div className="text-xs muted">
-                          {dias < 0 ? `hace ${-dias} días` : dias === 0 ? 'hoy' : `en ${dias} días`}
-                        </div>
+                      {llegada ? (
+                        <>
+                          <div className="fw-600">{fmtFechaCorta(llegada)}</div>
+                          <div className="text-xs muted">
+                            {c.bodega_destino ?? '—'}
+                            {c.presentacion ? ` · ${c.presentacion}` : ''}
+                          </div>
+                        </>
+                      ) : c.eta_puerto ? (
+                        <>
+                          <div className="fw-600">{fmtFechaCorta(c.eta_puerto)}</div>
+                          <div className="text-xs muted">ETA puerto</div>
+                        </>
+                      ) : (
+                        <span className="text-xs muted">— Por llegar —</span>
                       )}
                     </td>
                     <td><StatusPill status={c.status} /></td>
