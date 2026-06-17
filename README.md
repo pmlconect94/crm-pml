@@ -12,12 +12,15 @@ Plataforma empresarial para Grupo Lizárraga — importación, distribución y p
 
 | Tab | Estado |
 |---|---|
-| Contratos | ✅ Live — alta manual, carga PDF stub, delete con PIN, semáforo Liquidado |
-| Pagos | ✅ Live — Pendientes / Realizados (filtros completos) / Forwards (ejecutar + bloqueo duplicados), pago múltiple, delete con PIN |
-| Recepción | 🔜 Próximo |
-| Notas de crédito · Facturas · Calendario · Central de costos · Productos | 🔜 |
+| Contratos | ✅ Live — base real (336 contratos), filtros Activos/Terminados, status calculado, export Excel |
+| Recepción | ✅ Live — por recibir / historial / calendario, programar llegada, recepción con líneas |
+| Pagos | ✅ Live — anticipos / saldos / forwards, pago múltiple, delete con PIN |
+| Notas de crédito | ✅ Live — flujo Sin monto → Aplicada, auto-NC desde recepción |
+| Facturas | ✅ Live — comparador factura vs contrato + subir PDF a Storage |
+| Central de costos · Productos | ✅ Live |
+| Calendario | 🔜 Próximo |
 
-Camanchaca y Neptuno: schema y frontend pendientes (ver `CLAUDE.md` §16 para roadmap completo).
+Camanchaca y Neptuno: schema y frontend pendientes (ver `CLAUDE.md` §16 para roadmap completo y estado al día).
 
 ---
 
@@ -33,22 +36,28 @@ Camanchaca y Neptuno: schema y frontend pendientes (ver `CLAUDE.md` §16 para ro
 ### Pasos
 
 ```bash
-# 1. Clonar el repo
-git clone https://github.com/<tu-usuario>/crm-lizarraga.git
-cd crm-lizarraga
+# 1. Clonar el repo (privado — hay que estar logueado en la cuenta
+#    pmlconect94 de GitHub, o ser colaborador del repo)
+git clone https://github.com/pmlconect94/crm-pml.git
+cd crm-pml
 
 # 2. Instalar dependencias
 npm install
 
 # 3. Crear .env.local desde la plantilla y llenar
 cp .env.example .env.local
-# Editar .env.local con la URL y publishable key del proyecto Supabase
-# (las puedes copiar del Dashboard de Supabase → Project Settings → API)
+# Editar .env.local con la URL y la anon (publishable) key del proyecto
+# Supabase crm-pml — Dashboard → Project Settings → API, o copiarlas del
+# .env.local de la computadora donde ya funciona.
 
 # 4. Levantar dev server
 npm run dev
-# Abre http://localhost:5173 (o el siguiente puerto disponible)
+# Abre http://localhost:5174 (el 5173 lo ocupa el sistema de nómina local;
+# si está libre toma ese).
 ```
+
+> La base de datos vive en Supabase (la nube), así que es la misma desde
+> cualquier computadora — solo necesitas el repo + el `.env.local`.
 
 ### Variables de entorno (.env.local)
 
