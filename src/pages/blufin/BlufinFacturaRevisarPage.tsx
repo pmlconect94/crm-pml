@@ -12,6 +12,7 @@ import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { Combobox } from '@/components/Combobox';
 import { StatusPill } from '@/features/blufin/StatusPill';
+import { statusContrato } from '@/features/blufin/status';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratos } from '@/features/blufin/queries';
@@ -242,7 +243,7 @@ export function BlufinFacturaRevisarPage() {
               </div>
             ))}
             <div style={{ marginLeft: 'auto' }}>
-              <StatusPill status={contrato.status} />
+              <StatusPill status={statusContrato(contrato)} />
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { StatusPill } from '@/features/blufin/StatusPill';
+import { statusContrato } from '@/features/blufin/status';
 import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtUSD, fmtFechaCorta } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
@@ -226,7 +227,7 @@ export function BlufinRecepcionRegistrarPage() {
             Registrar recepción de mercancía
           </h2>
           <span className="mono fw-700 text-sm">{contrato.folio}</span>
-          <StatusPill status={contrato.status} />
+          <StatusPill status={statusContrato(contrato)} />
         </div>
       </PageEnter>
 

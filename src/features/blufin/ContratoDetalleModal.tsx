@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { StatusPill } from '@/features/blufin/StatusPill';
+import { statusContrato } from '@/features/blufin/status';
 import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratoDetalle } from '@/features/blufin/queries';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
@@ -107,7 +108,7 @@ export function ContratoDetalleModal({
                       <span className="mono fw-700" style={{ fontSize: 16 }}>
                         {c.folio}
                       </span>
-                      <StatusPill status={c.status} />
+                      <StatusPill status={statusContrato(c)} />
                     </div>
                     <div className="text-xs muted">
                       Fecha {fmtFechaCorta(c.fecha)}

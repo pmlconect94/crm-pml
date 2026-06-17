@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon';
 import { PageEnter, SPRING } from '@/components/motion';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
 import { StatusPill } from '@/features/blufin/StatusPill';
+import { statusContrato } from '@/features/blufin/status';
 import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtFechaCorta, fmtFecha, diasDesde } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
@@ -334,7 +335,7 @@ function PorRecibirView({
               <div>
                 <div className="hstack" style={{ gap: 8, marginBottom: 4 }}>
                   <span className="mono fw-700 text-sm">{c.folio}</span>
-                  <StatusPill status={c.status} />
+                  <StatusPill status={statusContrato(c)} />
                   {!c.eta_bodega && (
                     <span className="badge badge-amber" style={{ fontSize: 10 }}>
                       Sin ETA — programar llegada

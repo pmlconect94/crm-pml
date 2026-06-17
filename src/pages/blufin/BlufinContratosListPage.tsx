@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { StatusPill } from '@/features/blufin/StatusPill';
+import { statusContrato } from '@/features/blufin/status';
 import { fetchContratos } from '@/features/blufin/queries';
 import { deleteContrato, fetchSaldosPorContrato } from '@/features/blufin/pagos-queries';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
@@ -88,12 +89,14 @@ export function BlufinContratosListPage() {
   }, [contratos, filter, search]);
 
   const kpis = useMemo(() => {
-    const enTransito = contratos.filter((c) => c.status === 'En tránsito').length;
+    const enTransito = contratos.filter((c) => statusContrato(c) === 'En tránsito').length;
+    const enPuerto = contratos.filter((c) => statusContrato(c) === 'En puerto').length;
     const terminados = contratos.filter(esTerminado).length;
     const totalUsd = contratos.reduce((s, c) => s + (Number(c.total_usd) || 0), 0);
     const totalKg = contratos.reduce((s, c) => s + (Number(c.total_kg) || 0), 0);
     return {
       enTransito,
+      enPuerto,
       terminados,
       activos: contratos.length - terminados,
       totalUsd,
@@ -152,6 +155,11 @@ export function BlufinContratosListPage() {
         <span>
           <strong className="mono" style={{ color: 'var(--amber-500)' }}>{kpis.enTransito}</strong> en
           tránsito
+        </span>
+        <span style={{ color: 'var(--ink-300)' }}>·</span>
+        <span>
+          <strong className="mono" style={{ color: 'var(--violet-500)' }}>{kpis.enPuerto}</strong> en
+          puerto
         </span>
         <span style={{ color: 'var(--ink-300)' }}>·</span>
         <span>
@@ -372,7 +380,7 @@ export function BlufinContratosListPage() {
                         <span className="text-xs muted">— Por llegar —</span>
                       )}
                     </td>
-                    <td><StatusPill status={c.status} /></td>
+                    <td><StatusPill status={statusContrato(c)} /></td>
                     <td>
                       {c.contenedor ? (
                         <>

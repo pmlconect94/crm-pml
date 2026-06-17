@@ -4,6 +4,7 @@
  */
 import { downloadXlsx, type XlsxCell } from '@/lib/excel';
 import type { CatalogoSku, BlufinContratoConProductos, BlufinProducto } from '@/types/database';
+import { statusContrato } from '@/features/blufin/status';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 /** Número como número (Excel lo suma); null/undefined → celda vacía. */
@@ -45,7 +46,7 @@ export function exportContratos(
     ...contratos.map((c) => [
       c.folio,
       fecha(c.fecha),
-      c.status,
+      statusContrato(c),
       c.lote ?? '',
       c.contenedor ?? '',
       c.naviera ?? '',
@@ -92,7 +93,7 @@ export function exportProductosPorContrato(contratos: BlufinContratoConProductos
     ],
     ...flat.map(({ c, p }) => [
       c.folio,
-      c.status,
+      statusContrato(c),
       fecha(c.eta_puerto),
       fecha(c.eta_bodega),
       fecha(c.llegada_real),
