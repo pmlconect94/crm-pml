@@ -45,6 +45,10 @@ export function ContratoDetalleModal({
 
   const backdrop = useBackdropDismiss(onClose);
   const c = data?.contrato;
+  const prods = c?.productos ?? [];
+  const totKg = prods.reduce((s, p) => s + Number(p.kg ?? 0), 0);
+  const totCajas = prods.reduce((s, p) => s + Number(p.cajas ?? 0), 0);
+  const totUsd = prods.reduce((s, p) => s + Number(p.total_usd ?? 0), 0);
   const restante =
     c && !(c.anticipo_pagado && c.saldo_pagado)
       ? Math.max(0, Number(c.total_usd ?? 0) - (data?.pagado ?? 0) - (data?.ncAplicado ?? 0))
@@ -80,7 +84,7 @@ export function ContratoDetalleModal({
               background: 'white',
               borderRadius: 'var(--r-lg)',
               boxShadow: 'var(--shadow-xl)',
-              maxWidth: 820,
+              maxWidth: 1080,
               width: '100%',
               maxHeight: '92vh',
               overflowY: 'auto',
@@ -176,8 +180,37 @@ export function ContratoDetalleModal({
                     ))}
                   </div>
 
-                  {/* Productos */}
-                  <Section title={`Productos (${c.productos?.length ?? 0})`}>
+                  {/* Productos — sección destacada con marco de acento */}
+                  <div
+                    style={{
+                      marginTop: 18,
+                      border: '1.5px solid color-mix(in srgb, var(--blue-500) 35%, var(--ink-200))',
+                      borderRadius: 'var(--r-md)',
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 12px color-mix(in srgb, var(--blue-500) 12%, transparent)',
+                    }}
+                  >
+                    <div
+                      className="hstack"
+                      style={{
+                        gap: 8,
+                        padding: '10px 14px',
+                        background: 'color-mix(in srgb, var(--blue-500) 8%, white)',
+                        borderBottom: '1px solid color-mix(in srgb, var(--blue-500) 20%, var(--ink-100))',
+                      }}
+                    >
+                      <Icon name="package" size={14} style={{ color: 'var(--blue-500)' }} />
+                      <span
+                        className="text-xs fw-700"
+                        style={{
+                          color: 'var(--blue-500)',
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        Productos ({prods.length})
+                      </span>
+                    </div>
                     <table className="tbl">
                       <thead>
                         <tr>
@@ -189,7 +222,7 @@ export function ContratoDetalleModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {(c.productos ?? []).map((p) => (
+                        {prods.map((p) => (
                           <tr key={p.id}>
                             <td className="text-sm fw-600">{p.descripcion ?? '—'}</td>
                             <td style={{ textAlign: 'right' }} className="mono">{fmtKg(p.kg)}</td>
@@ -199,8 +232,19 @@ export function ContratoDetalleModal({
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={{ background: 'color-mix(in srgb, var(--blue-500) 6%, white)' }}>
+                          <td className="text-sm fw-700">Total</td>
+                          <td style={{ textAlign: 'right' }} className="mono fw-700">{fmtKg(totKg)}</td>
+                          <td style={{ textAlign: 'right' }} className="mono fw-700">{totCajas || '—'}</td>
+                          <td></td>
+                          <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-700">
+                            {fmtUSD(totUsd)}
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
-                  </Section>
+                  </div>
 
                   {/* Pagos */}
                   <Section title={`Pagos (${data!.pagos.length})`}>
