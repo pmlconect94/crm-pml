@@ -84,12 +84,13 @@ def rest_patch(folio, field, value):
 def main():
     contratos = rest_get("blufin_contratos?select=folio,observaciones&limit=2000")
     folios = {c["folio"] for c in contratos}
-    # C#### (de observaciones) -> folio
+    # numero de factura (solo digitos, de "Factura proveedor C####") -> folio.
+    # El archivo puede llamarse C#### o F-#### indistintamente; lo que liga es el NÚMERO.
     fact_to_folio = {}
     for c in contratos:
-        m = FACT_RE.search(c.get("observaciones") or "")
+        m = re.search(r"C(\d{3,})", c.get("observaciones") or "")
         if m:
-            fact_to_folio.setdefault(m.group(1).upper(), c["folio"])
+            fact_to_folio.setdefault(m.group(1), c["folio"])
 
     rep = {"contratos_ligados": 0, "contratos_sin_match": [], "facturas_ligadas": 0, "facturas_sin_match": []}
 
@@ -109,16 +110,20 @@ def main():
             rest_patch(folio, "contrato_pdf_path", spath)
         rep["contratos_ligados"] += 1
 
-    # ── Facturas ──
+    # ── Facturas ── (archivo C#### o F-####; el número liga, el prefijo no)
     for pdf in sorted(Path("uploads/facturas-blufin").rglob("*.pdf")):
-        m = FACT_RE.search(pdf.stem)
-        if not m:
-            rep["facturas_sin_match"].append(pdf.name + " (nombre sin C####)")
+        s = pdf.stem.strip().upper()
+        if s.startswith("CT"):
+            rep["facturas_sin_match"].append(pdf.name + " (es contrato CT, ignorado)")
             continue
-        fact = m.group(1).upper()
-        folio = fact_to_folio.get(fact)
+        mm = re.match(r"^C(\d{3,})", s) or re.match(r"^F-?(\d{3,})", s)
+        if not mm:
+            rep["facturas_sin_match"].append(pdf.name + " (nombre no reconocido)")
+            continue
+        num = mm.group(1)
+        folio = fact_to_folio.get(num)
         if not folio:
-            rep["facturas_sin_match"].append(f"{pdf.name} ({fact} sin contrato)")
+            rep["facturas_sin_match"].append(f"{pdf.name} (factura {num} sin contrato en BD)")
             continue
         spath = f"facturas/{folio}.pdf"
         if not DRY:
