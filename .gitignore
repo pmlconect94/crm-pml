@@ -16,6 +16,10 @@ vite.config.js.map
 .env.local
 .env.*.local
 
+# Python (scripts de carga/utilidades)
+__pycache__/
+*.pyc
+
 # Editor / OS
 .DS_Store
 .thumbnail
