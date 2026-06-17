@@ -83,6 +83,8 @@ export type Database = {
           saldo_pagado: boolean | null;
           tc_ponderado: number | null;
           observaciones: string | null;
+          contrato_pdf_path: string | null;
+          factura_pdf_path: string | null;
           created_at: string | null;
           created_by: string | null;
           updated_at: string | null;
@@ -111,6 +113,8 @@ export type Database = {
           saldo_pagado?: boolean | null;
           tc_ponderado?: number | null;
           observaciones?: string | null;
+          contrato_pdf_path?: string | null;
+          factura_pdf_path?: string | null;
           created_by?: string | null;
         };
         Update: {
@@ -137,6 +141,8 @@ export type Database = {
           saldo_pagado?: boolean | null;
           tc_ponderado?: number | null;
           observaciones?: string | null;
+          contrato_pdf_path?: string | null;
+          factura_pdf_path?: string | null;
         };
         Relationships: Empty;
       };

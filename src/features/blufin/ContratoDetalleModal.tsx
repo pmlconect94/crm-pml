@@ -5,9 +5,21 @@ import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { statusContrato } from '@/features/blufin/status';
+import { toast } from 'sonner';
 import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratoDetalle } from '@/features/blufin/queries';
+import { getImportPdfUrl } from '@/features/blufin/import-queries';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
+
+async function abrirPdf(path: string) {
+  try {
+    const url = await getImportPdfUrl(path);
+    if (url) window.open(url, '_blank');
+    else toast.error('No se encontró el PDF');
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
+  }
+}
 
 const NC_STATUS_COLOR: Record<string, string> = {
   'Sin monto': 'var(--ink-500)',
@@ -130,9 +142,29 @@ export function ContratoDetalleModal({
                       {c.lote ? ` · lote ${c.lote}` : ''}
                     </div>
                   </div>
-                  <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
-                    <Icon name="x" size={14} />
-                  </button>
+                  <div className="hstack" style={{ gap: 6, flexShrink: 0 }}>
+                    {c.contrato_pdf_path && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => abrirPdf(c.contrato_pdf_path!)}
+                        title="Descargar el PDF de la orden de compra"
+                      >
+                        <Icon name="file-text" size={13} /> Contrato
+                      </button>
+                    )}
+                    {c.factura_pdf_path && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => abrirPdf(c.factura_pdf_path!)}
+                        title="Descargar el PDF de la factura del proveedor"
+                      >
+                        <Icon name="receipt" size={13} /> Factura
+                      </button>
+                    )}
+                    <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
+                      <Icon name="x" size={14} />
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ padding: '14px 22px 22px' }}>

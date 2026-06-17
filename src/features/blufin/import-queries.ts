@@ -152,6 +152,7 @@ export async function importarLote(loteId: string, empresaId: string): Promise<I
           saldo_pagado: false,
           tc_ponderado: null,
           observaciones: c.observaciones,
+          contrato_pdf_path: c.pdf_path,
         },
         lineas.map((l) => {
           const sku = l.sku_id ? skuById.get(l.sku_id) : null;
