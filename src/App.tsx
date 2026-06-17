@@ -9,6 +9,7 @@ import { BlufinLayout } from '@/pages/blufin/BlufinLayout';
 import { BlufinContratosListPage } from '@/pages/blufin/BlufinContratosListPage';
 import { BlufinNuevoContratoPage } from '@/pages/blufin/BlufinNuevoContratoPage';
 import { BlufinCargaMasivaPage } from '@/pages/blufin/BlufinCargaMasivaPage';
+import { BlufinCargaMasivaRevisarPage } from '@/pages/blufin/BlufinCargaMasivaRevisarPage';
 import { BlufinPagosPage } from '@/pages/blufin/BlufinPagosPage';
 import { BlufinPagoMultiplePage } from '@/pages/blufin/BlufinPagoMultiplePage';
 import { BlufinRecepcionPage } from '@/pages/blufin/BlufinRecepcionPage';
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="contratos" element={<BlufinContratosListPage />} />
             <Route path="contratos/nuevo" element={<BlufinNuevoContratoPage />} />
             <Route path="contratos/carga-masiva" element={<BlufinCargaMasivaPage />} />
+            <Route path="contratos/carga-masiva/:loteId" element={<BlufinCargaMasivaRevisarPage />} />
             <Route path="pagos" element={<BlufinPagosPage />} />
             <Route path="pagos/multiple" element={<BlufinPagoMultiplePage />} />
             <Route path="recepcion" element={<BlufinRecepcionPage />} />

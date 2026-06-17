@@ -485,6 +485,146 @@ export type Database = {
         };
         Relationships: Empty;
       };
+
+      // ─── Carga masiva (staging de importación PDF) ──────────────────────────
+      blufin_import_lotes: {
+        Row: {
+          id: string;
+          empresa_id: string | null;
+          nombre: string;
+          fuente: string | null;
+          total_contratos: number | null;
+          status: string; // 'pendiente' | 'importado' | 'descartado'
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          empresa_id?: string | null;
+          nombre: string;
+          fuente?: string | null;
+          total_contratos?: number | null;
+          status?: string;
+        };
+        Update: {
+          nombre?: string;
+          total_contratos?: number | null;
+          status?: string;
+        };
+        Relationships: Empty;
+      };
+      blufin_import_contratos: {
+        Row: {
+          id: string;
+          lote_id: string | null;
+          empresa_id: string | null;
+          folio: string;
+          fecha: string | null;
+          eta_puerto: string | null;
+          eta_bodega: string | null;
+          bodega_destino: string | null;
+          presentacion: string | null;
+          contenedor: string | null;
+          total_usd: number | null;
+          total_kg: number | null;
+          anticipo_usd: number | null;
+          anticipo_fecha: string | null;
+          saldo_usd: number | null;
+          saldo_fecha: string | null;
+          observaciones: string | null;
+          pdf_path: string | null;
+          duplicado: boolean | null;
+          status: string; // 'pendiente' | 'importado' | 'omitido'
+          contrato_id: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          lote_id?: string | null;
+          empresa_id?: string | null;
+          folio: string;
+          fecha?: string | null;
+          eta_puerto?: string | null;
+          eta_bodega?: string | null;
+          bodega_destino?: string | null;
+          presentacion?: string | null;
+          contenedor?: string | null;
+          total_usd?: number | null;
+          total_kg?: number | null;
+          anticipo_usd?: number | null;
+          anticipo_fecha?: string | null;
+          saldo_usd?: number | null;
+          saldo_fecha?: string | null;
+          observaciones?: string | null;
+          pdf_path?: string | null;
+          duplicado?: boolean | null;
+          status?: string;
+          contrato_id?: string | null;
+        };
+        Update: {
+          folio?: string;
+          fecha?: string | null;
+          eta_puerto?: string | null;
+          eta_bodega?: string | null;
+          bodega_destino?: string | null;
+          presentacion?: string | null;
+          contenedor?: string | null;
+          total_usd?: number | null;
+          total_kg?: number | null;
+          anticipo_usd?: number | null;
+          anticipo_fecha?: string | null;
+          saldo_usd?: number | null;
+          saldo_fecha?: string | null;
+          observaciones?: string | null;
+          duplicado?: boolean | null;
+          status?: string;
+          contrato_id?: string | null;
+        };
+        Relationships: Empty;
+      };
+      blufin_import_lineas: {
+        Row: {
+          id: string;
+          import_contrato_id: string | null;
+          orden: number | null;
+          descripcion_pdf: string | null;
+          marca_pdf: string | null;
+          talla_pdf: string | null;
+          pct_pdf: string | null;
+          kg_caja: number | null;
+          kg: number | null;
+          cajas: number | null;
+          precio_usd: number | null;
+          total_usd: number | null;
+          sku_id: string | null;
+          match_confianza: string | null; // 'alta' | 'media' | 'baja' | 'sin_match'
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          import_contrato_id?: string | null;
+          orden?: number | null;
+          descripcion_pdf?: string | null;
+          marca_pdf?: string | null;
+          talla_pdf?: string | null;
+          pct_pdf?: string | null;
+          kg_caja?: number | null;
+          kg?: number | null;
+          cajas?: number | null;
+          precio_usd?: number | null;
+          total_usd?: number | null;
+          sku_id?: string | null;
+          match_confianza?: string | null;
+        };
+        Update: {
+          sku_id?: string | null;
+          match_confianza?: string | null;
+          kg?: number | null;
+          cajas?: number | null;
+          precio_usd?: number | null;
+          total_usd?: number | null;
+        };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -553,4 +693,22 @@ export type BlufinRecepcionEnriquecida = BlufinRecepcion & {
   contrato?: { folio: string; presentacion: string | null; total_kg: number | null } | null;
   bodega?: { nombre: string } | null;
   lineas?: (BlufinRecepcionLinea & { sku?: { code: string; descripcion: string } | null })[];
+};
+
+// ─── Carga masiva (staging) ───────────────────────────────────────────────
+export type BlufinImportLote = Database['crm']['Tables']['blufin_import_lotes']['Row'];
+export type BlufinImportLoteInsert = Database['crm']['Tables']['blufin_import_lotes']['Insert'];
+export type BlufinImportContrato = Database['crm']['Tables']['blufin_import_contratos']['Row'];
+export type BlufinImportContratoInsert = Database['crm']['Tables']['blufin_import_contratos']['Insert'];
+export type BlufinImportLinea = Database['crm']['Tables']['blufin_import_lineas']['Row'];
+export type BlufinImportLineaInsert = Database['crm']['Tables']['blufin_import_lineas']['Insert'];
+
+// Lote + conteo de contratos por status (para la lista de lotes)
+export type BlufinImportLoteEnriquecido = BlufinImportLote & {
+  contratos?: { status: string; duplicado: boolean | null }[];
+};
+
+// Contrato de staging + sus líneas con el SKU sugerido (para la pantalla de revisión)
+export type BlufinImportContratoConLineas = BlufinImportContrato & {
+  lineas?: (BlufinImportLinea & { sku?: { code: string; descripcion: string } | null })[];
 };
