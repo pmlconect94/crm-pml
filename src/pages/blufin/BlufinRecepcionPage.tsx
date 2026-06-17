@@ -26,6 +26,15 @@ type View = 'por-recibir' | 'historial' | 'calendario';
 // se muestran (necesitan que se les programe llegada).
 const VENTANA_ADELANTE = 7;
 
+/** ETA bodega auto = ETA puerto + 7d (regla §14.4). Si la eta_bodega del
+ *  contrato coincide con esto, sigue siendo la ESTIMADA; al "Programar llegada"
+ *  se le pone otra fecha y esa pasa a ser la oficial. */
+const etaBodegaAuto = (etaPuerto: string) => {
+  const d = new Date(etaPuerto + 'T12:00:00');
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+};
+
 export function BlufinRecepcionPage() {
   const { empresaId } = useAuth();
   const navigate = useNavigate();
@@ -284,6 +293,8 @@ function PorRecibirView({
           const dias = diasDesde(c.eta_bodega);
           const productos = c.productos ?? [];
           const eta = c.eta_bodega ? new Date(c.eta_bodega + 'T12:00:00') : null;
+          const etaEstimada =
+            !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
           return (
             <div
               key={c.id}
@@ -327,6 +338,14 @@ function PorRecibirView({
                   {!c.eta_bodega && (
                     <span className="badge badge-amber" style={{ fontSize: 10 }}>
                       Sin ETA — programar llegada
+                    </span>
+                  )}
+                  {etaEstimada && (
+                    <span
+                      className="text-xs muted"
+                      title="ETA bodega estimada (ETA puerto + 7d). Programa la llegada para fijar la fecha oficial."
+                    >
+                      ETA estimada +7d
                     </span>
                   )}
                   {dias !== null && dias < 0 && (
@@ -511,13 +530,16 @@ function ProgramarLlegadaModal({
                 <span className="text-xs muted">(auto +7d sobre ETA puerto — estimado)</span>
               </div>
               <div>
-                <label className="field-label">Fecha de llegada a bodega *</label>
+                <label className="field-label">Fecha oficial de llegada a bodega *</label>
                 <input
                   type="date"
                   className="field-input"
                   value={fecha}
                   onChange={(e) => setFecha(e.target.value)}
                 />
+                <div className="text-xs muted" style={{ marginTop: 3 }}>
+                  Reemplaza la ETA estimada — esta queda como la fecha oficial.
+                </div>
               </div>
               <div>
                 <label className="field-label">Bodega destino</label>

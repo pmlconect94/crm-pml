@@ -59,7 +59,7 @@ export function BlufinContratosListPage() {
   });
 
   const filtered = useMemo(() => {
-    return contratos.filter((c) => {
+    const res = contratos.filter((c) => {
       if (filter === 'activos' && esTerminado(c)) return false;
       if (filter === 'terminados' && !esTerminado(c)) return false;
       if (search) {
@@ -74,6 +74,16 @@ export function BlufinContratosListPage() {
         if (!folioMatch && !productoMatch && !contenedorMatch) return false;
       }
       return true;
+    });
+    // Orden por ETA puerto ascendente (los próximos a llegar primero); los que
+    // no tienen ETA puerto van al final, y entre ellos por llegada más reciente.
+    return res.sort((a, b) => {
+      const ka = a.eta_puerto || '9999-99-99';
+      const kb = b.eta_puerto || '9999-99-99';
+      if (ka !== kb) return ka < kb ? -1 : 1;
+      const la = a.llegada_real || '';
+      const lb = b.llegada_real || '';
+      return la < lb ? 1 : la > lb ? -1 : 0;
     });
   }, [contratos, filter, search]);
 
@@ -244,7 +254,7 @@ export function BlufinContratosListPage() {
             >
               <div>Contrato</div>
               <div>Producto principal</div>
-              <div>Llegada</div>
+              <div>ETA puerto</div>
               <div>Status</div>
               <div>Contenedor</div>
               <div style={{ textAlign: 'right' }}>USD</div>
@@ -301,7 +311,7 @@ export function BlufinContratosListPage() {
               <tr>
                 <th>Contrato</th>
                 <th>Producto principal</th>
-                <th>Llegada</th>
+                <th>ETA puerto</th>
                 <th>Status</th>
                 <th>Contenedor</th>
                 <th style={{ textAlign: 'right' }}>Costo USD</th>
@@ -314,7 +324,6 @@ export function BlufinContratosListPage() {
               {filtered.map((c) => {
                 const principal = c.productos?.[0];
                 const numProductos = c.productos?.length ?? 0;
-                const llegada = c.llegada_real ?? c.eta_bodega;
                 return (
                   <tr
                     key={c.id}
@@ -344,18 +353,20 @@ export function BlufinContratosListPage() {
                       )}
                     </td>
                     <td>
-                      {llegada ? (
-                        <>
-                          <div className="fw-600">{fmtFechaCorta(llegada)}</div>
-                          <div className="text-xs muted">
-                            {c.bodega_destino ?? '—'}
-                            {c.presentacion ? ` · ${c.presentacion}` : ''}
-                          </div>
-                        </>
-                      ) : c.eta_puerto ? (
+                      {c.eta_puerto ? (
                         <>
                           <div className="fw-600">{fmtFechaCorta(c.eta_puerto)}</div>
-                          <div className="text-xs muted">ETA puerto</div>
+                          <div className="text-xs muted">
+                            {c.llegada_real ? `llegó ${fmtFechaCorta(c.llegada_real)}` : 'ETA puerto'}
+                            {c.bodega_destino ? ` · ${c.bodega_destino}` : ''}
+                          </div>
+                        </>
+                      ) : c.llegada_real ? (
+                        <>
+                          <div className="fw-600">{fmtFechaCorta(c.llegada_real)}</div>
+                          <div className="text-xs muted">
+                            llegó{c.bodega_destino ? ` · ${c.bodega_destino}` : ''}
+                          </div>
                         </>
                       ) : (
                         <span className="text-xs muted">— Por llegar —</span>
