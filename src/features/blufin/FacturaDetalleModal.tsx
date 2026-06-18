@@ -128,9 +128,21 @@ export function FacturaDetalleModal({
                     </div>
                   </div>
                   <div className="hstack" style={{ gap: 8 }}>
-                    {f.storage_path && (
-                      <button className="btn btn-outline btn-sm" onClick={() => verArchivo(f.storage_path!)}>
-                        <Icon name="receipt" size={13} /> Ver archivo
+                    {(f.storage_path || f.drive_pdf_id) && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() =>
+                          f.storage_path
+                            ? verArchivo(f.storage_path)
+                            : window.open(
+                                `https://drive.google.com/file/d/${f.drive_pdf_id}/view`,
+                                '_blank',
+                                'noopener',
+                              )
+                        }
+                        title="Abrir el PDF de la factura para verificar el mapeo"
+                      >
+                        <Icon name="receipt" size={13} /> Ver PDF
                       </button>
                     )}
                     <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
@@ -188,6 +200,13 @@ export function FacturaDetalleModal({
                           <tr key={l.id} style={diferente ? { background: 'color-mix(in srgb, var(--amber-500) 5%, white)' } : undefined}>
                             <td className="text-sm fw-600">
                               {l.descripcion_contrato ?? l.descripcion_factura ?? '—'}
+                              {l.descripcion_factura &&
+                                l.descripcion_contrato &&
+                                l.descripcion_factura !== l.descripcion_contrato && (
+                                  <div className="text-xs muted">
+                                    En factura: {l.descripcion_factura}
+                                  </div>
+                                )}
                               {l.nota_revision && (
                                 <div className="text-xs muted">{l.nota_revision}</div>
                               )}

@@ -110,6 +110,7 @@ export type NuevaFactura = {
   factura_num?: string | null;
   xml_path?: string | null;
   email_message_id?: string | null;
+  drive_pdf_id?: string | null;
 };
 
 export async function createFactura(params: NuevaFactura): Promise<string> {
@@ -127,6 +128,7 @@ export async function createFactura(params: NuevaFactura): Promise<string> {
       factura_num: params.factura_num ?? null,
       xml_path: params.xml_path ?? null,
       email_message_id: params.email_message_id ?? null,
+      drive_pdf_id: params.drive_pdf_id ?? null,
     })
     .select('id')
     .single();

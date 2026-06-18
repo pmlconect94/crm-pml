@@ -428,6 +428,7 @@ export type Database = {
           factura_num: string | null; // folio CFDI, ej. 'C4000'
           xml_path: string | null; // ruta del XML (CFDI) en Storage
           email_message_id: string | null; // idempotencia de la rutina de correo
+          drive_pdf_id: string | null; // id del PDF en Google Drive (facturas por correo)
         };
         Insert: {
           id?: string;
@@ -443,6 +444,7 @@ export type Database = {
           factura_num?: string | null;
           xml_path?: string | null;
           email_message_id?: string | null;
+          drive_pdf_id?: string | null;
         };
         Update: {
           fecha_subida?: string | null;
@@ -456,6 +458,7 @@ export type Database = {
           factura_num?: string | null;
           xml_path?: string | null;
           email_message_id?: string | null;
+          drive_pdf_id?: string | null;
         };
         Relationships: Empty;
       };
