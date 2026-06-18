@@ -1,6 +1,7 @@
 /**
  * Modal de alta/edición de SKU del catálogo Blufin.
- * La descripción no se captura: se genera con composeDescripcion.
+ * La descripción es editable (debe coincidir con Intelisis); el botón
+ * "Generar de la ficha" la arma con composeDescripcion como atajo.
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -40,6 +41,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
   const [pct, setPct] = useState('');
   const [talla, setTalla] = useState('');
   const [kgCaja, setKgCaja] = useState('');
+  const [descripcion, setDescripcion] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -49,10 +51,8 @@ export function SkuModal({ open, onClose, sku }: Props) {
     setPct(sku?.pct ?? '');
     setTalla(sku?.talla ?? '');
     setKgCaja(sku?.kg_caja != null ? String(sku.kg_caja) : '');
+    setDescripcion(sku?.descripcion ?? '');
   }, [open, sku]);
-
-  // La descripción no se captura — se genera en vivo desde la ficha
-  const descripcion = composeDescripcion(producto, marca, talla, pct);
 
   const valid = code.trim() !== '' && producto.trim() !== '' && parseFloat(kgCaja) > 0;
 
@@ -61,7 +61,7 @@ export function SkuModal({ open, onClose, sku }: Props) {
       const params: SkuParams = {
         code: code.trim(),
         producto: producto.trim(),
-        descripcion,
+        descripcion: descripcion.trim() || composeDescripcion(producto, marca, talla, pct),
         marca: marca.trim() || null,
         pct: pct.trim() || null,
         talla: talla.trim() || null,
@@ -234,20 +234,28 @@ export function SkuModal({ open, onClose, sku }: Props) {
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <div
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 'var(--r-sm)',
-                    background: 'var(--ink-50)',
-                    border: '1px solid var(--ink-200)',
-                  }}
+                  className="hstack"
+                  style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}
                 >
-                  <div className="text-xs muted" style={{ marginBottom: 2 }}>
-                    Descripción (se genera sola: producto - marca - peso neto - talla)
-                  </div>
-                  <div className="text-sm fw-600" style={{ color: descripcion ? 'var(--ink-900)' : 'var(--ink-400)' }}>
-                    {descripcion || 'Captura el producto para verla…'}
-                  </div>
+                  <label className="field-label" style={{ marginBottom: 0 }}>
+                    Descripción (como en Intelisis)
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: '2px 8px', fontSize: 11 }}
+                    onClick={() => setDescripcion(composeDescripcion(producto, marca, talla, pct))}
+                    title="Rellenar con producto - marca - peso neto - talla"
+                  >
+                    <Icon name="edit" size={11} /> Generar de la ficha
+                  </button>
                 </div>
+                <input
+                  className="field-input"
+                  value={descripcion}
+                  onChange={(e) => setDescripcion(e.target.value)}
+                  placeholder="Ej: Basa Pangabay 100% 5/7 (5.00 kg / Caja)"
+                />
               </div>
             </div>
 

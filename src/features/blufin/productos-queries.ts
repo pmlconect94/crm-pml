@@ -21,10 +21,9 @@ export const TALLAS_BLUFIN = [
 export const PORCENTAJES_BLUFIN = ['45%', '50%', '70%', '85%', '100%'];
 
 /**
- * La descripción del SKU no se captura: se genera con el formato
- * PRODUCTO - MARCA - PESO NETO - TALLA (separador " - ", omite campos
- * vacíos). El % es el peso neto del producto (producto real vs glaseo),
- * así que el 100% SÍ se muestra — es un dato del producto, no un default.
+ * Atajo para autocompletar la descripción ("Generar de la ficha" en el modal):
+ * arma PRODUCTO - MARCA - PESO NETO - TALLA. La descripción del SKU es EDITABLE
+ * (2026-06-18) y debe coincidir con Intelisis; esto es solo un punto de partida.
  */
 export function composeDescripcion(
   producto: string,
@@ -56,7 +55,7 @@ export async function fetchSkusBlufin(empresaId: string): Promise<CatalogoSku[]>
 export type SkuParams = {
   code: string;
   producto: string;
-  descripcion: string; // generada con composeDescripcion — no se captura
+  descripcion: string; // editable (alineada con Intelisis); composeDescripcion = atajo
   marca: string | null;
   pct: string | null;
   talla: string | null;
