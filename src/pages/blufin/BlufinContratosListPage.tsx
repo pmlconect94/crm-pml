@@ -25,6 +25,12 @@ const FILTROS = [
 const esTerminado = (c: BlufinContratoConProductos) =>
   c.status === 'Entregado' && c.saldo_pagado === true;
 
+// Columnas ordenables. El orden POR DEFECTO siempre es 'eta' (ETA puerto);
+// el usuario puede reordenar haciendo clic en los títulos, pero al recargar
+// vuelve a ETA puerto. El orden de los status para ordenar por etapa.
+type SortCol = 'folio' | 'producto' | 'eta' | 'status' | 'contenedor' | 'costo' | 'saldo' | 'pagos';
+const STATUS_ORDEN = ['Contratado', 'En tránsito', 'En puerto', 'Entregado'];
+
 export function BlufinContratosListPage() {
   const { empresaId } = useAuth();
   const { data: contratos = [], isLoading, error } = useQuery({
@@ -47,6 +53,10 @@ export function BlufinContratosListPage() {
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<BlufinContratoConProductos | null>(null);
   const [detalleId, setDetalleId] = useState<string | null>(null);
+  // Orden de la tabla. Default 'eta' asc (ETA puerto) — clic en un título reordena.
+  const [sort, setSort] = useState<{ by: SortCol; dir: 'asc' | 'desc' }>({ by: 'eta', dir: 'asc' });
+  const toggleSort = (by: SortCol) =>
+    setSort((s) => (s.by === by ? { by, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { by, dir: 'asc' }));
   const qc = useQueryClient();
 
   const deleteMut = useMutation({
@@ -76,17 +86,38 @@ export function BlufinContratosListPage() {
       }
       return true;
     });
-    // Orden por ETA puerto ascendente (los próximos a llegar primero); los que
-    // no tienen ETA puerto van al final, y entre ellos por llegada más reciente.
+    // Clave de orden por columna. ETA puerto (default): los próximos primero, los
+    // sin ETA al final (clave '9999-…'). Las demás columnas hacen tie-break por ETA.
+    const key = (c: BlufinContratoConProductos): string | number => {
+      switch (sort.by) {
+        case 'folio': return c.folio.toLowerCase();
+        case 'producto': return (c.productos?.[0]?.descripcion ?? '~').toLowerCase();
+        case 'status': return STATUS_ORDEN.indexOf(statusContrato(c));
+        case 'contenedor': return (c.contenedor ?? '~~').toLowerCase();
+        case 'costo': return Number(c.total_usd ?? 0);
+        case 'saldo': return saldoDe(c);
+        case 'pagos': return c.saldo_pagado ? 2 : c.anticipo_pagado ? 1 : 0;
+        case 'eta':
+        default: return c.eta_puerto || '9999-99-99';
+      }
+    };
+    const dir = sort.dir === 'asc' ? 1 : -1;
     return res.sort((a, b) => {
-      const ka = a.eta_puerto || '9999-99-99';
-      const kb = b.eta_puerto || '9999-99-99';
-      if (ka !== kb) return ka < kb ? -1 : 1;
-      const la = a.llegada_real || '';
-      const lb = b.llegada_real || '';
-      return la < lb ? 1 : la > lb ? -1 : 0;
+      const ka = key(a);
+      const kb = key(b);
+      if (ka < kb) return -1 * dir;
+      if (ka > kb) return 1 * dir;
+      // Empate: para ETA, llegada más reciente primero; para el resto, ETA asc.
+      if (sort.by === 'eta') {
+        const la = a.llegada_real || '';
+        const lb = b.llegada_real || '';
+        return la < lb ? 1 : la > lb ? -1 : 0;
+      }
+      const ea = a.eta_puerto || '9999-99-99';
+      const eb = b.eta_puerto || '9999-99-99';
+      return ea < eb ? -1 : ea > eb ? 1 : 0;
     });
-  }, [contratos, filter, search]);
+  }, [contratos, filter, search, sort, saldos]);
 
   const kpis = useMemo(() => {
     const enTransito = contratos.filter((c) => statusContrato(c) === 'En tránsito').length;
@@ -104,6 +135,24 @@ export function BlufinContratosListPage() {
       count: contratos.length,
     };
   }, [contratos]);
+
+  // Encabezado clicable: ordena por su columna; muestra ▲/▼ en la activa y ↕ tenue
+  // en las demás para indicar que se puede ordenar.
+  const th = (col: SortCol, label: string, align?: 'right') => {
+    const active = sort.by === col;
+    return (
+      <th
+        onClick={() => toggleSort(col)}
+        title="Ordenar por esta columna"
+        style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', textAlign: align }}
+      >
+        {label}
+        <span style={{ marginLeft: 4, fontSize: 10, color: active ? 'var(--blue-500)' : 'var(--ink-300)' }}>
+          {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+        </span>
+      </th>
+    );
+  };
 
   return (
     <>
@@ -317,14 +366,14 @@ export function BlufinContratosListPage() {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Contrato</th>
-                <th>Producto principal</th>
-                <th>ETA puerto</th>
-                <th>Status</th>
-                <th>Contenedor</th>
-                <th style={{ textAlign: 'right' }}>Costo USD</th>
-                <th style={{ textAlign: 'right' }}>Saldo</th>
-                <th style={{ textAlign: 'right' }}>Pagos</th>
+                {th('folio', 'Contrato')}
+                {th('producto', 'Producto principal')}
+                {th('eta', 'ETA puerto')}
+                {th('status', 'Status')}
+                {th('contenedor', 'Contenedor')}
+                {th('costo', 'Costo USD', 'right')}
+                {th('saldo', 'Saldo', 'right')}
+                {th('pagos', 'Pagos', 'right')}
                 <th style={{ width: 40 }}></th>
               </tr>
             </thead>

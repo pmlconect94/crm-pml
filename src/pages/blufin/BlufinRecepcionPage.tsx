@@ -8,6 +8,7 @@ import { PageEnter, SPRING } from '@/components/motion';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { statusContrato } from '@/features/blufin/status';
+import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
 import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtFechaCorta, fmtFecha, diasDesde } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
@@ -45,6 +46,7 @@ export function BlufinRecepcionPage() {
     null,
   );
   const [programarTarget, setProgramarTarget] = useState<BlufinContratoConProductos | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
 
   const { data: porRecibir = [], isLoading: loadingPorRecibir } = useQuery({
     queryKey: ['blufin_contratos_por_recibir', empresaId],
@@ -182,13 +184,19 @@ export function BlufinRecepcionPage() {
         />
       )}
       {view === 'calendario' && (
-        <CalendarioView porRecibir={porRecibir} recepciones={recepciones} />
+        <CalendarioView
+          porRecibir={porRecibir}
+          recepciones={recepciones}
+          onVerContrato={setDetalleId}
+        />
       )}
 
       <ProgramarLlegadaModal
         contrato={programarTarget}
         onClose={() => setProgramarTarget(null)}
       />
+
+      <ContratoDetalleModal contratoId={detalleId} onClose={() => setDetalleId(null)} />
 
       <DeleteConfirmModal
         open={!!deleteTarget}
@@ -296,6 +304,8 @@ function PorRecibirView({
           const eta = c.eta_bodega ? new Date(c.eta_bodega + 'T12:00:00') : null;
           const etaEstimada =
             !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
+          // Ya programada = tiene ETA bodega OFICIAL (no la estimada +7d ni vacía)
+          const yaProgramada = !!c.eta_bodega && !etaEstimada;
           return (
             <div
               key={c.id}
@@ -390,14 +400,37 @@ function PorRecibirView({
                 >
                   <Icon name="inbox" size={13} /> Registrar recepción
                 </button>
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => onProgramar(c)}
-                  title="La ETA bodega auto-calculada (+7d) es un estimado — asigna aquí la fecha y bodega acordadas con el agente"
-                  style={{ width: 170, justifyContent: 'center' }}
-                >
-                  <Icon name="calendar" size={13} /> Programar llegada
-                </button>
+                {yaProgramada ? (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          'La llegada de este contenedor ya está programada. ¿Te gustaría reprogramarla?',
+                        )
+                      )
+                        onProgramar(c);
+                    }}
+                    title="Llegada ya programada — clic para reprogramar"
+                    style={{
+                      width: 170,
+                      justifyContent: 'center',
+                      color: 'var(--green-500)',
+                      borderColor: 'color-mix(in srgb, var(--green-500) 35%, white)',
+                    }}
+                  >
+                    <Icon name="check" size={13} /> Llegada programada
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => onProgramar(c)}
+                    title="La ETA bodega auto-calculada (+7d) es un estimado — asigna aquí la fecha y bodega acordadas con el agente"
+                    style={{ width: 170, justifyContent: 'center' }}
+                  >
+                    <Icon name="calendar" size={13} /> Programar llegada
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -649,7 +682,21 @@ function HistorialView({
                 <td>
                   <div className="fw-600">{fmtFecha(r.fecha_recepcion)}</div>
                 </td>
-                <td className="mono text-sm fw-600">{r.contrato?.folio ?? '—'}</td>
+                <td>
+                  <div className="mono text-sm fw-600">{r.contrato?.folio ?? '—'}</div>
+                  <div className="text-xs muted" style={{ marginTop: 2, maxWidth: 300 }}>
+                    {lineas.slice(0, 3).map((l, i) => (
+                      <div
+                        key={i}
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={l.sku?.descripcion ?? ''}
+                      >
+                        {l.sku?.descripcion ?? '—'}
+                      </div>
+                    ))}
+                    {lineas.length > 3 && <div>+{lineas.length - 3} más</div>}
+                  </div>
+                </td>
                 <td className="text-sm">{r.bodega?.nombre ?? '—'}</td>
                 <td className="mono text-sm">{r.entrada_intelisis ?? '—'}</td>
                 <td>
@@ -694,7 +741,12 @@ function HistorialView({
 
 /* ─── Calendario ──────────────────────────────────────────────────── */
 
-type EventoDia = { tipo: 'recepcion' | 'eta'; folio: string };
+type EventoDia = {
+  tipo: 'recepcion' | 'eta';
+  folio: string;
+  contratoId: string | null;
+  programada?: boolean; // solo para 'eta': true si la llegada ya fue programada (oficial)
+};
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -708,9 +760,11 @@ const isoDe = (d: Date) =>
 function CalendarioView({
   porRecibir,
   recepciones,
+  onVerContrato,
 }: {
   porRecibir: BlufinContratoConProductos[];
   recepciones: BlufinRecepcionEnriquecida[];
+  onVerContrato: (id: string) => void;
 }) {
   const hoy = new Date();
   const [mes, setMes] = useState(() => new Date(hoy.getFullYear(), hoy.getMonth(), 1));
@@ -724,9 +778,22 @@ function CalendarioView({
       map.set(fecha, arr);
     };
     recepciones.forEach((r) =>
-      add(r.fecha_recepcion, { tipo: 'recepcion', folio: r.contrato?.folio ?? '—' }),
+      add(r.fecha_recepcion, {
+        tipo: 'recepcion',
+        folio: r.contrato?.folio ?? '—',
+        contratoId: r.contrato_id ?? null,
+      }),
     );
-    porRecibir.forEach((c) => add(c.eta_bodega, { tipo: 'eta', folio: c.folio }));
+    porRecibir.forEach((c) => {
+      const estimada =
+        !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
+      add(c.eta_bodega, {
+        tipo: 'eta',
+        folio: c.folio,
+        contratoId: c.id,
+        programada: !!c.eta_bodega && !estimada,
+      });
+    });
     return map;
   }, [porRecibir, recepciones]);
 
@@ -760,15 +827,20 @@ function CalendarioView({
           <span className="fw-700" style={{ fontSize: 14 }}>
             {MESES[mes.getMonth()]} {mes.getFullYear()}
           </span>
-          <span className="hstack text-xs muted" style={{ gap: 10, marginLeft: 8 }}>
+          <span className="hstack text-xs muted" style={{ gap: 10, marginLeft: 8, flexWrap: 'wrap' }}>
             <span className="hstack" style={{ gap: 4 }}>
               <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--green-500)' }} />
               Recibido
             </span>
             <span className="hstack" style={{ gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--amber-500)' }} />
-              ETA bodega
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--violet-500)' }} />
+              Llegada programada
             </span>
+            <span className="hstack" style={{ gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 999, background: 'var(--amber-500)' }} />
+              ETA estimada (+7d)
+            </span>
+            <span className="muted" style={{ fontSize: 10 }}>· clic en un contrato para ver su ficha</span>
           </span>
         </div>
         <div className="hstack" style={{ gap: 4 }}>
@@ -858,29 +930,36 @@ function CalendarioView({
                 {d.getDate()}
               </div>
               <div className="vstack" style={{ gap: 2 }}>
-                {evs.map((ev, j) => (
-                  <div
-                    key={j}
-                    className="mono"
-                    title={ev.tipo === 'recepcion' ? 'Recepción registrada' : 'ETA bodega (por recibir)'}
-                    style={{
-                      fontSize: 9.5,
-                      fontWeight: 600,
-                      padding: '1px 5px',
-                      borderRadius: 4,
-                      background:
-                        ev.tipo === 'recepcion'
-                          ? 'color-mix(in srgb, var(--green-500) 12%, white)'
-                          : 'color-mix(in srgb, var(--amber-500) 14%, white)',
-                      color: ev.tipo === 'recepcion' ? '#065F46' : '#92400E',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {ev.folio}
-                  </div>
-                ))}
+                {evs.map((ev, j) => {
+                  const estilo =
+                    ev.tipo === 'recepcion'
+                      ? { bg: 'color-mix(in srgb, var(--green-500) 12%, white)', fg: '#065F46', t: 'Recepción registrada' }
+                      : ev.programada
+                        ? { bg: 'color-mix(in srgb, var(--violet-500) 16%, white)', fg: '#5B21B6', t: 'Llegada programada (fecha oficial)' }
+                        : { bg: 'color-mix(in srgb, var(--amber-500) 14%, white)', fg: '#92400E', t: 'ETA bodega estimada (+7d)' };
+                  return (
+                    <div
+                      key={j}
+                      className="mono"
+                      title={`${estilo.t}${ev.contratoId ? ' — clic para ver la ficha' : ''}`}
+                      onClick={ev.contratoId ? () => onVerContrato(ev.contratoId!) : undefined}
+                      style={{
+                        fontSize: 9.5,
+                        fontWeight: 600,
+                        padding: '1px 5px',
+                        borderRadius: 4,
+                        background: estilo.bg,
+                        color: estilo.fg,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        cursor: ev.contratoId ? 'pointer' : 'default',
+                      }}
+                    >
+                      {ev.folio}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );

@@ -10,6 +10,17 @@ import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtUSD, fmtFechaCorta } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
 import { createRecepcion, fetchContratoById } from '@/features/blufin/recepcion-queries';
+import { getImportPdfUrl } from '@/features/blufin/import-queries';
+
+async function abrirPdf(path: string) {
+  try {
+    const url = await getImportPdfUrl(path);
+    if (url) window.open(url, '_blank');
+    else toast.error('No se encontró el PDF');
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
+  }
+}
 
 type LineaForm = {
   sku_id: string | null;
@@ -228,6 +239,26 @@ export function BlufinRecepcionRegistrarPage() {
           </h2>
           <span className="mono fw-700 text-sm">{contrato.folio}</span>
           <StatusPill status={statusContrato(contrato)} />
+          <div className="hstack" style={{ gap: 6, marginLeft: 'auto' }}>
+            {contrato.contrato_pdf_path && (
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => abrirPdf(contrato.contrato_pdf_path!)}
+                title="Descargar el PDF de la orden de compra"
+              >
+                <Icon name="file-text" size={13} /> Contrato
+              </button>
+            )}
+            {contrato.factura_pdf_path && (
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => abrirPdf(contrato.factura_pdf_path!)}
+                title="Descargar el PDF de la factura del proveedor"
+              >
+                <Icon name="receipt" size={13} /> Factura
+              </button>
+            )}
+          </div>
         </div>
       </PageEnter>
 
