@@ -340,7 +340,23 @@ export function BlufinContratosListPage() {
                     title="Ver ficha del contrato"
                   >
                     <td>
-                      <div className="mono fw-600" style={{ fontSize: 13 }}>{c.folio}</div>
+                      <div className="hstack" style={{ gap: 7, alignItems: 'center' }}>
+                        <span className="mono fw-600" style={{ fontSize: 13 }}>{c.folio}</span>
+                        <span className="hstack" style={{ gap: 3 }}>
+                          <span
+                            style={{ display: 'inline-flex', color: c.contrato_pdf_path ? 'var(--blue-500)' : 'var(--ink-200)' }}
+                            title={c.contrato_pdf_path ? 'Contrato PDF disponible' : 'Sin PDF de contrato'}
+                          >
+                            <Icon name="file-text" size={13} />
+                          </span>
+                          <span
+                            style={{ display: 'inline-flex', color: c.factura_pdf_path ? 'var(--blue-500)' : 'var(--ink-200)' }}
+                            title={c.factura_pdf_path ? 'Factura PDF disponible' : 'Sin PDF de factura'}
+                          >
+                            <Icon name="receipt" size={13} />
+                          </span>
+                        </span>
+                      </div>
                       <div className="text-xs muted">
                         {fmtFechaCorta(c.fecha)} {c.lote ? `· ${c.lote}` : ''}
                       </div>
