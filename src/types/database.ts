@@ -424,6 +424,10 @@ export type Database = {
           diferencia_monto: number | null; // generada en BD: total_factura - total_contrato
           revisado_por: string | null;
           created_at: string | null;
+          origen: string | null; // 'manual' | 'correo'
+          factura_num: string | null; // folio CFDI, ej. 'C4000'
+          xml_path: string | null; // ruta del XML (CFDI) en Storage
+          email_message_id: string | null; // idempotencia de la rutina de correo
         };
         Insert: {
           id?: string;
@@ -435,6 +439,10 @@ export type Database = {
           total_contrato?: number | null;
           total_factura?: number | null;
           revisado_por?: string | null;
+          origen?: string | null;
+          factura_num?: string | null;
+          xml_path?: string | null;
+          email_message_id?: string | null;
         };
         Update: {
           fecha_subida?: string | null;
@@ -444,6 +452,10 @@ export type Database = {
           total_contrato?: number | null;
           total_factura?: number | null;
           revisado_por?: string | null;
+          origen?: string | null;
+          factura_num?: string | null;
+          xml_path?: string | null;
+          email_message_id?: string | null;
         };
         Relationships: Empty;
       };
@@ -465,6 +477,8 @@ export type Database = {
           diferencias: Record<string, unknown>[] | null; // jsonb
           aceptado: boolean | null;
           nota_revision: string | null;
+          sku_id: string | null; // SKU del catálogo al que mapea la línea de la factura
+          confianza: string | null; // 'alta' | 'media' | 'baja' | 'sin_match'
         };
         Insert: {
           id?: string;
@@ -483,11 +497,15 @@ export type Database = {
           diferencias?: Record<string, unknown>[] | null;
           aceptado?: boolean | null;
           nota_revision?: string | null;
+          sku_id?: string | null;
+          confianza?: string | null;
         };
         Update: {
           match?: string | null;
           aceptado?: boolean | null;
           nota_revision?: string | null;
+          sku_id?: string | null;
+          confianza?: string | null;
         };
         Relationships: Empty;
       };

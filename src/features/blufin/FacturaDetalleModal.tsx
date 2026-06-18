@@ -34,9 +34,13 @@ export function FacturaDetalleModal({
   const aprobar = useMutation({
     mutationFn: () => approveFactura(facturaId!),
     onSuccess: () => {
-      toast.success('Factura aprobada');
+      toast.success('Factura aprobada — el contrato quedó como dice la factura');
       qc.invalidateQueries({ queryKey: ['blufin_facturas'] });
       qc.invalidateQueries({ queryKey: ['blufin_factura_detalle', facturaId] });
+      // approveFactura reescribe el contrato (líneas/total/saldo) — refrescar todo lo dependiente.
+      qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

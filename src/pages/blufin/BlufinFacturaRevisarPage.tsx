@@ -15,9 +15,10 @@ import { StatusPill } from '@/features/blufin/StatusPill';
 import { statusContrato } from '@/features/blufin/status';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtKg, fmtFechaCorta } from '@/lib/format';
-import { fetchContratos } from '@/features/blufin/queries';
+import { fetchContratos, fetchCatalogos } from '@/features/blufin/queries';
 import {
   createFactura,
+  approveFactura,
   uploadFacturaArchivo,
   type FacturaDiferencia,
   type NuevaFacturaLinea,
@@ -36,6 +37,7 @@ const EPS_TOTAL = 0.01;
 
 type LineaCmp = {
   descripcion: string;
+  sku_id: string | null;
   kg_contrato: number;
   precio_contrato: number;
   total_contrato: number;
@@ -54,6 +56,14 @@ export function BlufinFacturaRevisarPage() {
     queryKey: ['blufin_contratos', empresaId],
     queryFn: () => fetchContratos(empresaId),
   });
+  const { data: cat } = useQuery({
+    queryKey: ['blufin_catalogos', empresaId],
+    queryFn: () => fetchCatalogos(empresaId),
+  });
+  const skuOptions = useMemo(
+    () => (cat?.skus ?? []).map((s) => ({ id: s.id, label: `${s.code} — ${s.descripcion}` })),
+    [cat],
+  );
 
   const [contratoId, setContratoId] = useState('');
   const [fecha, setFecha] = useState(hoyISO());
@@ -78,6 +88,7 @@ export function BlufinFacturaRevisarPage() {
         const total = p.total_usd != null ? Number(p.total_usd) : kg * precio;
         return {
           descripcion: [p.descripcion, p.marca, p.talla].filter(Boolean).join(' · '),
+          sku_id: p.sku_id ?? null,
           kg_contrato: kg,
           precio_contrato: precio,
           total_contrato: total,
@@ -121,7 +132,9 @@ export function BlufinFacturaRevisarPage() {
     return { tc, tf, dif: tf - tc, nDif };
   }, [lineas]);
 
+  const sinSku = useMemo(() => lineas.filter((l) => !l.sku_id).length, [lineas]);
   const canSave = !!contratoId && lineas.length > 0;
+  const canApprove = canSave && sinSku === 0;
 
   const guardar = useMutation({
     mutationFn: async (aprobar: boolean) => {
@@ -134,6 +147,7 @@ export function BlufinFacturaRevisarPage() {
         const { totalF, diferente, diferencias } = calc(l);
         return {
           descripcion: l.descripcion,
+          sku_id: l.sku_id,
           sku_contrato: null,
           kg_contrato: l.kg_contrato,
           precio_contrato: l.precio_contrato,
@@ -147,21 +161,33 @@ export function BlufinFacturaRevisarPage() {
           nota_revision: l.nota.trim() || null,
         };
       });
-      await createFactura({
+      // Siempre se crea como pendiente; aprobar = reescribir el contrato con lo
+      // facturado (approveFactura) — única ruta de la reescritura.
+      const facturaId = await createFactura({
         contrato_id: contratoId,
         fecha_subida: fecha,
         nombre_archivo: storage.nombre,
         storage_path: storage.path,
-        status: aprobar ? 'Aprobada' : 'Pendiente revisión',
+        status: 'Pendiente revisión',
         total_contrato: totales.tc,
         total_factura: totales.tf,
         lineas: lineasPayload,
       });
+      if (aprobar) await approveFactura(facturaId);
       return aprobar;
     },
     onSuccess: (aprobar) => {
-      toast.success(aprobar ? 'Factura revisada y aprobada' : 'Factura guardada — pendiente de revisión');
+      toast.success(
+        aprobar
+          ? 'Factura aprobada — el contrato quedó como dice la factura'
+          : 'Factura guardada — pendiente de revisión',
+      );
       qc.invalidateQueries({ queryKey: ['blufin_facturas'] });
+      if (aprobar) {
+        qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
+        qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+        qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
+      }
       navigate('/app/importaciones/blufin/facturas');
     },
     onError: (e: Error) => toast.error(e.message),
@@ -291,6 +317,7 @@ export function BlufinFacturaRevisarPage() {
             <thead>
               <tr>
                 <th>Producto</th>
+                <th style={{ width: 220 }}>SKU (catálogo)</th>
                 <th style={{ textAlign: 'right' }}>Kg contrato</th>
                 <th style={{ width: 110 }}>Kg factura</th>
                 <th style={{ textAlign: 'right' }}>$/kg contrato</th>
@@ -310,6 +337,19 @@ export function BlufinFacturaRevisarPage() {
                   <tr key={i}>
                     <td className="text-sm fw-600" style={{ minWidth: 180 }}>
                       {l.descripcion || 'Producto'}
+                    </td>
+                    <td style={{ minWidth: 200 }}>
+                      <Combobox
+                        options={skuOptions}
+                        value={l.sku_id}
+                        onChange={(id) => setLinea(i, { sku_id: id })}
+                        placeholder="Buscar SKU…"
+                      />
+                      {!l.sku_id && (
+                        <div className="text-xs fw-600" style={{ color: 'var(--red-500)', marginTop: 2 }}>
+                          Falta SKU
+                        </div>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }} className="mono">{fmtKg(l.kg_contrato)}</td>
                     <td>
@@ -429,11 +469,16 @@ export function BlufinFacturaRevisarPage() {
             </button>
             <button
               className="btn btn-primary btn-sm"
-              disabled={!canSave || guardar.isPending}
+              disabled={!canApprove || guardar.isPending}
               onClick={() => guardar.mutate(true)}
+              title={
+                sinSku > 0
+                  ? `Mapea el SKU de ${sinSku} línea(s) antes de aprobar`
+                  : 'El contrato quedará como dice la factura (líneas, total y saldo); los pagos hechos se conservan'
+              }
             >
               {guardar.isPending ? <div className="spinner" style={{ width: 12, height: 12 }} /> : <Icon name="check-circle" size={13} />}
-              Aprobar factura
+              Aprobar (queda como la factura)
             </button>
           </div>
         </div>
