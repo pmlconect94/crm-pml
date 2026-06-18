@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
+import { StatStrip } from '@/components/StatStrip';
 import { FacturaDetalleModal } from '@/features/blufin/FacturaDetalleModal';
 import { fetchFacturas, deleteFactura } from '@/features/blufin/facturas-queries';
 import { useAuth } from '@/lib/auth';
@@ -78,37 +79,27 @@ export function BlufinFacturasPage() {
         </button>
       </PageEnter>
 
-      {/* KPIs */}
-      <div className="grid grid-4" style={{ marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="kpi-label">Por revisar</span>
-          <span className="kpi-value">{kpis.porRevisar}</span>
-          <span className="kpi-delta">Pendientes de aprobar</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Aprobadas</span>
-          <span className="kpi-value">{kpis.aprobadas}</span>
-          <span className="kpi-delta">Revisadas OK</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Con diferencia</span>
-          <span className="kpi-value">{kpis.conDif}</span>
-          <span className="kpi-delta">Factura ≠ contrato</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Diferencia neta</span>
-          <span
-            className="kpi-value mono"
-            style={{
-              fontSize: 18,
-              color: Math.abs(kpis.difNeta) < 0.01 ? undefined : kpis.difNeta > 0 ? 'var(--red-500)' : 'var(--amber-500)',
-            }}
-          >
-            {Math.abs(kpis.difNeta) < 0.01 ? '$0.00' : `${kpis.difNeta > 0 ? '+' : '−'}${fmtUSD(Math.abs(kpis.difNeta))}`}
-          </span>
-          <span className="kpi-delta">Facturado vs contratado</span>
-        </div>
-      </div>
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      <StatStrip
+        stats={[
+          { value: kpis.porRevisar, label: 'por revisar' },
+          { value: kpis.aprobadas, label: 'aprobadas' },
+          { value: kpis.conDif, label: 'con diferencia' },
+          {
+            value:
+              Math.abs(kpis.difNeta) < 0.01
+                ? '$0.00'
+                : `${kpis.difNeta > 0 ? '+' : '−'}${fmtUSD(Math.abs(kpis.difNeta))}`,
+            label: 'diferencia neta',
+            color:
+              Math.abs(kpis.difNeta) < 0.01
+                ? undefined
+                : kpis.difNeta > 0
+                  ? 'var(--red-500)'
+                  : 'var(--amber-500)',
+          },
+        ]}
+      />
 
       {/* Sub-tabs */}
       <div className="tabs" style={{ marginBottom: 12 }}>

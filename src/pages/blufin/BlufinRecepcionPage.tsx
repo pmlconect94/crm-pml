@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter, SPRING } from '@/components/motion';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
+import { StatStrip } from '@/components/StatStrip';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { statusContrato } from '@/features/blufin/status';
 import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
@@ -90,43 +91,23 @@ export function BlufinRecepcionPage() {
         </div>
       </PageEnter>
 
-      {/* KPIs — mount instantáneo */}
-      <div className="grid grid-4" style={{ marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="kpi-label">Por recibir</span>
-          <span
-            className="kpi-value"
-            style={porRecibir.length > 0 ? { color: 'var(--amber-500)' } : undefined}
-          >
-            {porRecibir.length}
-          </span>
-          <span className="kpi-delta">Contratos sin recepción</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Recibidos</span>
-          <span className="kpi-value">{recepciones.length}</span>
-          <span className="kpi-delta">En historial</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Kg recibidos</span>
-          <span className="kpi-value mono" style={{ fontSize: 18 }}>
-            {fmtKg(kpis.kgRecibidos)}
-          </span>
-          <span className="kpi-delta">Acumulado en bodega</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Kg faltantes</span>
-          <span
-            className="kpi-value mono"
-            style={{ fontSize: 18, color: kpis.kgFaltantes > 0 ? 'var(--red-500)' : undefined }}
-          >
-            {fmtKg(kpis.kgFaltantes)}
-          </span>
-          <span className="kpi-delta">
-            {kpis.skusConFaltante} SKU{kpis.skusConFaltante !== 1 ? 's' : ''} con faltante
-          </span>
-        </div>
-      </div>
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      <StatStrip
+        stats={[
+          {
+            value: porRecibir.length,
+            label: 'por recibir',
+            color: porRecibir.length > 0 ? 'var(--amber-500)' : undefined,
+          },
+          { value: recepciones.length, label: 'recepciones' },
+          { value: fmtKg(kpis.kgRecibidos), label: 'recibidos' },
+          {
+            value: fmtKg(kpis.kgFaltantes),
+            label: `faltantes${kpis.skusConFaltante > 0 ? ` · ${kpis.skusConFaltante} SKU${kpis.skusConFaltante !== 1 ? 's' : ''}` : ''}`,
+            color: kpis.kgFaltantes > 0 ? 'var(--red-500)' : undefined,
+          },
+        ]}
+      />
 
       {/* Sub-tabs */}
       <div className="tabs" style={{ marginBottom: 12 }}>

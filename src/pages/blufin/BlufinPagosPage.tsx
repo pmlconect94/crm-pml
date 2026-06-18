@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
+import { StatStrip } from '@/components/StatStrip';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtMXN, fmtFecha, fmtFechaCorta, diasDesde } from '@/lib/format';
 import {
@@ -201,35 +202,19 @@ export function BlufinPagosPage() {
         </div>
       </PageEnter>
 
-      {/* KPIs — mount instantáneo */}
-      <div className="grid grid-4" style={{ marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="kpi-label">USD pagado</span>
-          <span className="kpi-value mono" style={{ fontSize: 18 }}>
-            {fmtUSD(kpis.totalUsd)}
-          </span>
-          <span className="kpi-delta">{fmtMXN(kpis.totalMxn)}</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">USD pendiente</span>
-          <span className="kpi-value mono" style={{ fontSize: 18 }}>
-            {fmtUSD(kpis.usdPendiente)}
-          </span>
-          <span className="kpi-delta">{pendientes.length} contratos abiertos</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">TC efectivo</span>
-          <span className="kpi-value mono">
-            {kpis.tcEfectivo > 0 ? kpis.tcEfectivo.toFixed(4) : '—'}
-          </span>
-          <span className="kpi-delta">Promedio ponderado de pagos</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Pagos este mes</span>
-          <span className="kpi-value">{kpis.esteMes}</span>
-          <span className="kpi-delta">de {pagos.length} totales</span>
-        </div>
-      </div>
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      <StatStrip
+        stats={[
+          { value: fmtUSD(kpis.totalUsd), label: 'pagado' },
+          {
+            value: fmtUSD(kpis.usdPendiente),
+            label: `pendiente · ${pendientes.length} contratos`,
+            color: kpis.usdPendiente > 0 ? 'var(--amber-500)' : undefined,
+          },
+          { value: kpis.tcEfectivo > 0 ? kpis.tcEfectivo.toFixed(4) : '—', label: 'TC efectivo' },
+          { value: kpis.esteMes, label: `pagos este mes · de ${pagos.length}` },
+        ]}
+      />
 
       {/* Sub-tabs */}
       <div className="tabs" style={{ marginBottom: 12 }}>
@@ -344,7 +329,46 @@ export function BlufinPagosPage() {
   );
 }
 
-/* ─── Pendientes ──────────────────────────────────────────────────── */
+/* ─── Pendientes (por semana, separado por tipo) ──────────────────── */
+
+type TipoPend = 'anticipo' | 'saldo';
+
+type PendItem = {
+  contratoId: string;
+  folio: string;
+  status: string;
+  monto: number;
+  fecha: string | null;
+};
+
+type GrupoSemana = {
+  key: string;
+  kind: 'atrasado' | 'semana' | 'sinfecha';
+  label: string;
+  esActual: boolean;
+  items: PendItem[];
+  total: number;
+};
+
+/** Lunes (mediodía local) de la semana que contiene la fecha ISO dada. */
+function lunesDe(iso: string): Date {
+  const d = new Date(iso + 'T12:00:00');
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = (x.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function isoLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function addDias(iso: string, n: number): string {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return isoLocal(d);
+}
 
 function PendientesView({
   pendientes,
@@ -357,6 +381,116 @@ function PendientesView({
   isLoading: boolean;
   onPay: (p: { contratoId: string; tipo: 'anticipo' | 'saldo' }) => void;
 }) {
+  const [tipoTab, setTipoTab] = useState<TipoPend>('anticipo');
+
+  // Conteo por tipo para los chips del toggle.
+  const conteo = useMemo(() => {
+    let anticipo = 0;
+    let saldo = 0;
+    for (const c of pendientes) {
+      if (!c.anticipo_pagado && c.anticipo_usd) anticipo++;
+      if (!c.saldo_pagado && c.saldo_usd) saldo++;
+    }
+    return { anticipo, saldo };
+  }, [pendientes]);
+
+  // Ítems del tipo seleccionado, agrupados por semana de su fecha programada.
+  // "Atrasado" = lo que quedó de semanas anteriores sin pagar. La semana actual
+  // se marca aparte para responder "¿qué tengo que pagar esta semana?".
+  const { grupos, totalSemana, totalAtrasado } = useMemo(() => {
+    const items: PendItem[] = [];
+    for (const c of pendientes) {
+      if (tipoTab === 'anticipo' && !c.anticipo_pagado && c.anticipo_usd) {
+        items.push({
+          contratoId: c.id,
+          folio: c.folio,
+          status: c.status,
+          monto: Number(c.anticipo_usd),
+          fecha: c.anticipo_fecha,
+        });
+      } else if (tipoTab === 'saldo' && !c.saldo_pagado && c.saldo_usd) {
+        items.push({
+          contratoId: c.id,
+          folio: c.folio,
+          status: c.status,
+          monto: Number(c.saldo_usd),
+          fecha: c.saldo_fecha,
+        });
+      }
+    }
+
+    const lunesHoyISO = isoLocal(lunesDe(isoLocal(new Date())));
+
+    const atrasado: PendItem[] = [];
+    const sinFecha: PendItem[] = [];
+    const semanas = new Map<string, PendItem[]>();
+    for (const it of items) {
+      if (!it.fecha) {
+        sinFecha.push(it);
+        continue;
+      }
+      const lunISO = isoLocal(lunesDe(it.fecha));
+      if (lunISO < lunesHoyISO) {
+        atrasado.push(it);
+        continue;
+      }
+      const arr = semanas.get(lunISO);
+      if (arr) arr.push(it);
+      else semanas.set(lunISO, [it]);
+    }
+
+    const porFecha = (a: PendItem, b: PendItem) =>
+      (a.fecha ?? '').localeCompare(b.fecha ?? '') || a.folio.localeCompare(b.folio);
+    const sum = (arr: PendItem[]) => arr.reduce((s, it) => s + it.monto, 0);
+
+    atrasado.sort(porFecha);
+    sinFecha.sort((a, b) => a.folio.localeCompare(b.folio));
+
+    const grupos: GrupoSemana[] = [];
+    if (atrasado.length) {
+      grupos.push({
+        key: 'atrasado',
+        kind: 'atrasado',
+        label: 'Atrasado',
+        esActual: false,
+        items: atrasado,
+        total: sum(atrasado),
+      });
+    }
+    for (const lunISO of [...semanas.keys()].sort()) {
+      const arr = semanas.get(lunISO)!;
+      arr.sort(porFecha);
+      const esActual = lunISO === lunesHoyISO;
+      grupos.push({
+        key: lunISO,
+        kind: 'semana',
+        label: esActual
+          ? 'Esta semana'
+          : `Semana del ${fmtFechaCorta(lunISO)} al ${fmtFechaCorta(addDias(lunISO, 6))}`,
+        esActual,
+        items: arr,
+        total: sum(arr),
+      });
+    }
+    if (sinFecha.length) {
+      grupos.push({
+        key: 'sinfecha',
+        kind: 'sinfecha',
+        label: 'Sin fecha programada',
+        esActual: false,
+        items: sinFecha,
+        total: sum(sinFecha),
+      });
+    }
+
+    const sem = grupos.find((g) => g.esActual);
+    return {
+      grupos,
+      totalSemana: sem?.total ?? 0,
+      totalAtrasado: atrasado.length ? sum(atrasado) : 0,
+    };
+  }, [pendientes, tipoTab]);
+
   if (isLoading) return <SkeletonList rows={4} />;
 
   if (pendientes.length === 0) {
@@ -371,147 +505,244 @@ function PendientesView({
     );
   }
 
+  const tipoLabel = tipoTab === 'anticipo' ? 'anticipos' : 'saldos';
+
   return (
     <div className="vstack" style={{ gap: 12 }}>
-      {pendientes.map((c) => {
-        const items: { tipo: 'anticipo' | 'saldo'; monto: number; fecha: string | null; pagado: boolean }[] =
-          [];
-        if (!c.anticipo_pagado && c.anticipo_usd) {
-          items.push({
-            tipo: 'anticipo',
-            monto: Number(c.anticipo_usd),
-            fecha: c.anticipo_fecha,
-            pagado: false,
-          });
-        }
-        if (!c.saldo_pagado && c.saldo_usd) {
-          items.push({
-            tipo: 'saldo',
-            monto: Number(c.saldo_usd),
-            fecha: c.saldo_fecha,
-            pagado: false,
-          });
-        }
-        if (items.length === 0) return null;
+      {/* Toggle Anticipos / Saldos + resumen de la semana */}
+      <div
+        className="hstack"
+        style={{ gap: 12, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}
+      >
+        <div className="hstack" style={{ gap: 6 }}>
+          {(['anticipo', 'saldo'] as TipoPend[]).map((t) => {
+            const activo = tipoTab === t;
+            const n = t === 'anticipo' ? conteo.anticipo : conteo.saldo;
+            return (
+              <button
+                key={t}
+                onClick={() => setTipoTab(t)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 999,
+                  border: '1px solid ' + (activo ? 'var(--blue-500)' : 'var(--ink-200)'),
+                  background: activo ? 'var(--blue-500)' : 'white',
+                  color: activo ? 'white' : 'var(--ink-700)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                {t === 'anticipo' ? 'Anticipos' : 'Saldos'}
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '0 6px',
+                    borderRadius: 999,
+                    background: activo ? 'rgba(255,255,255,0.25)' : 'var(--ink-100)',
+                    color: activo ? 'white' : 'var(--ink-500)',
+                  }}
+                >
+                  {n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <StatStrip
+          style={{ marginBottom: 0 }}
+          stats={[
+            {
+              value: fmtUSD(totalSemana),
+              label: 'esta semana',
+              color: totalSemana > 0 ? 'var(--blue-500)' : undefined,
+            },
+            {
+              value: fmtUSD(totalAtrasado),
+              label: 'atrasado',
+              color: totalAtrasado > 0 ? 'var(--red-500)' : undefined,
+            },
+          ]}
+        />
+      </div>
 
-        return (
-          <div key={c.id} className="card">
-            <div
-              style={{
-                padding: '14px 20px',
-                borderBottom: '1px solid var(--ink-100)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 16,
-              }}
-            >
-              <div>
-                <div className="mono fw-700" style={{ fontSize: 14 }}>
-                  {c.folio}
-                </div>
-                <div className="text-xs muted" style={{ marginTop: 2 }}>
-                  {c.status} · {fmtFechaCorta(c.fecha)} · {fmtUSD(c.total_usd)}
-                </div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {items.map((it, i) => {
-                const dias = diasDesde(it.fecha);
-                const vencido = dias !== null && dias < 0;
-                const proximo = dias !== null && dias >= 0 && dias <= 3;
-                const fwd = forwardsActivos.find(
-                  (f) => f.contrato_id === c.id && f.asociado_a === it.tipo,
-                );
-                return (
-                  <div
-                    key={it.tipo}
+      {grupos.length === 0 ? (
+        <div className="card">
+          <div className="empty">
+            <Icon name="check-circle" size={36} />
+            <div className="empty-title">Sin {tipoLabel} pendientes</div>
+            <p className="muted">No hay {tipoLabel} por pagar. Revisa la otra pestaña.</p>
+          </div>
+        </div>
+      ) : (
+        grupos.map((g) => {
+          const accent =
+            g.kind === 'atrasado'
+              ? 'var(--red-500)'
+              : g.esActual
+                ? 'var(--blue-500)'
+                : g.kind === 'sinfecha'
+                  ? 'var(--ink-400)'
+                  : 'var(--ink-300)';
+          const headerBg =
+            g.kind === 'atrasado'
+              ? 'color-mix(in srgb, var(--red-500) 7%, white)'
+              : g.esActual
+                ? 'color-mix(in srgb, var(--blue-500) 7%, white)'
+                : 'var(--ink-50)';
+          const resaltado = g.esActual || g.kind === 'atrasado';
+          return (
+            <div key={g.key} className="card" style={resaltado ? { borderColor: accent } : undefined}>
+              {/* Cabecera de la semana */}
+              <div
+                style={{
+                  padding: '10px 16px',
+                  borderBottom: '1px solid var(--ink-100)',
+                  background: headerBg,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div className="hstack" style={{ gap: 8, alignItems: 'center' }}>
+                  <span
                     style={{
-                      padding: '12px 20px',
-                      borderBottom:
-                        i < items.length - 1 ? '1px solid var(--ink-100)' : 'none',
-                      display: 'grid',
-                      gridTemplateColumns: '120px 1fr 1fr 130px',
-                      gap: 16,
-                      alignItems: 'center',
+                      width: 8,
+                      height: 8,
+                      borderRadius: 999,
+                      background: accent,
+                      display: 'inline-block',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    className="fw-700"
+                    style={{
+                      fontSize: 13,
+                      color: g.kind === 'atrasado' ? 'var(--red-500)' : 'var(--ink-900)',
                     }}
                   >
-                    <TipoPill tipo={it.tipo} />
-                    <div>
-                      <div className="mono fw-700" style={{ fontSize: 15 }}>
-                        {fmtUSD(it.monto)}
-                      </div>
-                      <div className="text-xs muted" style={{ marginTop: 2 }}>
-                        Programado {fmtFecha(it.fecha)}
-                      </div>
-                    </div>
-                    <div>
-                      {fwd ? (
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            flexDirection: 'column',
-                            alignItems: 'flex-start',
-                            gap: 2,
-                            padding: '6px 10px',
-                            background: 'color-mix(in srgb, var(--amber-500) 8%, white)',
-                            border: '1px solid color-mix(in srgb, var(--amber-500) 30%, white)',
-                            borderRadius: 'var(--r-sm)',
-                          }}
-                        >
-                          <div
-                            className="text-xs fw-700"
-                            style={{
-                              color: '#92400E',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.04em',
-                            }}
-                          >
-                            Forward cerrado para {fmtFechaCorta(fwd.fecha_entrega)}
-                          </div>
-                          <div className="text-xs muted">
-                            TC pactado{' '}
-                            <span className="mono fw-600" style={{ color: 'var(--ink-700)' }}>
-                              {(fwd.tc_forward ?? 0).toFixed(4)}
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        dias !== null && (
-                          <div
-                            className="text-xs fw-600"
-                            style={{
-                              color: vencido
-                                ? 'var(--red-500)'
-                                : proximo
-                                  ? 'var(--amber-500)'
-                                  : 'var(--ink-500)',
-                            }}
-                          >
-                            {vencido
-                              ? `Vencido hace ${-dias}d`
-                              : dias === 0
-                                ? 'Vence hoy'
-                                : `En ${dias} días`}
-                          </div>
-                        )
-                      )}
-                    </div>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => onPay({ contratoId: c.id, tipo: it.tipo })}
-                      style={{ justifySelf: 'end' }}
-                      title={fwd ? 'Pagar al TC del día (spot, sin usar el forward)' : undefined}
+                    {g.label}
+                  </span>
+                  <span className="text-xs muted">
+                    {g.items.length} pago{g.items.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <span className="mono fw-700" style={{ fontSize: 13 }}>
+                  {fmtUSD(g.total)}
+                </span>
+              </div>
+
+              {/* Filas del grupo */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {g.items.map((it, i) => {
+                  const dias = diasDesde(it.fecha);
+                  const vencido = dias !== null && dias < 0;
+                  const proximo = dias !== null && dias >= 0 && dias <= 3;
+                  const fwd = forwardsActivos.find(
+                    (f) => f.contrato_id === it.contratoId && f.asociado_a === tipoTab,
+                  );
+                  return (
+                    <div
+                      key={it.contratoId}
+                      style={{
+                        padding: '10px 16px',
+                        borderBottom: i < g.items.length - 1 ? '1px solid var(--ink-100)' : 'none',
+                        display: 'grid',
+                        gridTemplateColumns: '150px 1fr 1fr 130px',
+                        gap: 16,
+                        alignItems: 'center',
+                      }}
                     >
-                      <Icon name="check" size={12} /> {fwd ? 'Pagar spot' : 'Pagar'}
-                    </button>
-                  </div>
-                );
-              })}
+                      <div>
+                        <div className="mono fw-700" style={{ fontSize: 13 }}>
+                          {it.folio}
+                        </div>
+                        <div className="text-xs muted" style={{ marginTop: 2 }}>
+                          {it.status}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mono fw-700" style={{ fontSize: 15 }}>
+                          {fmtUSD(it.monto)}
+                        </div>
+                        <div className="text-xs muted" style={{ marginTop: 2 }}>
+                          Programado {fmtFecha(it.fecha)}
+                        </div>
+                      </div>
+                      <div>
+                        {fwd ? (
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-start',
+                              gap: 2,
+                              padding: '6px 10px',
+                              background: 'color-mix(in srgb, var(--amber-500) 8%, white)',
+                              border: '1px solid color-mix(in srgb, var(--amber-500) 30%, white)',
+                              borderRadius: 'var(--r-sm)',
+                            }}
+                          >
+                            <div
+                              className="text-xs fw-700"
+                              style={{
+                                color: '#92400E',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em',
+                              }}
+                            >
+                              Forward cerrado para {fmtFechaCorta(fwd.fecha_entrega)}
+                            </div>
+                            <div className="text-xs muted">
+                              TC pactado{' '}
+                              <span className="mono fw-600" style={{ color: 'var(--ink-700)' }}>
+                                {(fwd.tc_forward ?? 0).toFixed(4)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          dias !== null && (
+                            <div
+                              className="text-xs fw-600"
+                              style={{
+                                color: vencido
+                                  ? 'var(--red-500)'
+                                  : proximo
+                                    ? 'var(--amber-500)'
+                                    : 'var(--ink-500)',
+                              }}
+                            >
+                              {vencido
+                                ? `Vencido hace ${-dias}d`
+                                : dias === 0
+                                  ? 'Vence hoy'
+                                  : `En ${dias} días`}
+                            </div>
+                          )
+                        )}
+                      </div>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => onPay({ contratoId: it.contratoId, tipo: tipoTab })}
+                        style={{ justifySelf: 'end' }}
+                        title={fwd ? 'Pagar al TC del día (spot, sin usar el forward)' : undefined}
+                      >
+                        <Icon name="check" size={12} /> {fwd ? 'Pagar spot' : 'Pagar'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })
+      )}
     </div>
   );
 }

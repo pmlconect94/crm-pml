@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
+import { StatStrip } from '@/components/StatStrip';
 import { useAuth } from '@/lib/auth';
 import { fmtNum } from '@/lib/format';
 import { fetchSkusBlufin, toggleSkuActivo } from '@/features/blufin/productos-queries';
@@ -97,23 +98,16 @@ export function BlufinProductosPage() {
         </div>
       </PageEnter>
 
-      {/* KPIs — mount instantáneo */}
-      <div className="grid grid-4" style={{ marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="kpi-label">SKUs activos</span>
-          <span className="kpi-value">{activos.length}</span>
-          <span className="kpi-delta">
-            {inactivos > 0 ? `${inactivos} inactivo${inactivos !== 1 ? 's' : ''}` : 'Catálogo completo'}
-          </span>
-        </div>
-        {productos.slice(0, 3).map((p) => (
-          <div className="kpi" key={p.nombre}>
-            <span className="kpi-label">{p.nombre}</span>
-            <span className="kpi-value">{p.count}</span>
-            <span className="kpi-delta">SKUs de este producto</span>
-          </div>
-        ))}
-      </div>
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      <StatStrip
+        stats={[
+          {
+            value: activos.length,
+            label: `SKUs activos${inactivos > 0 ? ` · ${inactivos} inactivo${inactivos !== 1 ? 's' : ''}` : ''}`,
+          },
+          ...productos.slice(0, 3).map((p) => ({ value: p.count, label: p.nombre })),
+        ]}
+      />
 
       {/* Filtros */}
       <div className="card" style={{ marginBottom: 10 }}>

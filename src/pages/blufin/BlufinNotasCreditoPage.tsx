@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
+import { StatStrip } from '@/components/StatStrip';
 import { useAuth } from '@/lib/auth';
 import { fmtUSD, fmtMXN, fmtFecha, fmtFechaCorta } from '@/lib/format';
 import {
@@ -135,35 +136,19 @@ export function BlufinNotasCreditoPage() {
         </button>
       </PageEnter>
 
-      {/* KPIs */}
-      <div className="grid grid-4" style={{ marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="kpi-label">Sin monto</span>
-          <span className="kpi-value" style={sinMonto.length > 0 ? { color: 'var(--amber-500)' } : undefined}>
-            {sinMonto.length}
-          </span>
-          <span className="kpi-delta">Pendientes de confirmar monto</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Saldo por aplicar</span>
-          <span className="kpi-value mono" style={{ fontSize: 18 }}>
-            {fmtUSD(kpis.saldo)}
-          </span>
-          <span className="kpi-delta">{porAplicar.length} NCs por aplicar</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Total emitido</span>
-          <span className="kpi-value mono" style={{ fontSize: 18 }}>
-            {fmtUSD(kpis.emitido)}
-          </span>
-          <span className="kpi-delta">{ncs.length} notas de crédito</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Timbradas</span>
-          <span className="kpi-value">{kpis.timbradas}</span>
-          <span className="kpi-delta">Con folio del SAT</span>
-        </div>
-      </div>
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      <StatStrip
+        stats={[
+          {
+            value: sinMonto.length,
+            label: 'sin monto',
+            color: sinMonto.length > 0 ? 'var(--amber-500)' : undefined,
+          },
+          { value: fmtUSD(kpis.saldo), label: `por aplicar · ${porAplicar.length} NCs` },
+          { value: fmtUSD(kpis.emitido), label: `emitido · ${ncs.length} NCs` },
+          { value: kpis.timbradas, label: 'timbradas' },
+        ]}
+      />
 
       {/* Sub-tabs */}
       <div className="tabs" style={{ marginBottom: 12 }}>
