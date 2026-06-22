@@ -13,10 +13,36 @@ export type FuenteCosto = {
   eta_bodega: string | null;
   fecha_contrato: string | null;
   status: string;
+  llegada_real: string | null;
+  llego: boolean; // tiene recepción (ya llegó a bodega)
   kg: number;
   precio_usd: number;
-  tc: number | null; // TC efectivo (null si no se pudo determinar)
+  tc: number | null; // TC efectivo REAL (null si no se pudo determinar)
   tc_origen: TcOrigen;
+};
+
+/** Un contenedor (= un contrato) con su costo total y TC efectivo. */
+export type ContenedorCosto = {
+  contrato_id: string;
+  folio: string;
+  contenedor: string | null;
+  naviera: string | null;
+  eta_bodega: string | null;
+  llegada_real: string | null;
+  llego: boolean;
+  liquidado: boolean; // saldo pagado
+  status: string;
+  total_usd: number;
+  total_kg: number;
+  tc: number | null; // TC efectivo REAL (null si no hay pagos/forward/ponderado)
+  tc_origen: TcOrigen;
+  lineas: { descripcion: string; kg: number; precio_usd: number; total_usd: number }[];
+};
+
+export type CostosData = {
+  skus: SkuCosto[];
+  contenedores: ContenedorCosto[]; // ordenados por eta_bodega DESC
+  tcDelDiaSugerido: number | null; // TC del pago más reciente (proxy del TC de hoy)
 };
 
 export type SkuCosto = {
@@ -33,38 +59,49 @@ export type SkuCosto = {
 
 export type PromedioResultado = {
   avgUSD: number;
-  avgTC: number | null; // null si ninguna fuente usada tiene TC
+  avgTC: number | null; // null si ninguna fuente usada tiene TC (ni estimado)
   avgMXN: number | null;
   totalKg: number;
   faltante: number; // kg del stock que no alcanzó a cubrir el historial
-  sinTC: number; // kg usados que no tenían TC
-  breakdown: (FuenteCosto & { kgUsado: number })[];
+  sinTC: number; // kg usados que no tenían TC ni estimado
+  kgEstimado: number; // kg que usaron el TC estimado del día (sin TC oficial)
+  usaEstimado: boolean;
+  breakdown: (FuenteCosto & { kgUsado: number; tcUsado: number | null; tcEsEstimado: boolean })[];
 };
 
 /**
  * Costo promedio ponderado sobre el stock, tomando del contenedor más nuevo
  * al más viejo (ver §6). El TC promedio se pondera solo sobre los kg que sí
- * tienen TC; si ninguno lo tiene, avgMXN queda null.
+ * tienen TC. Para los contenedores SIN TC oficial se usa `tcEstimado` (TC del
+ * día) si se provee — esos kg se marcan como estimados (`tcEsEstimado`).
  */
-export function calcularPromedio(fuentes: FuenteCosto[], stockKg: number): PromedioResultado | null {
+export function calcularPromedio(
+  fuentes: FuenteCosto[],
+  stockKg: number,
+  tcEstimado?: number | null,
+): PromedioResultado | null {
   let restante = stockKg;
   let sumUSD = 0;
   let sumTC = 0;
   let sumKg = 0;
   let sumKgConTC = 0;
-  const breakdown: (FuenteCosto & { kgUsado: number })[] = [];
+  let sumKgEstimado = 0;
+  const breakdown: (FuenteCosto & { kgUsado: number; tcUsado: number | null; tcEsEstimado: boolean })[] = [];
 
   for (const f of fuentes) {
     if (restante <= 0.0001) break;
     const usado = Math.min(f.kg, restante);
     sumUSD += f.precio_usd * usado;
     sumKg += usado;
-    if (f.tc != null) {
-      sumTC += f.tc * usado;
+    const tcUsado = f.tc ?? (tcEstimado != null && tcEstimado > 0 ? tcEstimado : null);
+    const esEstimado = f.tc == null && tcUsado != null;
+    if (tcUsado != null) {
+      sumTC += tcUsado * usado;
       sumKgConTC += usado;
+      if (esEstimado) sumKgEstimado += usado;
     }
     restante -= usado;
-    breakdown.push({ ...f, kgUsado: usado });
+    breakdown.push({ ...f, kgUsado: usado, tcUsado, tcEsEstimado: esEstimado });
   }
 
   if (sumKg === 0) return null;
@@ -77,6 +114,8 @@ export function calcularPromedio(fuentes: FuenteCosto[], stockKg: number): Prome
     totalKg: sumKg,
     faltante: Math.max(0, restante),
     sinTC: sumKg - sumKgConTC,
+    kgEstimado: sumKgEstimado,
+    usaEstimado: sumKgEstimado > 0,
     breakdown,
   };
 }
@@ -106,7 +145,7 @@ function tcEfectivo(
  * Arma la lista de SKUs con sus fuentes (contenedores) y el TC efectivo de
  * cada uno. Reutiliza los fetch existentes para no duplicar queries.
  */
-export async function fetchCostosData(empresaId: string): Promise<SkuCosto[]> {
+export async function fetchCostosData(empresaId: string): Promise<CostosData> {
   const [contratos, pagos, forwards, catalogo] = await Promise.all([
     fetchContratos(empresaId),
     fetchPagos(empresaId),
@@ -116,16 +155,31 @@ export async function fetchCostosData(empresaId: string): Promise<SkuCosto[]> {
 
   const skuById = new Map(catalogo.map((s) => [s.id, s]));
   const skuMap = new Map<string, SkuCosto>();
+  const contenedores: ContenedorCosto[] = [];
+
+  const pagosLite = pagos.map((p) => ({
+    contrato_id: p.contrato_id,
+    monto_usd: Number(p.monto_usd),
+    tc: Number(p.tc),
+  }));
+  const forwardsLite = forwards.map((f) => ({ contrato_id: f.contrato_id, tc_forward: f.tc_forward }));
 
   for (const c of contratos) {
-    const { tc, origen } = tcEfectivo(
-      c.id,
-      pagos.map((p) => ({ contrato_id: p.contrato_id, monto_usd: Number(p.monto_usd), tc: Number(p.tc) })),
-      forwards.map((f) => ({ contrato_id: f.contrato_id, tc_forward: f.tc_forward })),
-      c.tc_ponderado,
-    );
+    const { tc, origen } = tcEfectivo(c.id, pagosLite, forwardsLite, c.tc_ponderado);
+    const llego = !!c.llegada_real;
 
+    const contLineas: ContenedorCosto['lineas'] = [];
+    let contKg = 0;
     for (const linea of c.productos ?? []) {
+      const kg = Number(linea.kg ?? 0);
+      contLineas.push({
+        descripcion: linea.descripcion ?? '—',
+        kg,
+        precio_usd: Number(linea.precio_usd ?? 0),
+        total_usd: linea.total_usd != null ? Number(linea.total_usd) : kg * Number(linea.precio_usd ?? 0),
+      });
+      contKg += kg;
+
       if (!linea.sku_id) continue;
       const cat = skuById.get(linea.sku_id);
       if (!skuMap.has(linea.sku_id)) {
@@ -142,7 +196,6 @@ export async function fetchCostosData(empresaId: string): Promise<SkuCosto[]> {
         });
       }
       const sku = skuMap.get(linea.sku_id)!;
-      const kg = Number(linea.kg ?? 0);
       sku.fuentes.push({
         contrato_id: c.id,
         folio: c.folio,
@@ -151,6 +204,8 @@ export async function fetchCostosData(empresaId: string): Promise<SkuCosto[]> {
         eta_bodega: c.eta_bodega,
         fecha_contrato: c.fecha,
         status: c.status,
+        llegada_real: c.llegada_real ?? null,
+        llego,
         kg,
         precio_usd: Number(linea.precio_usd ?? 0),
         tc,
@@ -158,12 +213,34 @@ export async function fetchCostosData(empresaId: string): Promise<SkuCosto[]> {
       });
       sku.totalKg += kg;
     }
+
+    contenedores.push({
+      contrato_id: c.id,
+      folio: c.folio,
+      contenedor: c.contenedor,
+      naviera: c.naviera,
+      eta_bodega: c.eta_bodega,
+      llegada_real: c.llegada_real ?? null,
+      llego,
+      liquidado: c.saldo_pagado === true,
+      status: c.status,
+      total_usd: Number(c.total_usd ?? 0),
+      total_kg: contKg,
+      tc,
+      tc_origen: origen,
+      lineas: contLineas,
+    });
   }
 
   // Ordenar fuentes por eta_bodega DESC (nulls al final)
   for (const sku of skuMap.values()) {
     sku.fuentes.sort((a, b) => (b.eta_bodega ?? '').localeCompare(a.eta_bodega ?? ''));
   }
+  contenedores.sort((a, b) => (b.eta_bodega ?? '').localeCompare(a.eta_bodega ?? ''));
 
-  return Array.from(skuMap.values()).sort((a, b) => b.totalKg - a.totalKg);
+  return {
+    skus: Array.from(skuMap.values()).sort((a, b) => b.totalKg - a.totalKg),
+    contenedores,
+    tcDelDiaSugerido: pagos.length > 0 ? Number(pagos[0].tc) : null,
+  };
 }

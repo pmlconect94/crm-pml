@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/components/Icon';
 import { PageEnter, SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
-import { fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
+import { fmtMXN, fmtUSD, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import {
   fetchCostosData,
   calcularPromedio,
   type SkuCosto,
   type FuenteCosto,
+  type ContenedorCosto,
 } from '@/features/blufin/costos-queries';
 
 const fmtUSD4 = (n: number | null | undefined) =>
@@ -20,16 +21,30 @@ const toNum = (s: string) => {
   return Number.isNaN(n) ? 0 : n;
 };
 
-type View = 'inventario' | 'precios';
+type View = 'inventario' | 'contenedores' | 'precios';
 
 export function BlufinCostosPage() {
   const { empresaId } = useAuth();
   const [view, setView] = useState<View>('inventario');
+  const [tcInput, setTcInput] = useState('');
 
-  const { data: skus = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['blufin_costos', empresaId],
     queryFn: () => fetchCostosData(empresaId),
   });
+  const skus = data?.skus ?? [];
+  const contenedores = data?.contenedores ?? [];
+  const sugerido = data?.tcDelDiaSugerido ?? null;
+
+  // Prefill del TC del día con el TC del pago más reciente (editable).
+  useEffect(() => {
+    if (sugerido != null) setTcInput((prev) => (prev === '' ? sugerido.toFixed(4) : prev));
+  }, [sugerido]);
+
+  const tcEstimado = (() => {
+    const n = toNum(tcInput);
+    return n > 0 ? n : null;
+  })();
 
   return (
     <>
@@ -38,14 +53,55 @@ export function BlufinCostosPage() {
           Central de costos
         </h2>
         <p className="page-subtitle">
-          Costo promedio ponderado por SKU y evolución del precio FOB del proveedor
+          Costo promedio ponderado por SKU, costo por contenedor y evolución del precio FOB
         </p>
       </PageEnter>
+
+      {/* TC del día estimado */}
+      <div
+        className="hstack"
+        style={{
+          gap: 10,
+          marginBottom: 12,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          padding: '8px 12px',
+          background: 'color-mix(in srgb, var(--amber-500) 6%, white)',
+          border: '1px solid color-mix(in srgb, var(--amber-500) 24%, white)',
+          borderRadius: 'var(--r-md)',
+        }}
+      >
+        <span className="text-xs fw-700" style={{ color: '#92400E', whiteSpace: 'nowrap' }}>
+          TC del día (estimado)
+        </span>
+        <input
+          type="number"
+          step="0.0001"
+          min="0"
+          value={tcInput}
+          onChange={(e) => setTcInput(e.target.value)}
+          placeholder="18.0000"
+          className="field-input mono"
+          style={{ width: 120, fontSize: 13, fontWeight: 700, padding: '6px 10px' }}
+        />
+        <span className="text-xs" style={{ color: '#92400E', flex: 1, minWidth: 240 }}>
+          Se usa en los contenedores SIN TC oficial — esos costos salen en{' '}
+          <strong>ámbar</strong> como ESTIMADOS al día de hoy.
+          {sugerido != null && (
+            <>
+              {' '}
+              Sugerido (último pago):{' '}
+              <span className="mono fw-700">{sugerido.toFixed(4)}</span>.
+            </>
+          )}
+        </span>
+      </div>
 
       <div className="tabs" style={{ marginBottom: 12 }}>
         {(
           [
             { id: 'inventario', label: 'Inventario & Costo Promedio', icon: 'trend-up' },
+            { id: 'contenedores', label: 'Por contenedor', icon: 'package' },
             { id: 'precios', label: 'Histórico de Precios', icon: 'file-text' },
           ] as const
         ).map((t) => (
@@ -67,19 +123,21 @@ export function BlufinCostosPage() {
             <div className="skeleton-bar" style={{ width: '70%' }} />
           </div>
         </div>
-      ) : skus.length === 0 ? (
+      ) : contenedores.length === 0 ? (
         <div className="card">
           <div className="empty">
             <Icon name="trend-up" size={36} />
             <div className="empty-title">Sin datos de costos todavía</div>
             <p className="muted">
               Cuando haya contratos con productos capturados, aquí podrás calcular el costo promedio
-              ponderado de tu stock.
+              ponderado de tu stock y el costo por contenedor.
             </p>
           </div>
         </div>
       ) : view === 'inventario' ? (
-        <InventarioView skus={skus} />
+        <InventarioView skus={skus} tcEstimado={tcEstimado} />
+      ) : view === 'contenedores' ? (
+        <ContenedoresView contenedores={contenedores} tcEstimado={tcEstimado} />
       ) : (
         <PreciosView skus={skus} />
       )}
@@ -89,7 +147,7 @@ export function BlufinCostosPage() {
 
 /* ─── Tab 1 — Inventario & Costo Promedio ─────────────────────────── */
 
-function InventarioView({ skus }: { skus: SkuCosto[] }) {
+function InventarioView({ skus, tcEstimado }: { skus: SkuCosto[]; tcEstimado: number | null }) {
   const [query, setQuery] = useState('');
   const [prodFilter, setProdFilter] = useState('Todos');
   const [open, setOpen] = useState(false);
@@ -126,9 +184,13 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
   }, [skus, query, prodFilter]);
 
   const activeSku = selectedId ? skus.find((s) => s.sku_id === selectedId) ?? null : null;
-  const last5 = activeSku ? activeSku.fuentes.slice(0, 5) : [];
+  // Solo los contenedores que YA llegaron a bodega cuentan para el inventario y el
+  // costo promedio; los que no han llegado se muestran aparte como "futuras cargas".
+  const llegados = activeSku ? activeSku.fuentes.filter((f) => f.llego) : [];
+  const futuros = activeSku ? activeSku.fuentes.filter((f) => !f.llego) : [];
+  const last5 = llegados.slice(0, 5);
   const stockKg = toNum(stockInput);
-  const resultado = activeSku && stockKg > 0 ? calcularPromedio(activeSku.fuentes, stockKg) : null;
+  const resultado = activeSku && stockKg > 0 ? calcularPromedio(llegados, stockKg, tcEstimado) : null;
 
   const seleccionar = (s: SkuCosto) => {
     setSelectedId(s.sku_id);
@@ -322,8 +384,15 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
                 {activeSku.descripcion}
               </div>
               <div className="text-xs muted" style={{ marginTop: 2 }}>
-                {activeSku.fuentes.length} contenedor{activeSku.fuentes.length !== 1 ? 'es' : ''} en
-                historial
+                <span className="fw-700" style={{ color: 'var(--green-600, #047857)' }}>
+                  {llegados.length} llegado{llegados.length !== 1 ? 's' : ''}
+                </span>
+                {futuros.length > 0 && (
+                  <span style={{ color: 'var(--amber-500)' }}>
+                    {' · '}{futuros.length} futura{futuros.length !== 1 ? 's' : ''}
+                  </span>
+                )}{' '}
+                · {activeSku.fuentes.length} en historial
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
@@ -346,10 +415,19 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
               }}
             >
               <span className="fw-700 text-sm">
-                Últimos {Math.min(5, last5.length)} contenedores — más reciente primero
+                Últimos {last5.length} contenedores llegados — más reciente primero
               </span>
               <span className="text-xs muted">referencia informativa</span>
             </div>
+            {last5.length === 0 ? (
+              <div className="empty" style={{ padding: '24px 16px' }}>
+                <Icon name="package" size={28} />
+                <div className="empty-title">Ningún contenedor llegado todavía</div>
+                <p className="muted">
+                  Aún no hay recepción de este SKU. Mira las futuras cargas abajo.
+                </p>
+              </div>
+            ) : (
             <table className="tbl">
               <thead>
                 <tr>
@@ -400,16 +478,70 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
                       {fmtUSD4(f.precio_usd)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <TcCell f={f} />
+                      <TcCell f={f} tcEstimado={tcEstimado} />
                     </td>
                     <td style={{ textAlign: 'right' }} className="mono fw-700">
-                      {f.tc != null ? fmtMXN(f.precio_usd * f.tc) : '—'}
+                      <MxnKgCell precioUsd={f.precio_usd} tcReal={f.tc} tcEstimado={tcEstimado} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            )}
           </div>
+
+          {/* Futuras cargas (aún no llegan a bodega) */}
+          {futuros.length > 0 && (
+            <div className="card">
+              <div
+                style={{
+                  padding: '10px 16px',
+                  borderBottom: '1px solid var(--ink-100)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'color-mix(in srgb, var(--amber-500) 6%, white)',
+                }}
+              >
+                <span className="fw-700 text-sm" style={{ color: '#92400E' }}>
+                  Futuras cargas — {futuros.length} contenedor{futuros.length !== 1 ? 'es' : ''} en camino
+                </span>
+                <span className="text-xs" style={{ color: '#92400E' }}>
+                  aún no llegan a bodega · no cuentan para el costo
+                </span>
+              </div>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Folio</th>
+                    <th>Contenedor</th>
+                    <th>ETA bodega</th>
+                    <th style={{ textAlign: 'right' }}>Kg</th>
+                    <th style={{ textAlign: 'right' }}>USD/kg</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {futuros.map((f) => (
+                    <tr key={f.contrato_id}>
+                      <td className="mono fw-600 text-sm">{f.folio}</td>
+                      <td className="mono text-xs">{f.contenedor ?? '—'}</td>
+                      <td className="text-sm">{fmtFechaCorta(f.eta_bodega)}</td>
+                      <td style={{ textAlign: 'right' }} className="mono fw-600">
+                        {fmtKg(f.kg)}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-700">
+                        {fmtUSD4(f.precio_usd)}
+                      </td>
+                      <td>
+                        <span className="badge badge-amber">{f.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Calculadora de stock */}
           <div className="card" style={{ padding: 18 }}>
@@ -464,15 +596,41 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
                   <ResultKpi
                     label="TC promedio"
                     value={resultado.avgTC != null ? resultado.avgTC.toFixed(4) : '—'}
-                    sub={resultado.avgTC != null ? 'ponderado por volumen' : 'sin pagos ni forward'}
+                    sub={
+                      resultado.avgTC == null
+                        ? 'sin pagos ni forward'
+                        : resultado.usaEstimado
+                          ? 'incluye TC estimado del día'
+                          : 'ponderado por volumen'
+                    }
+                    amber={resultado.usaEstimado}
                   />
                   <ResultKpi
-                    label="Costo prom. MXN"
+                    label={resultado.usaEstimado ? 'Costo prom. MXN (estimado)' : 'Costo prom. MXN'}
                     value={resultado.avgMXN != null ? fmtMXN(resultado.avgMXN) : '—'}
                     sub="por kilogramo"
-                    accent
+                    accent={!resultado.usaEstimado}
+                    amber={resultado.usaEstimado}
                   />
                 </div>
+
+                {resultado.usaEstimado && (
+                  <div
+                    className="text-xs"
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 'var(--r-sm)',
+                      background: 'color-mix(in srgb, var(--amber-500) 8%, white)',
+                      border: '1px solid color-mix(in srgb, var(--amber-500) 28%, white)',
+                      color: '#92400E',
+                      marginBottom: 12,
+                    }}
+                  >
+                    <strong>Costo MXN ESTIMADO:</strong> {fmtKg(resultado.kgEstimado)} de tu stock vienen
+                    de contenedores sin TC oficial todavía — se usó el <strong>TC del día</strong> para
+                    estimarlos. El costo en pesos es aproximado hasta que esos contenedores se liquiden.
+                  </div>
+                )}
 
                 {resultado.sinTC > 0 && (
                   <div
@@ -576,7 +734,7 @@ function InventarioView({ skus }: { skus: SkuCosto[] }) {
                               {fmtUSD4(f.precio_usd)}
                             </td>
                             <td style={{ textAlign: 'right' }} className="mono fw-700">
-                              {f.tc != null ? fmtMXN(f.precio_usd * f.tc) : '—'}
+                              <MxnKgCell precioUsd={f.precio_usd} tcReal={f.tc} tcEstimado={tcEstimado} />
                             </td>
                           </tr>
                         );
@@ -600,23 +758,55 @@ const TC_ORIGEN_LABEL: Record<string, string> = {
   ninguno: 'Sin TC disponible (falta pago, forward o TC del día)',
 };
 
-function TcCell({ f }: { f: FuenteCosto }) {
-  if (f.tc == null) {
+function TcCell({ f, tcEstimado }: { f: FuenteCosto; tcEstimado?: number | null }) {
+  if (f.tc != null) {
     return (
-      <span className="text-xs muted" title={TC_ORIGEN_LABEL.ninguno}>
-        —
+      <span
+        className="mono"
+        title={TC_ORIGEN_LABEL[f.tc_origen]}
+        style={{ borderBottom: '1px dotted var(--ink-300)', cursor: 'help' }}
+      >
+        {f.tc.toFixed(4)}
+      </span>
+    );
+  }
+  if (tcEstimado != null && tcEstimado > 0) {
+    return (
+      <span
+        className="mono"
+        title="TC estimado del día (no oficial) — el contenedor aún no tiene pagos ni forward"
+        style={{ color: 'var(--amber-500)', borderBottom: '1px dotted var(--amber-500)', cursor: 'help' }}
+      >
+        {tcEstimado.toFixed(4)}<span className="text-xs"> est.</span>
       </span>
     );
   }
   return (
-    <span
-      className="mono"
-      title={TC_ORIGEN_LABEL[f.tc_origen]}
-      style={{ borderBottom: '1px dotted var(--ink-300)', cursor: 'help' }}
-    >
-      {f.tc.toFixed(4)}
+    <span className="text-xs muted" title={TC_ORIGEN_LABEL.ninguno}>
+      —
     </span>
   );
+}
+
+/** Celda de costo MXN/kg: TC real (oficial) o estimado del día (en ámbar). */
+function MxnKgCell({
+  precioUsd,
+  tcReal,
+  tcEstimado,
+}: {
+  precioUsd: number;
+  tcReal: number | null;
+  tcEstimado: number | null;
+}) {
+  if (tcReal != null) return <>{fmtMXN(precioUsd * tcReal)}</>;
+  if (tcEstimado != null && tcEstimado > 0) {
+    return (
+      <span style={{ color: 'var(--amber-500)' }} title="Estimado con el TC del día (no oficial)">
+        {fmtMXN(precioUsd * tcEstimado)}<span className="text-xs"> est.</span>
+      </span>
+    );
+  }
+  return <>—</>;
 }
 
 function ResultKpi({
@@ -624,30 +814,239 @@ function ResultKpi({
   value,
   sub,
   accent,
+  amber,
 }: {
   label: string;
   value: string;
   sub: string;
   accent?: boolean;
+  amber?: boolean;
 }) {
+  const bg = amber
+    ? 'color-mix(in srgb, var(--amber-500) 8%, white)'
+    : accent
+      ? 'color-mix(in srgb, var(--blue-500) 5%, white)'
+      : 'var(--ink-50)';
+  const border = amber
+    ? 'color-mix(in srgb, var(--amber-500) 30%, white)'
+    : accent
+      ? 'color-mix(in srgb, var(--blue-500) 22%, white)'
+      : 'var(--ink-100)';
+  const valueColor = amber ? 'var(--amber-500)' : accent ? 'var(--blue-500)' : 'var(--ink-900)';
   return (
-    <div
-      style={{
-        padding: '12px 14px',
-        borderRadius: 'var(--r-sm)',
-        background: accent ? 'color-mix(in srgb, var(--blue-500) 5%, white)' : 'var(--ink-50)',
-        border: '1px solid ' + (accent ? 'color-mix(in srgb, var(--blue-500) 22%, white)' : 'var(--ink-100)'),
-      }}
-    >
+    <div style={{ padding: '12px 14px', borderRadius: 'var(--r-sm)', background: bg, border: '1px solid ' + border }}>
       <div className="kpi-label">{label}</div>
-      <div
-        className="mono fw-700"
-        style={{ fontSize: 16, color: accent ? 'var(--blue-500)' : 'var(--ink-900)', lineHeight: 1.1 }}
-      >
+      <div className="mono fw-700" style={{ fontSize: 16, color: valueColor, lineHeight: 1.1 }}>
         {value}
       </div>
       <div className="text-xs muted" style={{ marginTop: 3 }}>
         {sub}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Tab — Por contenedor ────────────────────────────────────────── */
+
+function ContenedoresView({
+  contenedores,
+  tcEstimado,
+}: {
+  contenedores: ContenedorCosto[];
+  tcEstimado: number | null;
+}) {
+  const [query, setQuery] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return contenedores;
+    return contenedores.filter(
+      (c) =>
+        c.folio.toLowerCase().includes(q) ||
+        (c.contenedor ?? '').toLowerCase().includes(q) ||
+        (c.naviera ?? '').toLowerCase().includes(q),
+    );
+  }, [contenedores, query]);
+
+  return (
+    <div className="vstack" style={{ gap: 12 }}>
+      <div
+        className="hstack"
+        style={{
+          gap: 8,
+          padding: '9px 12px',
+          background: 'white',
+          border: '1px solid var(--ink-200)',
+          borderRadius: 'var(--r-md)',
+          boxShadow: 'var(--shadow-sm)',
+          maxWidth: 560,
+        }}
+      >
+        <Icon name="search" size={14} />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar contenedor, folio o naviera…"
+          style={{
+            border: 'none',
+            outline: 'none',
+            flex: 1,
+            fontSize: 13,
+            fontWeight: 500,
+            background: 'transparent',
+            color: 'var(--ink-900)',
+          }}
+        />
+        <span className="text-xs muted">
+          {filtered.length} de {contenedores.length}
+        </span>
+      </div>
+
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <table className="tbl" style={{ minWidth: 880 }}>
+          <thead>
+            <tr>
+              <th>Folio</th>
+              <th>Contenedor</th>
+              <th>Estado</th>
+              <th style={{ textAlign: 'right' }}>Kg</th>
+              <th style={{ textAlign: 'right' }}>Total USD</th>
+              <th style={{ textAlign: 'right' }}>TC</th>
+              <th style={{ textAlign: 'right' }}>MXN/kg</th>
+              <th style={{ textAlign: 'right' }}>Total MXN</th>
+              <th style={{ width: 28 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((c) => {
+              const tcUsado = c.tc ?? (tcEstimado != null && tcEstimado > 0 ? tcEstimado : null);
+              const esEstimado = c.tc == null && tcUsado != null;
+              const totalMxn = tcUsado != null ? c.total_usd * tcUsado : null;
+              const avgUsdKg = c.total_kg > 0 ? c.total_usd / c.total_kg : 0;
+              const open = expandedId === c.contrato_id;
+              return (
+                <Fragment key={c.contrato_id}>
+                  <tr
+                    onClick={() => setExpandedId(open ? null : c.contrato_id)}
+                    style={{ cursor: 'pointer', background: open ? 'var(--ink-50)' : undefined }}
+                    title="Clic para ver el detalle por producto"
+                  >
+                    <td className="mono fw-600 text-sm">{c.folio}</td>
+                    <td className="mono text-xs">{c.contenedor ?? '—'}</td>
+                    <td>
+                      <div className="hstack" style={{ gap: 4, flexWrap: 'wrap' }}>
+                        {c.liquidado ? (
+                          <span className="badge badge-green">Liquidado</span>
+                        ) : (
+                          <span className="badge badge-amber">Pendiente</span>
+                        )}
+                        {!c.llego && (
+                          <span
+                            className="badge"
+                            style={{ background: 'var(--ink-100)', color: 'var(--ink-600)' }}
+                          >
+                            En camino
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-600">
+                      {fmtKg(c.total_kg)}
+                    </td>
+                    <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-700">
+                      {fmtUSD(c.total_usd)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <TcCell f={{ tc: c.tc, tc_origen: c.tc_origen } as FuenteCosto} tcEstimado={tcEstimado} />
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-700">
+                      <MxnKgCell precioUsd={avgUsdKg} tcReal={c.tc} tcEstimado={tcEstimado} />
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-700">
+                      {totalMxn != null ? (
+                        esEstimado ? (
+                          <span style={{ color: 'var(--amber-500)' }} title="Estimado con el TC del día (no oficial)">
+                            {fmtMXN(totalMxn)}<span className="text-xs"> est.</span>
+                          </span>
+                        ) : (
+                          fmtMXN(totalMxn)
+                        )
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right', color: 'var(--ink-400)' }}>
+                      <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
+                    </td>
+                  </tr>
+                  {open && (
+                    <tr>
+                      <td colSpan={9} style={{ background: 'var(--ink-50)', padding: 0 }}>
+                        <div style={{ padding: '10px 16px' }}>
+                          <div
+                            className="text-xs fw-700"
+                            style={{ color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}
+                          >
+                            Detalle — {c.lineas.length} producto{c.lineas.length !== 1 ? 's' : ''}
+                            {esEstimado && (
+                              <span style={{ color: 'var(--amber-500)' }}> · precios MXN ESTIMADOS (TC del día)</span>
+                            )}
+                          </div>
+                          <table className="tbl" style={{ background: 'white' }}>
+                            <thead>
+                              <tr>
+                                <th>Producto</th>
+                                <th style={{ textAlign: 'right' }}>Kg</th>
+                                <th style={{ textAlign: 'right' }}>USD/kg</th>
+                                <th style={{ textAlign: 'right' }}>MXN/kg</th>
+                                <th style={{ textAlign: 'right' }}>Total MXN</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {c.lineas.map((l, i) => (
+                                <tr key={i}>
+                                  <td className="text-sm fw-600">{l.descripcion}</td>
+                                  <td style={{ textAlign: 'right' }} className="mono">{fmtKg(l.kg)}</td>
+                                  <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-700">
+                                    {fmtUSD4(l.precio_usd)}
+                                  </td>
+                                  <td style={{ textAlign: 'right' }} className="mono fw-700">
+                                    <MxnKgCell precioUsd={l.precio_usd} tcReal={c.tc} tcEstimado={tcEstimado} />
+                                  </td>
+                                  <td style={{ textAlign: 'right' }} className="mono fw-700">
+                                    {tcUsado != null ? (
+                                      esEstimado ? (
+                                        <span style={{ color: 'var(--amber-500)' }}>
+                                          {fmtMXN(l.total_usd * tcUsado)}<span className="text-xs"> est.</span>
+                                        </span>
+                                      ) : (
+                                        fmtMXN(l.total_usd * tcUsado)
+                                      )
+                                    ) : (
+                                      '—'
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          {!c.liquidado && (
+                            <div className="text-xs muted" style={{ marginTop: 8 }}>
+                              {esEstimado
+                                ? 'Este contenedor aún no está liquidado: el costo en pesos es ESTIMADO con el TC del día. Quedará oficial al registrar los pagos.'
+                                : 'TC tomado de pagos/forward/TC ponderado. El costo será oficial al liquidar el saldo.'}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
