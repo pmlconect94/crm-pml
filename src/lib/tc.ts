@@ -1,17 +1,33 @@
+import { supabase } from './supabase';
+
 /**
- * Obtener el TC del día (USD → MXN) para usar como respaldo en costos.
+ * TC del día USD → MXN.
  *
- * TODO: integrar Edge Function `tc-del-dia` de Supabase que llama a Banxico SIE
- * con un token de servidor. Por ahora devuelve `null` para que el campo
- * `tc_ponderado` quede vacío y la Central de Costos use su fallback más bajo
- * (también el TC del día — sin valor por ahora).
- *
- * Cuando la Edge Function exista, sustituir el cuerpo por:
- *   const { data, error } = await supabase.functions.invoke('tc-del-dia');
- *   if (error) return null;
- *   return data.tc as number;
+ * Lo entrega la Edge Function `tc-del-dia` de Supabase, que trae el tipo de
+ * cambio de una API de mercado en vivo (frankfurter / open-er-api, sin token),
+ * lo cachea por día en `crm.tc_dia` y lo devuelve. Se usa como respaldo en
+ * costos y para prellenar el "TC del día estimado" en Central de Costos.
  */
+
+export type TcDelDiaInfo = { tc: number; fecha: string; fuente: string };
+
+export async function getTcDelDiaInfo(): Promise<TcDelDiaInfo | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('tc-del-dia');
+    if (error) return null;
+    const tc = Number((data as { tc?: unknown })?.tc);
+    if (!(tc > 0)) return null;
+    return {
+      tc,
+      fecha: String((data as { fecha?: unknown }).fecha ?? ''),
+      fuente: String((data as { fuente?: unknown }).fuente ?? ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getTcDelDia(): Promise<number | null> {
-  // Stub: hasta que tengamos Edge Function con Banxico, regresa null.
-  return null;
+  const info = await getTcDelDiaInfo();
+  return info?.tc ?? null;
 }

@@ -6,6 +6,7 @@ import { PageEnter, SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
 import { fmtMXN, fmtUSD, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
+import { getTcDelDiaInfo } from '@/lib/tc';
 import {
   fetchCostosData,
   calcularPromedio,
@@ -36,10 +37,29 @@ export function BlufinCostosPage() {
   const contenedores = data?.contenedores ?? [];
   const sugerido = data?.tcDelDiaSugerido ?? null;
 
-  // Prefill del TC del día con el TC del pago más reciente (editable).
+  // TC del día automático — Edge Function `tc-del-dia` (tasa de mercado en vivo,
+  // cacheada por día en la BD). Cambia solo cada día al abrir la página.
+  const { data: tcInfo } = useQuery({
+    queryKey: ['tc-del-dia'],
+    queryFn: getTcDelDiaInfo,
+    staleTime: 1000 * 60 * 60, // 1 h — la función ya cachea por día
+  });
+  const tcLive = tcInfo?.tc ?? null;
+
+  // Prellenado del TC del día. La tasa de mercado de hoy es la fuente preferida;
+  // el TC del último pago es solo respaldo si la tasa no está disponible. No se
+  // sobreescribe si el usuario ya tecleó manualmente (tcTouchedRef).
+  const tcTouchedRef = useRef(false);
   useEffect(() => {
-    if (sugerido != null) setTcInput((prev) => (prev === '' ? sugerido.toFixed(4) : prev));
-  }, [sugerido]);
+    // Cuando llega la tasa de mercado, gana (aunque el respaldo ya haya prellenado).
+    if (tcLive != null && !tcTouchedRef.current) setTcInput(tcLive.toFixed(4));
+  }, [tcLive]);
+  useEffect(() => {
+    // Respaldo: solo si no hay tasa de mercado y el campo sigue vacío.
+    if (tcLive == null && sugerido != null && !tcTouchedRef.current) {
+      setTcInput((prev) => (prev === '' ? sugerido.toFixed(4) : prev));
+    }
+  }, [tcLive, sugerido]);
 
   const tcEstimado = (() => {
     const n = toNum(tcInput);
@@ -79,7 +99,10 @@ export function BlufinCostosPage() {
           step="0.0001"
           min="0"
           value={tcInput}
-          onChange={(e) => setTcInput(e.target.value)}
+          onChange={(e) => {
+            tcTouchedRef.current = true;
+            setTcInput(e.target.value);
+          }}
           placeholder="18.0000"
           className="field-input mono"
           style={{ width: 120, fontSize: 13, fontWeight: 700, padding: '6px 10px' }}
@@ -87,13 +110,19 @@ export function BlufinCostosPage() {
         <span className="text-xs" style={{ color: '#92400E', flex: 1, minWidth: 240 }}>
           Se usa en los contenedores SIN TC oficial — esos costos salen en{' '}
           <strong>ámbar</strong> como ESTIMADOS al día de hoy.
-          {sugerido != null && (
+          {tcInfo != null ? (
+            <>
+              {' '}
+              Tomado automáticamente de la tasa de mercado del{' '}
+              <span className="fw-700">{fmtFechaCorta(tcInfo.fecha)}</span>.
+            </>
+          ) : sugerido != null ? (
             <>
               {' '}
               Sugerido (último pago):{' '}
               <span className="mono fw-700">{sugerido.toFixed(4)}</span>.
             </>
-          )}
+          ) : null}
         </span>
       </div>
 
