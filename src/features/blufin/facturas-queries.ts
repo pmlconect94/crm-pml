@@ -172,7 +172,7 @@ export async function approveFactura(facturaId: string): Promise<void> {
   // 1) Factura + sus líneas
   const { data: factura, error: fErr } = await supabase
     .from('blufin_facturas')
-    .select('id, contrato_id, status')
+    .select('id, contrato_id, status, drive_pdf_id')
     .eq('id', facturaId)
     .single();
   if (fErr) throw fErr;
@@ -239,14 +239,22 @@ export async function approveFactura(facturaId: string): Promise<void> {
   const { error: insErr } = await supabase.from('blufin_contrato_productos').insert(nuevas);
   if (insErr) throw insErr;
 
-  // 5) Totales del contrato (mantener pagos; saldo = total − anticipo, nunca negativo)
+  // 5) Totales del contrato (mantener pagos; saldo = total − anticipo, nunca negativo).
+  //    Además se liga el PDF de la factura (de Drive) al contrato para que la lista
+  //    de contratos muestre el indicador "tiene factura" y se pueda descargar desde ahí.
   const totalUsd = nuevas.reduce((s, n) => s + Number(n.total_usd ?? 0), 0);
   const totalKg = nuevas.reduce((s, n) => s + Number(n.kg ?? 0), 0);
   const anticipo = Number(contrato.anticipo_usd ?? 0);
   const saldoUsd = Math.max(0, totalUsd - anticipo);
+  const update: { total_usd: number; total_kg: number; saldo_usd: number; factura_drive_pdf_id?: string } = {
+    total_usd: totalUsd,
+    total_kg: totalKg,
+    saldo_usd: saldoUsd,
+  };
+  if (factura.drive_pdf_id) update.factura_drive_pdf_id = factura.drive_pdf_id;
   const { error: upErr } = await supabase
     .from('blufin_contratos')
-    .update({ total_usd: totalUsd, total_kg: totalKg, saldo_usd: saldoUsd })
+    .update(update)
     .eq('id', factura.contrato_id);
   if (upErr) throw upErr;
 

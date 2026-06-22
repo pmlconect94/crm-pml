@@ -399,8 +399,8 @@ export function BlufinContratosListPage() {
                             <Icon name="file-text" size={13} />
                           </span>
                           <span
-                            style={{ display: 'inline-flex', color: c.factura_pdf_path ? 'var(--blue-500)' : 'var(--ink-200)' }}
-                            title={c.factura_pdf_path ? 'Factura PDF disponible' : 'Sin PDF de factura'}
+                            style={{ display: 'inline-flex', color: (c.factura_pdf_path || c.factura_drive_pdf_id) ? 'var(--blue-500)' : 'var(--ink-200)' }}
+                            title={(c.factura_pdf_path || c.factura_drive_pdf_id) ? 'Factura PDF disponible' : 'Sin PDF de factura'}
                           >
                             <Icon name="receipt" size={13} />
                           </span>

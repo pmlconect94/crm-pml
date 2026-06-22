@@ -42,6 +42,30 @@ export async function getImportPdfUrl(path: string): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+/**
+ * Abre el PDF de la factura del proveedor ligado a un contrato, venga de donde
+ * venga: de Storage (`factura_pdf_path`, facturas históricas en el bucket
+ * `documentos-importacion`) o de Google Drive (`factura_drive_pdf_id`, facturas
+ * que llegaron por correo y se ligaron al aprobar). Devuelve false si no hay PDF.
+ */
+export async function abrirFacturaDeContrato(c: {
+  factura_pdf_path?: string | null;
+  factura_drive_pdf_id?: string | null;
+}): Promise<boolean> {
+  if (c.factura_pdf_path) {
+    const url = await getImportPdfUrl(c.factura_pdf_path);
+    if (url) {
+      window.open(url, '_blank');
+      return true;
+    }
+  }
+  if (c.factura_drive_pdf_id) {
+    window.open(`https://drive.google.com/file/d/${c.factura_drive_pdf_id}/view`, '_blank', 'noopener');
+    return true;
+  }
+  return false;
+}
+
 // ─── Edición de la revisión ──────────────────────────────────────────────────
 
 /** Reasigna el SKU de un renglón. Si el usuario lo eligió a mano, confianza = alta. */

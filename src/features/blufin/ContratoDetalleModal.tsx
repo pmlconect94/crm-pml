@@ -8,7 +8,7 @@ import { statusContrato } from '@/features/blufin/status';
 import { toast } from 'sonner';
 import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratoDetalle } from '@/features/blufin/queries';
-import { getImportPdfUrl } from '@/features/blufin/import-queries';
+import { getImportPdfUrl, abrirFacturaDeContrato } from '@/features/blufin/import-queries';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 async function abrirPdf(path: string) {
@@ -16,6 +16,16 @@ async function abrirPdf(path: string) {
     const url = await getImportPdfUrl(path);
     if (url) window.open(url, '_blank');
     else toast.error('No se encontró el PDF');
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
+  }
+}
+
+/** Abre la factura del contrato (Storage o Drive). */
+async function abrirFactura(c: { factura_pdf_path?: string | null; factura_drive_pdf_id?: string | null }) {
+  try {
+    const ok = await abrirFacturaDeContrato(c);
+    if (!ok) toast.error('No se encontró el PDF de la factura');
   } catch (e) {
     toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
   }
@@ -152,10 +162,10 @@ export function ContratoDetalleModal({
                         <Icon name="file-text" size={13} /> Contrato
                       </button>
                     )}
-                    {c.factura_pdf_path && (
+                    {(c.factura_pdf_path || c.factura_drive_pdf_id) && (
                       <button
                         className="btn btn-outline btn-sm"
-                        onClick={() => abrirPdf(c.factura_pdf_path!)}
+                        onClick={() => abrirFactura(c)}
                         title="Descargar el PDF de la factura del proveedor"
                       >
                         <Icon name="receipt" size={13} /> Factura

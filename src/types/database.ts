@@ -85,6 +85,7 @@ export type Database = {
           observaciones: string | null;
           contrato_pdf_path: string | null;
           factura_pdf_path: string | null;
+          factura_drive_pdf_id: string | null;
           created_at: string | null;
           created_by: string | null;
           updated_at: string | null;
@@ -115,6 +116,7 @@ export type Database = {
           observaciones?: string | null;
           contrato_pdf_path?: string | null;
           factura_pdf_path?: string | null;
+          factura_drive_pdf_id?: string | null;
           created_by?: string | null;
         };
         Update: {
@@ -143,6 +145,7 @@ export type Database = {
           observaciones?: string | null;
           contrato_pdf_path?: string | null;
           factura_pdf_path?: string | null;
+          factura_drive_pdf_id?: string | null;
         };
         Relationships: Empty;
       };
