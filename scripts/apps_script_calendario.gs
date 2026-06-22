@@ -20,7 +20,7 @@
 function guardarCalendarioMenita() {
   var FOLDER_ID = '19WhqL_qQm1Z6CAru9IdjPYzEh1PuIRgN'; // "Calendario Menita CRM"
   var folder = DriveApp.getFolderById(FOLDER_ID);
-  var query = 'from:alfonso.gutierrez@menita.com.mx subject:Calendario has:attachment newer_than:30d';
+  var query = 'from:alfonso.gutierrez@menita.com.mx subject:"Calendario de llegadas" has:attachment newer_than:30d';
 
   var threads = GmailApp.search(query, 0, 50);
   var guardados = 0;
