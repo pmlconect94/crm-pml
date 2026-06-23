@@ -28,24 +28,19 @@ export function BlufinLayout() {
       <div
         className="hstack"
         style={{
-          gap: 16,
+          gap: 10,
           alignItems: 'center',
-          marginBottom: 16,
+          marginBottom: 12,
         }}
       >
         <div
           style={{
-            width: 150,
-            height: 84,
-            borderRadius: 'var(--r-md)',
-            background: 'white',
-            border: '1px solid var(--ink-200)',
+            width: 52,
+            height: 40,
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 6,
-            flexShrink: 0,
-            boxShadow: 'var(--shadow-sm)',
           }}
         >
           <img
@@ -54,16 +49,12 @@ export function BlufinLayout() {
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
           />
         </div>
-        <div style={{ flex: 1 }}>
-          <div className="hstack" style={{ gap: 12 }}>
-            <h1 className="page-title" style={{ margin: 0, fontSize: 28 }}>
-              Blufin Seafood
-            </h1>
-            <span className="badge badge-blue">
-              <span className="dot" /> Activo
-            </span>
-          </div>
-        </div>
+        <h1 className="page-title" style={{ margin: 0, fontSize: 19 }}>
+          Blufin Seafood
+        </h1>
+        <span className="badge badge-blue">
+          <span className="dot" /> Activo
+        </span>
       </div>
 
       <div className="tabs">
