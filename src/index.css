@@ -453,6 +453,16 @@ textarea.field-input { resize: vertical; min-height: 80px; }
   animation: loginIn 420ms var(--ease-out);
 }
 
+/* Olas animadas del login (superficie de marca — océano de Productos del Mar).
+   Drift horizontal continuo, transform-only (compositado en GPU, sin tocar
+   layout). Se congela con prefers-reduced-motion. */
+@keyframes waveDrift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.login-waves { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; overflow: hidden; pointer-events: none; z-index: 0; }
+.login-waves > svg { position: absolute; left: 0; bottom: 0; width: 200%; display: block; will-change: transform; }
+.login-waves .w3 { height: 100%; animation: waveDrift 30s linear infinite; }
+.login-waves .w2 { height: 82%;  animation: waveDrift 20s linear infinite reverse; }
+.login-waves .w1 { height: 62%;  animation: waveDrift 14s linear infinite; }
+
 /* Login responsive split */
 @media (min-width: 920px) {
   .login-grid {
@@ -486,7 +496,7 @@ textarea.field-input { resize: vertical; min-height: 80px; }
 
 /* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
-  .fade-up, .page-enter, .popover, .login-card-enter {
+  .fade-up, .page-enter, .popover, .login-card-enter, .login-waves > svg {
     animation: none;
     opacity: 1;
     transform: none;

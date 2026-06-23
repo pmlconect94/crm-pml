@@ -47,18 +47,30 @@ export function LoginPage() {
           overflow: 'hidden',
         }}
       >
-        {/* textura sutil */}
+        {/* glow sutil de profundidad */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
             backgroundImage:
-              'radial-gradient(ellipse at 75% 15%, rgba(0,163,255,0.16), transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(0,115,230,0.12), transparent 55%), linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)',
-            backgroundSize: '100% 100%, 100% 100%, 38px 38px, 38px 38px',
+              'radial-gradient(ellipse at 78% 10%, rgba(0,163,255,0.20), transparent 58%), radial-gradient(ellipse at 18% 60%, rgba(0,115,230,0.12), transparent 62%)',
             pointerEvents: 'none',
           }}
         />
+
+        {/* Olas animadas — océano (Productos del Mar) */}
+        <div className="login-waves" aria-hidden>
+          <svg className="w3" viewBox="0 0 1440 140" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,64 C120,104 240,104 360,64 C480,24 600,24 720,64 C840,104 960,104 1080,64 C1200,24 1320,24 1440,64 L1440,140 L0,140 Z" fill="rgba(0,115,230,0.10)" />
+          </svg>
+          <svg className="w2" viewBox="0 0 1440 140" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,64 C120,104 240,104 360,64 C480,24 600,24 720,64 C840,104 960,104 1080,64 C1200,24 1320,24 1440,64 L1440,140 L0,140 Z" fill="rgba(0,163,255,0.13)" />
+          </svg>
+          <svg className="w1" viewBox="0 0 1440 140" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,64 C120,104 240,104 360,64 C480,24 600,24 720,64 C840,104 960,104 1080,64 C1200,24 1320,24 1440,64 L1440,140 L0,140 Z" fill="rgba(125,205,255,0.16)" />
+          </svg>
+        </div>
 
         {/* marca arriba */}
         <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 11 }}>
@@ -84,7 +96,7 @@ export function LoginPage() {
           <img
             src="/assets/marlin-logo.png"
             alt="Marlin Lizárraga"
-            style={{ width: 220, maxWidth: '70%', objectFit: 'contain', filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.4))' }}
+            style={{ width: 264, maxWidth: '78%', objectFit: 'contain', filter: 'drop-shadow(0 14px 34px rgba(0,0,0,0.45))' }}
           />
           <div style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', marginTop: 4 }}>
             Marlin Lizárraga, S. de R.L. de C.V.
@@ -99,7 +111,7 @@ export function LoginPage() {
           <img
             src="/assets/pml-logo-transparent.png"
             alt="Productos Marinos Lizárraga"
-            style={{ width: 280, maxWidth: '86%', objectFit: 'contain', filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.35))' }}
+            style={{ width: 344, maxWidth: '92%', objectFit: 'contain', filter: 'drop-shadow(0 14px 34px rgba(0,0,0,0.38))' }}
           />
           <div style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', marginTop: 2 }}>
             Productos Marinos Lizárraga, S. de R.L. de C.V.
