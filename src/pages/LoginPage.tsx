@@ -88,7 +88,7 @@ export function LoginPage() {
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>Grupo Lizárraga</div>
             <div style={{ fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
-              CRM Corporativo
+              ERP Corporativo
             </div>
           </div>
         </div>
