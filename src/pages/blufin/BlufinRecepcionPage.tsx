@@ -9,7 +9,6 @@ import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
 import { StatStrip } from '@/components/StatStrip';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { statusContrato } from '@/features/blufin/status';
-import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
 import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtFechaCorta, fmtFecha, diasDesde } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
@@ -47,7 +46,6 @@ export function BlufinRecepcionPage() {
     null,
   );
   const [programarTarget, setProgramarTarget] = useState<BlufinContratoConProductos | null>(null);
-  const [detalleId, setDetalleId] = useState<string | null>(null);
 
   const { data: porRecibir = [], isLoading: loadingPorRecibir } = useQuery({
     queryKey: ['blufin_contratos_por_recibir', empresaId],
@@ -165,19 +163,13 @@ export function BlufinRecepcionPage() {
         />
       )}
       {view === 'calendario' && (
-        <CalendarioView
-          porRecibir={porRecibir}
-          recepciones={recepciones}
-          onVerContrato={setDetalleId}
-        />
+        <CalendarioView porRecibir={porRecibir} recepciones={recepciones} />
       )}
 
       <ProgramarLlegadaModal
         contrato={programarTarget}
         onClose={() => setProgramarTarget(null)}
       />
-
-      <ContratoDetalleModal contratoId={detalleId} onClose={() => setDetalleId(null)} />
 
       <DeleteConfirmModal
         open={!!deleteTarget}
@@ -897,11 +889,9 @@ const isoDe = (d: Date) =>
 function CalendarioView({
   porRecibir,
   recepciones,
-  onVerContrato,
 }: {
   porRecibir: BlufinContratoConProductos[];
   recepciones: BlufinRecepcionEnriquecida[];
-  onVerContrato: (id: string) => void;
 }) {
   const hoy = new Date();
   const [mes, setMes] = useState(() => new Date(hoy.getFullYear(), hoy.getMonth(), 1));
@@ -1078,8 +1068,7 @@ function CalendarioView({
                     <div
                       key={j}
                       className="mono"
-                      title={`${estilo.t}${ev.contratoId ? ' — clic para ver la ficha' : ''}`}
-                      onClick={ev.contratoId ? () => onVerContrato(ev.contratoId!) : undefined}
+                      title={estilo.t}
                       style={{
                         fontSize: 9.5,
                         fontWeight: 600,
@@ -1090,7 +1079,6 @@ function CalendarioView({
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        cursor: ev.contratoId ? 'pointer' : 'default',
                       }}
                     >
                       {ev.folio}

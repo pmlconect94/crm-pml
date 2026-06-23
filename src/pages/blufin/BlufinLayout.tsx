@@ -29,21 +29,21 @@ export function BlufinLayout() {
         className="hstack"
         style={{
           gap: 16,
-          alignItems: 'flex-start',
+          alignItems: 'center',
           marginBottom: 16,
         }}
       >
         <div
           style={{
-            width: 120,
-            height: 60,
+            width: 150,
+            height: 84,
             borderRadius: 'var(--r-md)',
             background: 'white',
             border: '1px solid var(--ink-200)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 8,
+            padding: 6,
             flexShrink: 0,
             boxShadow: 'var(--shadow-sm)',
           }}
@@ -55,16 +55,13 @@ export function BlufinLayout() {
           />
         </div>
         <div style={{ flex: 1 }}>
-          <div className="hstack" style={{ gap: 10, marginBottom: 4 }}>
-            <h1 className="page-title" style={{ margin: 0 }}>
+          <div className="hstack" style={{ gap: 12 }}>
+            <h1 className="page-title" style={{ margin: 0, fontSize: 28 }}>
               Blufin Seafood
             </h1>
             <span className="badge badge-blue">
               <span className="dot" /> Activo
             </span>
-          </div>
-          <div className="text-sm muted">
-            Menita Comercial Oceánica · RFC <span className="mono">MCO060711537</span> · José Luis Aroche Martínez
           </div>
         </div>
       </div>
