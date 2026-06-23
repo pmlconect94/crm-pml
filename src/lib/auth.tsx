@@ -1,4 +1,13 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
 export type Rol =
   | 'admin_total'
@@ -25,56 +34,77 @@ export const PERMISOS: Record<Rol, { depts: string[] }> = {
   vendedor:        { depts: ['ventas'] },
 };
 
-// Usuarios dados de alta por nosotros (no hay auto-registro). Los 3 con permiso
-// de ver todo (admin_total). TRANSICIÓN: por ahora el login valida solo el
-// correo (la contraseña real se valida con Supabase Auth cuando se conecte —
-// pendiente #3). Las contraseñas NO viven en el código.
-const USUARIOS: Usuario[] = [
-  { id: '00000000-0000-0000-0000-000000000001', nombre: 'DIEGO DIAZ LIZARRAGA',          email: 'ddl.pml2@gmail.com',              rol: 'admin_total', empresaId: 'pml' },
-  { id: '00000000-0000-0000-0000-000000000002', nombre: 'ANA SILVIA LIZARRAGA JIMENEZ',   email: 'anasilvia_lizarraga@hotmail.com', rol: 'admin_total', empresaId: 'pml' },
-  { id: '00000000-0000-0000-0000-000000000003', nombre: 'JESUS LIZARRAGA JIMENEZ',        email: 'lizarragajesus@hotmail.com',      rol: 'admin_total', empresaId: 'pml' },
-];
+// El nombre y el rol viven en el user_metadata del usuario de Supabase Auth
+// (se setean al darlo de alta). No hay módulo de usuarios: se crean a mano.
+function usuarioDeSesion(session: Session | null): Usuario | null {
+  const u = session?.user;
+  if (!u) return null;
+  const m = (u.user_metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: u.id,
+    nombre: (m.nombre as string) || u.email || 'Usuario',
+    email: u.email ?? '',
+    rol: ((m.rol as Rol) ?? 'admin_total'),
+    empresaId: ((m.empresa_id as 'pml' | 'marlin') ?? 'pml'),
+  };
+}
 
 type AuthContextValue = {
   user: Usuario | null;
+  /** true mientras se resuelve la sesión inicial (evita parpadeo al recargar). */
+  loading: boolean;
   empresaId: 'pml' | 'marlin';
   setEmpresa: (e: 'pml' | 'marlin') => void;
-  /** Devuelve true si el correo corresponde a un usuario dado de alta. */
-  signIn: (email: string, password: string) => boolean;
-  signOut: () => void;
+  signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signOut: () => Promise<void>;
   hasDept: (dept: string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Usuario | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const cached = localStorage.getItem('crm_user');
-    return cached ? (JSON.parse(cached) as Usuario) : null;
-  });
+  const [user, setUser] = useState<Usuario | null>(null);
+  const [loading, setLoading] = useState(true);
   const [empresaId, setEmpresaIdState] = useState<'pml' | 'marlin'>('pml');
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setUser(usuarioDeSesion(data.session));
+      setLoading(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(usuarioDeSesion(session));
+    });
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      loading,
       empresaId,
       setEmpresa: (e) => setEmpresaIdState(e),
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      signIn: (email, _password) => {
-        const u = USUARIOS.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
-        if (!u) return false;
-        localStorage.setItem('crm_user', JSON.stringify(u));
-        setUser(u);
-        return true;
+      signIn: async (email, password) => {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) return { ok: false, error: error.message };
+        setUser(usuarioDeSesion(data.session));
+        return { ok: true };
       },
-      signOut: () => {
-        localStorage.removeItem('crm_user');
+      signOut: async () => {
+        await supabase.auth.signOut();
         setUser(null);
       },
       hasDept: (dept) => (user ? PERMISOS[user.rol].depts.includes(dept) : false),
     }),
-    [user, empresaId],
+    [user, loading, empresaId],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

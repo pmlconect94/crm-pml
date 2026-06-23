@@ -53,7 +53,12 @@ def load_env(path=".env.local"):
 
 ENV = load_env()
 URL = ENV["VITE_SUPABASE_URL"].rstrip("/")
-KEY = ENV["VITE_SUPABASE_ANON_KEY"]
+# Con RLS endurecida (solo authenticated), la anon key ya no tiene acceso a la
+# base: usar la service_role. Ponla en .env.local como SUPABASE_SERVICE_ROLE_KEY
+# (Supabase Dashboard -> Settings -> API). NO la subas a Vercel ni al frontend.
+KEY = ENV.get("SUPABASE_SERVICE_ROLE_KEY") or ENV.get("VITE_SUPABASE_ANON_KEY")
+if not KEY:
+    raise SystemExit("Falta SUPABASE_SERVICE_ROLE_KEY en .env.local")
 
 
 def rest_get(path):

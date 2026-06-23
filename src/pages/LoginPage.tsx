@@ -4,27 +4,29 @@ import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/Icon';
 
 export function LoginPage() {
-  const { user, signIn } = useAuth();
+  const { user, loading, signIn } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
+  if (loading) return null;
   if (user) return <Navigate to="/app/dashboard" replace />;
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!email.trim() || !password) {
       setError('Escribe tu correo y contraseña.');
       return;
     }
-    if (signIn(email, password)) {
-      navigate('/app/dashboard');
-    } else {
-      setError('Correo o contraseña incorrectos.');
-    }
+    setSubmitting(true);
+    const res = await signIn(email, password);
+    setSubmitting(false);
+    if (res.ok) navigate('/app/dashboard');
+    else setError('Correo o contraseña incorrectos.');
   };
 
   return (
@@ -192,9 +194,20 @@ export function LoginPage() {
               </div>
             )}
 
-            <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: 2 }}>
-              Entrar al sistema
-              <Icon name="arrow-right" size={14} />
+            <button
+              type="submit"
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%', marginTop: 2 }}
+              disabled={submitting}
+            >
+              {submitting ? (
+                'Entrando…'
+              ) : (
+                <>
+                  Entrar al sistema
+                  <Icon name="arrow-right" size={14} />
+                </>
+              )}
             </button>
           </div>
 
