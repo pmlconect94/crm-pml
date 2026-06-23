@@ -297,6 +297,8 @@ function PorRecibirView({
                 gridTemplateColumns: '46px 1fr 130px 110px 80px 180px',
                 gap: 16,
                 alignItems: 'center',
+                // Resalta los contenedores con llegada YA programada (fecha oficial).
+                background: yaProgramada ? 'color-mix(in srgb, var(--green-500) 6%, white)' : undefined,
               }}
             >
               <div
@@ -354,9 +356,29 @@ function PorRecibirView({
                     <span className="muted"> +{productos.length - 1} más</span>
                   )}
                 </div>
-                <div className="text-xs muted">
-                  {[c.contenedor, c.naviera, c.bodega_destino].filter(Boolean).join(' · ') ||
-                    'Contenedor por asignar'}
+                <div className="hstack text-xs" style={{ gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
+                  <span className="muted">
+                    {[c.contenedor, c.naviera].filter(Boolean).join(' · ') || 'Contenedor por asignar'}
+                  </span>
+                  {c.bodega_destino && (
+                    <span
+                      className="hstack"
+                      style={{
+                        gap: 4,
+                        fontWeight: 700,
+                        fontSize: 11,
+                        color: '#065F46',
+                        background: 'color-mix(in srgb, var(--green-500) 14%, white)',
+                        border: '1px solid color-mix(in srgb, var(--green-500) 28%, white)',
+                        padding: '1px 8px',
+                        borderRadius: 999,
+                      }}
+                      title="Lugar de llegada acordado"
+                    >
+                      <Icon name="building" size={11} />
+                      {c.bodega_destino}
+                    </span>
+                  )}
                 </div>
               </div>
               <div>
