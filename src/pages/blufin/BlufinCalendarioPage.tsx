@@ -1,18 +1,17 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { StatStrip } from '@/components/StatStrip';
 import { useAuth } from '@/lib/auth';
-import { fmtUSD, fmtFechaCorta, fmtKg } from '@/lib/format';
+import { fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratos } from '@/features/blufin/queries';
 import { fetchRecepciones } from '@/features/blufin/recepcion-queries';
 import { statusContrato } from '@/features/blufin/status';
 import { StatusPill } from '@/features/blufin/StatusPill';
-import { ContratoDetalleModal } from '@/features/blufin/ContratoDetalleModal';
 import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida } from '@/types/database';
 
-/* ─── Helpers de fecha (todo en hora local, formato YYYY-MM-DD) ──────── */
+/* ─── Helpers de fecha (hora local, YYYY-MM-DD) ──────────────────────── */
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -24,8 +23,8 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const isoDe = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const hoyISO = () => isoDe(new Date());
 
-// ETA bodega "auto" = ETA puerto + 7d (regla §14.4). Si la ETA bodega guardada
-// coincide con esto, es estimada; si difiere, ya es oficial.
+// ETA bodega "auto" = ETA puerto + 7d (regla §14.4). Si coincide con la guardada,
+// la ETA bodega sigue siendo estimada; si difiere, ya es oficial.
 const etaBodegaAuto = (etaPuerto: string) => {
   const d = new Date(etaPuerto + 'T12:00:00');
   d.setDate(d.getDate() + 7);
@@ -36,33 +35,22 @@ const addDiasISO = (iso: string, n: number) => {
   d.setDate(d.getDate() + n);
   return isoDe(d);
 };
-const lunesDeISO = (iso: string) => {
-  const d = new Date(iso + 'T12:00:00');
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  return isoDe(d);
-};
 
-/* ─── Eventos del calendario ─────────────────────────────────────────── */
+/* ─── Eventos del calendario (SOLO llegadas) ─────────────────────────── */
 
-type TipoEvento = 'eta-puerto' | 'eta-bodega' | 'recepcion' | 'anticipo' | 'saldo';
+type TipoEvento = 'eta-puerto' | 'eta-bodega' | 'recepcion';
 
 type CalEvento = {
   tipo: TipoEvento;
   fecha: string;
   folio: string;
-  contratoId: string;
-  contenedor?: string | null;
-  naviera?: string | null;
-  monto?: number | null;
   estimada?: boolean; // solo eta-bodega
 };
 
 const EVENTO_META: Record<TipoEvento, { label: string; color: string }> = {
   'eta-puerto': { label: 'ETA puerto', color: 'var(--blue-500)' },
   'eta-bodega': { label: 'ETA bodega', color: 'var(--violet-500)' },
-  recepcion: { label: 'Recepción', color: 'var(--green-500)' },
-  anticipo: { label: 'Pago anticipo', color: 'var(--red-500)' },
-  saldo: { label: 'Pago saldo', color: 'var(--red-500)' },
+  recepcion: { label: 'Recibido', color: 'var(--green-500)' },
 };
 
 const colorEvento = (e: CalEvento) =>
@@ -70,49 +58,13 @@ const colorEvento = (e: CalEvento) =>
 
 const folioCorto = (f: string) => f.split('-').pop() ?? f;
 
-// Exportar un evento como archivo .ics (Google Calendar / Outlook / Apple).
-function downloadICS(e: CalEvento) {
-  const dt = e.fecha.replace(/-/g, '');
-  const meta = EVENTO_META[e.tipo];
-  const desc = [
-    e.contenedor ? `Contenedor: ${e.contenedor}` : null,
-    e.naviera ? `Naviera: ${e.naviera}` : null,
-    e.monto ? `Monto: ${fmtUSD(e.monto)} USD` : null,
-  ]
-    .filter(Boolean)
-    .join('\\n');
-  const ics = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Grupo Lizarraga//CRM//ES',
-    'BEGIN:VEVENT',
-    `UID:${e.contratoId}-${e.tipo}-${dt}@crm-pml`,
-    `DTSTART;VALUE=DATE:${dt}`,
-    `DTEND;VALUE=DATE:${dt}`,
-    `SUMMARY:${meta.label} — ${e.folio}`,
-    desc ? `DESCRIPTION:${desc}` : '',
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ]
-    .filter(Boolean)
-    .join('\r\n');
-  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
-  const a = Object.assign(document.createElement('a'), {
-    href: url,
-    download: `${e.folio}-${e.tipo}.ics`,
-  });
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 /* ─── Página ─────────────────────────────────────────────────────────── */
 
-type Vista = 'producto' | 'calendario' | 'lista';
+type Vista = 'producto' | 'calendario';
 
 export function BlufinCalendarioPage() {
   const { empresaId } = useAuth();
   const [vista, setVista] = useState<Vista>('producto');
-  const [detalleId, setDetalleId] = useState<string | null>(null);
   const hoy = hoyISO();
   const [mesAncla, setMesAncla] = useState(() => {
     const d = new Date();
@@ -128,6 +80,7 @@ export function BlufinCalendarioPage() {
     queryFn: () => fetchRecepciones(empresaId),
   });
 
+  // Solo eventos de LLEGADA: ETA puerto, ETA bodega y recepciones. Sin pagos.
   const eventos = useMemo<CalEvento[]>(() => {
     const out: CalEvento[] = [];
     const recibidoIds = new Set(
@@ -135,52 +88,19 @@ export function BlufinCalendarioPage() {
     );
     for (const c of contratos) {
       const recibido = recibidoIds.has(c.id) || c.status === 'Entregado' || !!c.llegada_real;
-      if (!recibido) {
-        if (c.eta_puerto)
-          out.push({
-            tipo: 'eta-puerto',
-            fecha: c.eta_puerto,
-            folio: c.folio,
-            contratoId: c.id,
-            contenedor: c.contenedor,
-            naviera: c.naviera,
-          });
-        if (c.eta_bodega)
-          out.push({
-            tipo: 'eta-bodega',
-            fecha: c.eta_bodega,
-            folio: c.folio,
-            contratoId: c.id,
-            contenedor: c.contenedor,
-            naviera: c.naviera,
-            estimada: !!c.eta_puerto && etaBodegaAuto(c.eta_puerto) === c.eta_bodega,
-          });
-      }
-      if (c.anticipo_fecha && !c.anticipo_pagado)
+      if (recibido) continue;
+      if (c.eta_puerto) out.push({ tipo: 'eta-puerto', fecha: c.eta_puerto, folio: c.folio });
+      if (c.eta_bodega)
         out.push({
-          tipo: 'anticipo',
-          fecha: c.anticipo_fecha,
+          tipo: 'eta-bodega',
+          fecha: c.eta_bodega,
           folio: c.folio,
-          contratoId: c.id,
-          monto: c.anticipo_usd,
-        });
-      if (c.saldo_fecha && !c.saldo_pagado)
-        out.push({
-          tipo: 'saldo',
-          fecha: c.saldo_fecha,
-          folio: c.folio,
-          contratoId: c.id,
-          monto: c.saldo_usd,
+          estimada: !!c.eta_puerto && etaBodegaAuto(c.eta_puerto) === c.eta_bodega,
         });
     }
     for (const r of recepciones) {
       if (r.fecha_recepcion)
-        out.push({
-          tipo: 'recepcion',
-          fecha: r.fecha_recepcion,
-          folio: r.contrato?.folio ?? '—',
-          contratoId: r.contrato_id ?? '',
-        });
+        out.push({ tipo: 'recepcion', fecha: r.fecha_recepcion, folio: r.contrato?.folio ?? '—' });
     }
     return out;
   }, [contratos, recepciones]);
@@ -194,59 +114,28 @@ export function BlufinCalendarioPage() {
       if (s === 'En tránsito') enTransito++;
       else if (s === 'En puerto') enPuerto++;
     }
-    const esEta = (e: CalEvento) => e.tipo === 'eta-puerto' || e.tipo === 'eta-bodega';
-    const esPago = (e: CalEvento) => e.tipo === 'anticipo' || e.tipo === 'saldo';
-    const etasSemana = eventos.filter((e) => esEta(e) && e.fecha >= hoy && e.fecha <= finSemana).length;
-    const pagosSemana = eventos.filter((e) => esPago(e) && e.fecha >= hoy && e.fecha <= finSemana);
-    const pagosAtras = eventos.filter((e) => esPago(e) && e.fecha < hoy);
-    const sumaSemana = pagosSemana.reduce((s, e) => s + (e.monto ?? 0), 0);
-    return {
-      enTransito,
-      enPuerto,
-      etasSemana,
-      pagosSemanaN: pagosSemana.length,
-      sumaSemana,
-      pagosAtrasN: pagosAtras.length,
-    };
+    const etasSemana = eventos.filter(
+      (e) => e.tipo !== 'recepcion' && e.fecha >= hoy && e.fecha <= finSemana,
+    ).length;
+    return { enTransito, enPuerto, etasSemana };
   }, [contratos, eventos, hoy]);
 
   return (
     <>
       <PageEnter style={{ marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>
-          Calendario
+          Llegadas
         </h2>
         <p className="page-subtitle">
-          Llegadas a puerto y bodega, recepciones y vencimientos de pago en un solo lugar
+          Mercancía por llegar por producto y calendario de arribos a puerto y bodega
         </p>
       </PageEnter>
-
-      {vista !== 'producto' && (
-        <StatStrip
-          stats={[
-            { value: stats.enTransito, label: 'en tránsito' },
-            { value: stats.enPuerto, label: 'en puerto' },
-            { value: stats.etasSemana, label: 'ETAs esta semana', color: 'var(--blue-500)' },
-            {
-              value: stats.pagosSemanaN,
-              label: `pagos esta semana · ${fmtUSD(stats.sumaSemana)}`,
-              color: 'var(--amber-500)',
-            },
-            {
-              value: stats.pagosAtrasN,
-              label: 'pagos atrasados',
-              color: stats.pagosAtrasN > 0 ? 'var(--red-500)' : undefined,
-            },
-          ]}
-        />
-      )}
 
       <div className="tabs" style={{ marginBottom: 12 }}>
         {(
           [
             { id: 'producto', label: 'Por producto', icon: 'search' },
             { id: 'calendario', label: 'Calendario', icon: 'calendar' },
-            { id: 'lista', label: 'Lista', icon: 'file-text' },
           ] as const
         ).map((t) => (
           <button
@@ -261,114 +150,128 @@ export function BlufinCalendarioPage() {
       </div>
 
       {vista === 'producto' ? (
-        <PorProductoView
-          contratos={contratos}
-          recepciones={recepciones}
-          hoy={hoy}
-          onVer={setDetalleId}
-        />
-      ) : vista === 'calendario' ? (
-        <CalendarioGrid
-          eventos={eventos}
-          mesAncla={mesAncla}
-          hoy={hoy}
-          onMes={setMesAncla}
-          onVer={setDetalleId}
-        />
+        <PorProductoView contratos={contratos} recepciones={recepciones} hoy={hoy} />
       ) : (
-        <ListaView eventos={eventos} hoy={hoy} onVer={setDetalleId} />
+        <>
+          <StatStrip
+            stats={[
+              { value: stats.enTransito, label: 'en tránsito' },
+              { value: stats.enPuerto, label: 'en puerto' },
+              { value: stats.etasSemana, label: 'ETAs esta semana', color: 'var(--blue-500)' },
+            ]}
+          />
+          <CalendarioGrid eventos={eventos} mesAncla={mesAncla} hoy={hoy} onMes={setMesAncla} />
+        </>
       )}
-
-      <ContratoDetalleModal contratoId={detalleId} onClose={() => setDetalleId(null)} />
     </>
   );
 }
 
-/* ─── Por producto — mercancía por llegar (para ventas) ──────────────── */
+/* ─── Por producto — mercancía por llegar (agrupada por SKU) ──────────── */
 
-type LineaPorLlegar = {
-  contratoId: string;
+type ItemContenedor = {
   folio: string;
   status: ReturnType<typeof statusContrato>;
   contenedor: string | null;
   naviera: string | null;
   etaBodega: string | null;
   etaEstimada: boolean;
-  descripcion: string;
-  talla: string | null;
   kg: number;
   cajas: number | null;
+};
+
+type GrupoSku = {
+  key: string;
+  descripcion: string;
+  talla: string | null;
+  totalKg: number;
+  items: ItemContenedor[];
 };
 
 function PorProductoView({
   contratos,
   recepciones,
   hoy,
-  onVer,
 }: {
   contratos: BlufinContratoConProductos[];
   recepciones: BlufinRecepcionEnriquecida[];
   hoy: string;
-  onVer: (id: string) => void;
 }) {
   const [q, setQ] = useState('');
+  const [abierto, setAbierto] = useState<Set<string>>(new Set());
 
-  // Una línea por SKU de cada contrato que aún NO ha llegado.
-  const lineas = useMemo<LineaPorLlegar[]>(() => {
+  // Agrupa por SKU sumando lo que viene en contratos NO recibidos.
+  const grupos = useMemo<GrupoSku[]>(() => {
     const recibidoIds = new Set(
       recepciones.map((r) => r.contrato_id).filter((id): id is string => !!id),
     );
-    const out: LineaPorLlegar[] = [];
+    const map = new Map<string, GrupoSku>();
     for (const c of contratos) {
       const recibido = recibidoIds.has(c.id) || c.status === 'Entregado' || !!c.llegada_real;
       if (recibido) continue;
       const etaEstimada =
         !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
       for (const p of c.productos ?? []) {
-        out.push({
-          contratoId: c.id,
+        const key = p.sku_id ?? p.descripcion ?? 'sin-sku';
+        let g = map.get(key);
+        if (!g) {
+          g = { key, descripcion: p.descripcion ?? '—', talla: p.talla ?? null, totalKg: 0, items: [] };
+          map.set(key, g);
+        }
+        g.totalKg += Number(p.kg ?? 0);
+        g.items.push({
           folio: c.folio,
           status: statusContrato(c, hoy),
           contenedor: c.contenedor,
           naviera: c.naviera,
           etaBodega: c.eta_bodega,
           etaEstimada,
-          descripcion: p.descripcion ?? '—',
-          talla: p.talla ?? null,
           kg: Number(p.kg ?? 0),
           cajas: p.cajas ?? null,
         });
       }
     }
-    return out;
+    const arr = Array.from(map.values());
+    // Contenedores de cada SKU: del más PRÓXIMO al más viejo (ETA asc, sin fecha al final).
+    for (const g of arr)
+      g.items.sort((a, b) => {
+        if (!a.etaBodega) return 1;
+        if (!b.etaBodega) return -1;
+        return a.etaBodega.localeCompare(b.etaBodega);
+      });
+    // Productos: el que trae más kg primero.
+    arr.sort((a, b) => b.totalKg - a.totalKg);
+    return arr;
   }, [contratos, recepciones, hoy]);
 
-  const filtradas = useMemo(() => {
+  const filtrados = useMemo(() => {
     const query = q.trim().toLowerCase();
-    const arr = query
-      ? lineas.filter(
-          (l) =>
-            l.descripcion.toLowerCase().includes(query) ||
-            (l.talla ?? '').toLowerCase().includes(query) ||
-            l.folio.toLowerCase().includes(query) ||
-            (l.contenedor ?? '').toLowerCase().includes(query),
-        )
-      : lineas;
-    return [...arr].sort((a, b) => {
-      if (!a.etaBodega) return 1;
-      if (!b.etaBodega) return -1;
-      return a.etaBodega.localeCompare(b.etaBodega);
-    });
-  }, [lineas, q]);
+    if (!query) return grupos;
+    return grupos.filter(
+      (g) =>
+        g.descripcion.toLowerCase().includes(query) ||
+        (g.talla ?? '').toLowerCase().includes(query) ||
+        g.items.some(
+          (it) =>
+            (it.contenedor ?? '').toLowerCase().includes(query) ||
+            it.folio.toLowerCase().includes(query),
+        ),
+    );
+  }, [grupos, q]);
 
   const resumen = useMemo(() => {
-    const totalKg = filtradas.reduce((s, l) => s + l.kg, 0);
-    const proximas = filtradas
-      .filter((l) => l.etaBodega && l.etaBodega >= hoy)
-      .map((l) => l.etaBodega as string)
-      .sort();
-    return { n: filtradas.length, totalKg, proxima: proximas[0] ?? null };
-  }, [filtradas, hoy]);
+    const totalKg = filtrados.reduce((s, g) => s + g.totalKg, 0);
+    const nCont = filtrados.reduce((s, g) => s + g.items.length, 0);
+    return { nSku: filtrados.length, totalKg, nCont };
+  }, [filtrados]);
+
+  const toggle = (key: string) =>
+    setAbierto((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
 
   return (
     <div className="vstack" style={{ gap: 12 }}>
@@ -405,18 +308,14 @@ function PorProductoView({
 
       <StatStrip
         stats={[
-          { value: resumen.n, label: q ? 'líneas (filtro)' : 'líneas por llegar' },
+          { value: resumen.nSku, label: q ? 'productos (filtro)' : 'productos por llegar' },
+          { value: resumen.nCont, label: 'contenedores' },
           { value: fmtKg(resumen.totalKg), label: 'en camino', color: 'var(--blue-500)' },
-          {
-            value: resumen.proxima ? fmtFechaCorta(resumen.proxima) : '—',
-            label: 'próxima llegada',
-            color: 'var(--green-500)',
-          },
         ]}
         style={{ marginBottom: 0 }}
       />
 
-      {filtradas.length === 0 ? (
+      {filtrados.length === 0 ? (
         <div className="card" style={{ padding: 32, textAlign: 'center' }}>
           <Icon name="package" size={28} />
           <div className="fw-700" style={{ marginTop: 8 }}>
@@ -433,48 +332,79 @@ function PorProductoView({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Llega</th>
                 <th>Producto</th>
-                <th style={{ textAlign: 'right' }}>Kg</th>
-                <th style={{ textAlign: 'right' }}>Cajas</th>
-                <th>Contrato</th>
-                <th>Contenedor</th>
+                <th style={{ textAlign: 'right' }}>Contenedores</th>
+                <th style={{ textAlign: 'right' }}>Total kg</th>
+                <th style={{ width: 28 }} />
               </tr>
             </thead>
             <tbody>
-              {filtradas.map((l, i) => (
-                <tr key={i} style={{ cursor: 'pointer' }} onClick={() => l.contratoId && onVer(l.contratoId)}>
-                  <td className="mono text-sm">
-                    {l.etaBodega ? (
-                      <>
-                        {fmtFechaCorta(l.etaBodega)}
-                        {l.etaEstimada && (
-                          <span className="text-xs" style={{ color: 'var(--amber-500)' }}> est.</span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="muted">sin ETA</span>
+              {filtrados.map((g) => {
+                const open = abierto.has(g.key);
+                return (
+                  <Fragment key={g.key}>
+                    <tr style={{ cursor: 'pointer' }} onClick={() => toggle(g.key)}>
+                      <td className="text-sm fw-600">
+                        {g.descripcion}
+                        {g.talla ? <span className="muted"> · {g.talla}</span> : null}
+                      </td>
+                      <td className="mono fw-700 text-sm" style={{ textAlign: 'right' }}>{g.items.length}</td>
+                      <td className="mono fw-700 text-sm" style={{ textAlign: 'right' }}>{fmtKg(g.totalKg)}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <Icon name="chevron-right" size={13} className={`nav-chevron ${open ? 'open' : ''}`} />
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr>
+                        <td colSpan={4} style={{ padding: 0, background: 'var(--ink-50)' }}>
+                          <table className="tbl" style={{ background: 'transparent' }}>
+                            <thead>
+                              <tr>
+                                <th>Llega</th>
+                                <th>Contenedor</th>
+                                <th>Contrato</th>
+                                <th style={{ textAlign: 'right' }}>Kg</th>
+                                <th style={{ textAlign: 'right' }}>Cajas</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.items.map((it, i) => (
+                                <tr key={i}>
+                                  <td className="mono text-sm">
+                                    {it.etaBodega ? (
+                                      <>
+                                        {fmtFechaCorta(it.etaBodega)}
+                                        {it.etaEstimada && (
+                                          <span className="text-xs" style={{ color: 'var(--amber-500)' }}> est.</span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="muted">sin ETA</span>
+                                    )}
+                                  </td>
+                                  <td className="mono text-xs">
+                                    {[it.contenedor, it.naviera].filter(Boolean).join(' · ') || (
+                                      <span className="muted">por asignar</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <span className="hstack" style={{ gap: 6 }}>
+                                      <span className="mono fw-700 text-xs">{it.folio}</span>
+                                      <StatusPill status={it.status} />
+                                    </span>
+                                  </td>
+                                  <td className="mono fw-700 text-sm" style={{ textAlign: 'right' }}>{fmtKg(it.kg)}</td>
+                                  <td className="mono text-sm" style={{ textAlign: 'right' }}>{it.cajas ?? '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="text-sm fw-600">
-                    {l.descripcion}
-                    {l.talla ? <span className="muted"> · {l.talla}</span> : null}
-                  </td>
-                  <td className="mono fw-700 text-sm" style={{ textAlign: 'right' }}>{fmtKg(l.kg)}</td>
-                  <td className="mono text-sm" style={{ textAlign: 'right' }}>{l.cajas ?? '—'}</td>
-                  <td>
-                    <span className="hstack" style={{ gap: 6 }}>
-                      <span className="mono fw-700 text-sm">{l.folio}</span>
-                      <StatusPill status={l.status} />
-                    </span>
-                  </td>
-                  <td className="mono text-xs">
-                    {[l.contenedor, l.naviera].filter(Boolean).join(' · ') || (
-                      <span className="muted">por asignar</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -483,7 +413,7 @@ function PorProductoView({
   );
 }
 
-/* ─── Leyenda de colores (compartida) ────────────────────────────────── */
+/* ─── Leyenda de colores ─────────────────────────────────────────────── */
 
 function Leyenda() {
   const items: { color: string; label: string }[] = [
@@ -491,7 +421,6 @@ function Leyenda() {
     { color: 'var(--violet-500)', label: 'ETA bodega' },
     { color: 'var(--amber-500)', label: 'ETA estimada (+7d)' },
     { color: 'var(--green-500)', label: 'Recibido' },
-    { color: 'var(--red-500)', label: 'Pago pendiente' },
   ];
   return (
     <span className="hstack text-xs muted" style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -505,20 +434,18 @@ function Leyenda() {
   );
 }
 
-/* ─── Vista calendario (grid mensual) ────────────────────────────────── */
+/* ─── Vista calendario (grid mensual de llegadas) ────────────────────── */
 
 function CalendarioGrid({
   eventos,
   mesAncla,
   hoy,
   onMes,
-  onVer,
 }: {
   eventos: CalEvento[];
   mesAncla: Date;
   hoy: string;
   onMes: (d: Date) => void;
-  onVer: (id: string) => void;
 }) {
   const porDia = useMemo(() => {
     const map = new Map<string, CalEvento[]>();
@@ -530,7 +457,6 @@ function CalendarioGrid({
     return map;
   }, [eventos]);
 
-  // 42 celdas: arranca el lunes de la semana del día 1, 6 semanas.
   const celdas = useMemo(() => {
     const primero = new Date(mesAncla.getFullYear(), mesAncla.getMonth(), 1);
     const offsetLunes = (primero.getDay() + 6) % 7;
@@ -656,9 +582,8 @@ function CalendarioGrid({
                 {visibles.map((e, ci) => {
                   const color = colorEvento(e);
                   return (
-                    <button
+                    <span
                       key={ci}
-                      onClick={() => e.contratoId && onVer(e.contratoId)}
                       title={`${EVENTO_META[e.tipo].label} · ${e.folio}`}
                       className="mono"
                       style={{
@@ -667,30 +592,18 @@ function CalendarioGrid({
                         gap: 4,
                         padding: '2px 5px',
                         borderRadius: 5,
-                        border: 'none',
-                        cursor: 'pointer',
                         background: `color-mix(in srgb, ${color} 12%, white)`,
                         color,
                         fontSize: 10,
                         fontWeight: 700,
-                        width: '100%',
-                        textAlign: 'left',
                         overflow: 'hidden',
                         whiteSpace: 'nowrap',
                         textOverflow: 'ellipsis',
                       }}
                     >
-                      <span
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 999,
-                          background: color,
-                          flexShrink: 0,
-                        }}
-                      />
+                      <span style={{ width: 6, height: 6, borderRadius: 999, background: color, flexShrink: 0 }} />
                       {folioCorto(e.folio)}
-                    </button>
+                    </span>
                   );
                 })}
                 {extra > 0 && (
@@ -703,205 +616,6 @@ function CalendarioGrid({
           );
         })}
       </div>
-    </div>
-  );
-}
-
-/* ─── Vista lista (agrupada por semana) ──────────────────────────────── */
-
-function ListaView({
-  eventos,
-  hoy,
-  onVer,
-}: {
-  eventos: CalEvento[];
-  hoy: string;
-  onVer: (id: string) => void;
-}) {
-  const [verPasados, setVerPasados] = useState(false);
-  const [q, setQ] = useState('');
-
-  const grupos = useMemo(() => {
-    const desde = lunesDeISO(hoy);
-    const query = q.trim().toLowerCase();
-    const filtrados = eventos.filter((e) => {
-      if (!verPasados && e.fecha < desde) return false;
-      if (!query) return true;
-      return (
-        e.folio.toLowerCase().includes(query) ||
-        (e.contenedor ?? '').toLowerCase().includes(query) ||
-        (e.naviera ?? '').toLowerCase().includes(query)
-      );
-    });
-    filtrados.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.tipo.localeCompare(b.tipo));
-    const map = new Map<string, CalEvento[]>();
-    for (const e of filtrados) {
-      const k = lunesDeISO(e.fecha);
-      const arr = map.get(k) ?? [];
-      arr.push(e);
-      map.set(k, arr);
-    }
-    return Array.from(map.entries()).map(([semana, items]) => ({ semana, items }));
-  }, [eventos, hoy, verPasados, q]);
-
-  const semanaActual = lunesDeISO(hoy);
-
-  return (
-    <div className="vstack" style={{ gap: 14 }}>
-      <div className="hstack" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div
-          className="hstack"
-          style={{
-            flex: 1,
-            minWidth: 220,
-            gap: 8,
-            padding: '7px 12px',
-            background: 'var(--ink-50)',
-            border: '1px solid var(--ink-200)',
-            borderRadius: 'var(--r-md)',
-          }}
-        >
-          <Icon name="search" size={14} />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por folio, contenedor o naviera…"
-            style={{
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              flex: 1,
-              fontSize: 13,
-              color: 'var(--ink-900)',
-            }}
-          />
-        </div>
-        <label className="hstack text-xs" style={{ gap: 6, cursor: 'pointer', color: 'var(--ink-600)' }}>
-          <input type="checkbox" checked={verPasados} onChange={(e) => setVerPasados(e.target.checked)} />
-          Ver eventos pasados
-        </label>
-        <Leyenda />
-      </div>
-
-      {grupos.length === 0 ? (
-        <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-          <Icon name="calendar" size={28} />
-          <div className="fw-700" style={{ marginTop: 8 }}>
-            Sin eventos {verPasados ? '' : 'próximos'}
-          </div>
-          <div className="text-sm muted" style={{ marginTop: 2 }}>
-            {q
-              ? 'Ningún evento coincide con la búsqueda.'
-              : verPasados
-                ? 'No hay ETAs, recepciones ni pagos registrados.'
-                : 'No hay ETAs ni vencimientos de pago próximos. Activa “Ver eventos pasados” para ver el historial.'}
-          </div>
-        </div>
-      ) : (
-        grupos.map((g) => (
-          <div key={g.semana} className="card" style={{ overflow: 'hidden' }}>
-            <div
-              className="hstack"
-              style={{
-                padding: '10px 14px',
-                borderBottom: '1px solid var(--ink-100)',
-                gap: 8,
-                background: g.semana === semanaActual ? 'color-mix(in srgb, var(--blue-500) 6%, white)' : undefined,
-              }}
-            >
-              <span className="fw-700" style={{ fontSize: 13 }}>
-                Semana del {fmtFechaCorta(g.semana)}
-              </span>
-              {g.semana === semanaActual && (
-                <span
-                  className="text-xs fw-700"
-                  style={{
-                    color: 'var(--blue-500)',
-                    background: 'color-mix(in srgb, var(--blue-500) 12%, white)',
-                    padding: '1px 8px',
-                    borderRadius: 999,
-                  }}
-                >
-                  Esta semana
-                </span>
-              )}
-              <span className="text-xs muted">
-                · {g.items.length} evento{g.items.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Evento</th>
-                  <th>Folio</th>
-                  <th>Contenedor</th>
-                  <th>Naviera</th>
-                  <th style={{ textAlign: 'right' }}>Monto USD</th>
-                  <th style={{ textAlign: 'center' }}>.ics</th>
-                </tr>
-              </thead>
-              <tbody>
-                {g.items.map((e, i) => {
-                  const color = colorEvento(e);
-                  const atrasado =
-                    (e.tipo === 'anticipo' || e.tipo === 'saldo') && e.fecha < hoy;
-                  return (
-                    <tr
-                      key={i}
-                      style={{ cursor: e.contratoId ? 'pointer' : 'default' }}
-                      onClick={() => e.contratoId && onVer(e.contratoId)}
-                    >
-                      <td className="mono text-sm" style={{ color: atrasado ? 'var(--red-500)' : undefined }}>
-                        {fmtFechaCorta(e.fecha)}
-                      </td>
-                      <td>
-                        <span
-                          className="hstack"
-                          style={{
-                            gap: 5,
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color,
-                            background: `color-mix(in srgb, ${color} 12%, white)`,
-                            padding: '2px 8px',
-                            borderRadius: 999,
-                            width: 'fit-content',
-                          }}
-                        >
-                          <span style={{ width: 6, height: 6, borderRadius: 999, background: color }} />
-                          {e.tipo === 'eta-bodega' && e.estimada
-                            ? 'ETA bodega (est.)'
-                            : EVENTO_META[e.tipo].label}
-                        </span>
-                      </td>
-                      <td className="mono fw-700 text-sm">{e.folio}</td>
-                      <td className="mono text-xs">{e.contenedor || <span className="muted">—</span>}</td>
-                      <td className="text-sm">{e.naviera || <span className="muted">—</span>}</td>
-                      <td className="mono text-sm" style={{ textAlign: 'right' }}>
-                        {e.monto != null ? fmtUSD(e.monto) : <span className="muted">—</span>}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          style={{ padding: 4 }}
-                          title="Guardar en mi calendario (.ics)"
-                          onClick={(ev) => {
-                            ev.stopPropagation();
-                            downloadICS(e);
-                          }}
-                        >
-                          <Icon name="download" size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ))
-      )}
     </div>
   );
 }
