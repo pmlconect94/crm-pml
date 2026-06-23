@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from '@/components/Icon';
+import { useAuth } from '@/lib/auth';
 
 type Tab = {
   id: string;
@@ -22,6 +23,14 @@ const TABS: Tab[] = [
 
 export function BlufinLayout() {
   const location = useLocation();
+  const { puedeTab } = useAuth();
+
+  const visibles = TABS.filter((t) => puedeTab(t.id));
+  // Si la ruta actual no está permitida para el usuario, mandarlo a su 1ª pestaña.
+  const actual = TABS.find((t) => location.pathname.startsWith(t.href));
+  if (actual && !puedeTab(actual.id)) {
+    return <Navigate to={visibles[0]?.href ?? '/app/dashboard'} replace />;
+  }
 
   return (
     <>
@@ -58,7 +67,7 @@ export function BlufinLayout() {
       </div>
 
       <div className="tabs">
-        {TABS.map((t) => {
+        {visibles.map((t) => {
           const isActive = location.pathname.startsWith(t.href);
           if (!t.enabled) {
             return (

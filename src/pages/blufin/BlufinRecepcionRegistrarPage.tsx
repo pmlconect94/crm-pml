@@ -55,9 +55,14 @@ const kgDesdeCajas = (cajas: number, kgCaja: number | null) =>
 
 export function BlufinRecepcionRegistrarPage() {
   const { contratoId } = useParams<{ contratoId: string }>();
-  const { empresaId } = useAuth();
+  const { empresaId, user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+
+  // Bloqueo: usuarios sin permiso de captura no registran recepciones (ni por URL).
+  useEffect(() => {
+    if (user && !user.capturar) navigate('/app/importaciones/blufin/recepcion', { replace: true });
+  }, [user, navigate]);
 
   const { data: contrato, isLoading } = useQuery({
     queryKey: ['blufin_contrato', contratoId],

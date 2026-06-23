@@ -15,7 +15,8 @@ export type Rol =
   | 'coord_logistica'
   | 'gerente_rh'
   | 'contador'
-  | 'vendedor';
+  | 'vendedor'
+  | 'operativo';
 
 export type Usuario = {
   id: string;
@@ -23,6 +24,10 @@ export type Usuario = {
   email: string;
   rol: Rol;
   empresaId: 'pml' | 'marlin';
+  /** Pestañas de Blufin permitidas. null = todas (admin). */
+  tabs: string[] | null;
+  /** Puede capturar/editar/borrar. false = solo ver. */
+  capturar: boolean;
 };
 
 export const PERMISOS: Record<Rol, { depts: string[] }> = {
@@ -32,32 +37,37 @@ export const PERMISOS: Record<Rol, { depts: string[] }> = {
   gerente_rh:      { depts: ['rh','administracion'] },
   contador:        { depts: ['contabilidad','cobranza','administracion'] },
   vendedor:        { depts: ['ventas'] },
+  operativo:       { depts: ['importaciones'] },
 };
 
-// El nombre y el rol viven en el user_metadata del usuario de Supabase Auth
-// (se setean al darlo de alta). No hay módulo de usuarios: se crean a mano.
+// nombre/rol/permisos viven en el user_metadata del usuario de Supabase Auth.
 function usuarioDeSesion(session: Session | null): Usuario | null {
   const u = session?.user;
   if (!u) return null;
   const m = (u.user_metadata ?? {}) as Record<string, unknown>;
+  const rol = ((m.rol as Rol) ?? 'admin_total');
+  const esAdmin = rol === 'admin_total';
   return {
     id: u.id,
     nombre: (m.nombre as string) || u.email || 'Usuario',
     email: u.email ?? '',
-    rol: ((m.rol as Rol) ?? 'admin_total'),
+    rol,
     empresaId: ((m.empresa_id as 'pml' | 'marlin') ?? 'pml'),
+    tabs: esAdmin ? null : Array.isArray(m.tabs) ? (m.tabs as string[]) : [],
+    capturar: esAdmin ? true : m.capturar === true,
   };
 }
 
 type AuthContextValue = {
   user: Usuario | null;
-  /** true mientras se resuelve la sesión inicial (evita parpadeo al recargar). */
   loading: boolean;
   empresaId: 'pml' | 'marlin';
   setEmpresa: (e: 'pml' | 'marlin') => void;
   signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => Promise<void>;
   hasDept: (dept: string) => boolean;
+  /** ¿El usuario puede ver esta pestaña de Blufin? (admin = todas). */
+  puedeTab: (tabId: string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -103,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       },
       hasDept: (dept) => (user ? PERMISOS[user.rol].depts.includes(dept) : false),
+      puedeTab: (tabId) => (user ? user.tabs === null || user.tabs.includes(tabId) : false),
     }),
     [user, loading, empresaId],
   );

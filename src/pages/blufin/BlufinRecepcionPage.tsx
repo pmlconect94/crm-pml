@@ -38,7 +38,7 @@ const etaBodegaAuto = (etaPuerto: string) => {
 };
 
 export function BlufinRecepcionPage() {
-  const { empresaId } = useAuth();
+  const { empresaId, user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [view, setView] = useState<View>('por-recibir');
@@ -146,6 +146,7 @@ export function BlufinRecepcionPage() {
         <PorRecibirView
           contratos={porRecibir}
           isLoading={loadingPorRecibir}
+          capturar={user?.capturar ?? false}
           onReceive={(c) => navigate(`/app/importaciones/blufin/recepcion/registrar/${c.id}`)}
           onProgramar={(c) => setProgramarTarget(c)}
         />
@@ -192,11 +193,13 @@ export function BlufinRecepcionPage() {
 function PorRecibirView({
   contratos,
   isLoading,
+  capturar,
   onReceive,
   onProgramar,
 }: {
   contratos: BlufinContratoConProductos[];
   isLoading: boolean;
+  capturar: boolean;
   onReceive: (c: BlufinContratoConProductos) => void;
   onProgramar: (c: BlufinContratoConProductos) => void;
 }) {
@@ -401,6 +404,7 @@ function PorRecibirView({
                 <div className="text-xs muted">SKUs</div>
                 <div className="fw-700 text-sm">{productos.length}</div>
               </div>
+              {capturar ? (
               <div className="vstack" style={{ gap: 6, justifySelf: 'end' }}>
                 <button
                   className="btn btn-primary btn-sm"
@@ -441,6 +445,9 @@ function PorRecibirView({
                   </button>
                 )}
               </div>
+              ) : (
+                <div />
+              )}
             </div>
           );
         })
