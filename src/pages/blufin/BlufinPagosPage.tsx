@@ -381,7 +381,7 @@ function PendientesView({
   isLoading: boolean;
   onPay: (p: { contratoId: string; tipo: 'anticipo' | 'saldo' }) => void;
 }) {
-  const [tipoTab, setTipoTab] = useState<TipoPend>('anticipo');
+  const [tipoTab, setTipoTab] = useState<TipoPend>('saldo');
 
   // Conteo por tipo para los chips del toggle.
   const conteo = useMemo(() => {

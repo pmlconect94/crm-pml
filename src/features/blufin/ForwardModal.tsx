@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon, type IconName } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
+import { Combobox } from '@/components/Combobox';
 import { fetchCatalogos } from '@/features/blufin/queries';
 import {
   createForward,
@@ -299,21 +300,18 @@ export function ForwardModal({ open, onClose }: Props) {
             >
               <div style={{ gridColumn: 'span 2' }}>
                 <label className="field-label">Contrato *</label>
-                <select
-                  className="field-input mono"
-                  value={contratoId}
-                  onChange={(e) => {
-                    setContratoId(e.target.value);
+                <Combobox
+                  options={contratos.map((c) => ({
+                    id: c.id,
+                    label: `${c.folio} · ${c.contenedor ?? 'sin contenedor'} · ${c.status}`,
+                  }))}
+                  value={contratoId || null}
+                  onChange={(id) => {
+                    setContratoId(id ?? '');
                     setMontoUsdOverride(false);
                   }}
-                >
-                  <option value="">— Selecciona contrato —</option>
-                  {contratos.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.folio} · {c.status} · {fmtUSD(c.total_usd)}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Escribe el folio o el número de contenedor…"
+                />
                 {contrato && (
                   <div
                     className="text-xs muted"
