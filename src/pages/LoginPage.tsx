@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/Icon';
@@ -5,245 +6,190 @@ import { Icon } from '@/components/Icon';
 export function LoginPage() {
   const { user, signIn } = useAuth();
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState('');
 
   if (user) return <Navigate to="/app/dashboard" replace />;
 
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim() || !password) {
+      setError('Escribe tu correo y contraseña.');
+      return;
+    }
+    if (signIn(email, password)) {
+      navigate('/app/dashboard');
+    } else {
+      setError('Correo o contraseña incorrectos.');
+    }
+  };
+
   return (
     <div
-      style={{
-        minHeight: '100dvh',
-        display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr)',
-        background: 'var(--ink-50)',
-      }}
+      style={{ minHeight: '100dvh', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', background: 'var(--ink-50)' }}
       className="login-grid"
     >
-      {/* Left — brand panel (only on desktop, controlled in index.css) */}
+      {/* ── Izquierda — portada de marca (solo desktop) ── */}
       <aside
         className="login-aside"
         style={{
           display: 'none',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          padding: 48,
+          padding: '40px 44px',
           background:
-            'linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 60%, var(--navy-600) 100%)',
+            'linear-gradient(160deg, var(--navy-900) 0%, var(--navy-800) 55%, var(--navy-700) 100%)',
           color: 'white',
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Subtle texture overlay */}
+        {/* textura sutil */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
             inset: 0,
-            background:
-              'radial-gradient(ellipse at 70% 20%, rgba(0,163,255,0.18), transparent 55%), radial-gradient(ellipse at 20% 80%, rgba(0,115,230,0.12), transparent 55%)',
+            backgroundImage:
+              'radial-gradient(ellipse at 75% 15%, rgba(0,163,255,0.16), transparent 55%), radial-gradient(ellipse at 15% 85%, rgba(0,115,230,0.12), transparent 55%), linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)',
+            backgroundSize: '100% 100%, 100% 100%, 38px 38px, 38px 38px',
             pointerEvents: 'none',
           }}
         />
 
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        {/* marca arriba */}
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 11 }}>
           <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 12px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.18)',
-              background: 'rgba(255,255,255,0.06)',
-              fontSize: 11,
-              fontWeight: 500,
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
+              width: 34, height: 34, borderRadius: 9, background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', padding: 5,
             }}
           >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 999,
-                background: 'var(--blue-400)',
-              }}
-            />
-            Grupo Lizárraga · CRM
+            <img src="/assets/pml-logo-transparent.png" alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em' }}>Grupo Lizárraga</div>
+            <div style={{ fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>
+              CRM Corporativo
+            </div>
           </div>
         </div>
 
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 460 }}>
-          <h2
-            style={{
-              fontSize: 48,
-              fontWeight: 600,
-              letterSpacing: '-0.03em',
-              lineHeight: 1.05,
-              margin: 0,
-              marginBottom: 20,
-            }}
-          >
-            Importación,<br />
-            logística y ventas<br />
-            <span style={{ color: 'var(--cyan-500)' }}>en un solo lugar.</span>
-          </h2>
-          <p
-            style={{
-              fontSize: 15,
-              lineHeight: 1.55,
-              color: 'rgba(255,255,255,0.7)',
-              margin: 0,
-              maxWidth: 420,
-            }}
-          >
-            Plataforma operativa para Productos Marinos Lizárraga y Marlin Lizárraga.
-            Contratos, recepciones, pagos, cobranza y contabilidad — el ciclo completo del negocio.
-          </p>
+        {/* logos centrales */}
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, maxWidth: 440, margin: '0 auto', width: '100%' }}>
+          <img
+            src="/assets/marlin-logo.png"
+            alt="Marlin Lizárraga"
+            style={{ width: 220, maxWidth: '70%', objectFit: 'contain', filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.4))' }}
+          />
+          <div style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', marginTop: 4 }}>
+            Marlin Lizárraga, S. de R.L. de C.V.
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '70%', margin: '22px 0' }}>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.12)' }} />
+            <span style={{ fontSize: 9.5, letterSpacing: '0.22em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Grupo</span>
+            <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.12)' }} />
+          </div>
+
+          <img
+            src="/assets/pml-logo-transparent.png"
+            alt="Productos Marinos Lizárraga"
+            style={{ width: 280, maxWidth: '86%', objectFit: 'contain', filter: 'drop-shadow(0 10px 28px rgba(0,0,0,0.35))' }}
+          />
+          <div style={{ fontSize: 10.5, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', marginTop: 2 }}>
+            Productos Marinos Lizárraga, S. de R.L. de C.V.
+          </div>
         </div>
 
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 1,
-            display: 'flex',
-            gap: 24,
-            paddingTop: 24,
-            borderTop: '1px solid rgba(255,255,255,0.1)',
-            fontSize: 12,
-            color: 'rgba(255,255,255,0.55)',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 600, color: 'white', fontSize: 13 }}>3 proveedores</div>
-            <div>Blufin · Camanchaca · Neptuno</div>
-          </div>
-          <div style={{ width: 1, background: 'rgba(255,255,255,0.1)' }} />
-          <div>
-            <div style={{ fontWeight: 600, color: 'white', fontSize: 13 }}>2 empresas</div>
-            <div>PML · Marlin Lizárraga</div>
-          </div>
-          <div style={{ width: 1, background: 'rgba(255,255,255,0.1)' }} />
-          <div>
-            <div style={{ fontWeight: 600, color: 'white', fontSize: 13 }}>7 departamentos</div>
-            <div>Operación end-to-end</div>
-          </div>
+        {/* footer */}
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+          <span className="hstack" style={{ gap: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--green-500)' }} />
+            Sistemas en línea · Zapopan, Jal.
+          </span>
+          <span>© 1994–2026 Grupo Lizárraga</span>
         </div>
       </aside>
 
-      {/* Right — auth form */}
-      <main
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 32,
-        }}
-      >
-        <div
-          className="login-card-enter"
-          style={{
-            width: '100%',
-            maxWidth: 380,
-          }}
-        >
-          <div style={{ marginBottom: 32 }}>
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 12,
-                background: 'var(--navy-900)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 8,
-                marginBottom: 20,
-              }}
-            >
-              <img
-                src="/assets/pml-logo-transparent.png"
-                alt="Grupo Lizárraga"
-                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+      {/* ── Derecha — formulario ── */}
+      <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+        <form onSubmit={onSubmit} className="login-card-enter" style={{ width: '100%', maxWidth: 380 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', margin: '0 0 6px', color: 'var(--ink-900)' }}>
+            Bienvenido de vuelta
+          </h1>
+          <p style={{ fontSize: 14, color: 'var(--ink-500)', margin: '0 0 26px', lineHeight: 1.5 }}>
+            Inicia sesión con tu cuenta corporativa para continuar.
+          </p>
+
+          <div className="vstack" style={{ gap: 14 }}>
+            <div>
+              <label className="field-label" htmlFor="email">Correo electrónico</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="username"
+                className="field-input"
+                placeholder="tucorreo@lizarraga.mx"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={{ width: '100%' }}
               />
             </div>
-            <h1
-              style={{
-                fontSize: 26,
-                fontWeight: 600,
-                letterSpacing: '-0.02em',
-                margin: 0,
-                marginBottom: 8,
-                color: 'var(--ink-900)',
-              }}
-            >
-              Entrar al CRM
-            </h1>
-            <p
-              style={{
-                fontSize: 14,
-                color: 'var(--ink-500)',
-                margin: 0,
-                lineHeight: 1.5,
-              }}
-            >
-              Continúa con tu cuenta corporativa de Google o Microsoft.
-            </p>
-          </div>
 
-          <div className="vstack" style={{ gap: 10 }}>
-            <button
-              className="btn btn-outline btn-lg"
-              style={{ width: '100%', justifyContent: 'flex-start', paddingLeft: 18 }}
-              onClick={() => alert('Google Workspace SSO — pendiente de configurar')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C4 19.98 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 4 4.02 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-              <span style={{ flex: 1, textAlign: 'left' }}>Google Workspace</span>
-            </button>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <label className="field-label" htmlFor="password">Contraseña</label>
+                <button
+                  type="button"
+                  onClick={() => setError('Pídele a un administrador que restablezca tu contraseña.')}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--blue-500)' }}
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                className="field-input"
+                placeholder="••••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
 
-            <button
-              className="btn btn-outline btn-lg"
-              style={{ width: '100%', justifyContent: 'flex-start', paddingLeft: 18 }}
-              onClick={() => alert('Microsoft Entra ID SSO — pendiente de configurar')}
-            >
-              <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden>
-                <rect x="1" y="1"  width="9" height="9" fill="#F25022"/>
-                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-              </svg>
-              <span style={{ flex: 1, textAlign: 'left' }}>Microsoft Entra ID</span>
-            </button>
+            <label className="hstack" style={{ gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--ink-700)' }}>
+              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              Mantener sesión iniciada
+            </label>
 
-            <button
-              className="btn btn-primary btn-lg"
-              style={{ width: '100%', marginTop: 8 }}
-              onClick={() => {
-                signIn();
-                navigate('/app/dashboard');
-              }}
-            >
+            {error && (
+              <div
+                style={{
+                  fontSize: 12.5, color: 'var(--red-500)', background: 'color-mix(in srgb, var(--red-500) 8%, white)',
+                  border: '1px solid color-mix(in srgb, var(--red-500) 24%, white)', borderRadius: 'var(--r-sm)', padding: '8px 10px',
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%', marginTop: 2 }}>
+              Entrar al sistema
               <Icon name="arrow-right" size={14} />
-              Entrar como admin (modo desarrollo)
             </button>
-
-            <p
-              style={{
-                fontSize: 12,
-                color: 'var(--ink-400)',
-                margin: '12px 0 0',
-                lineHeight: 1.5,
-              }}
-            >
-              SSO con Google Workspace y Microsoft Entra está pendiente de configurar.
-            </p>
           </div>
-        </div>
+
+          <p style={{ fontSize: 11.5, color: 'var(--ink-400)', margin: '20px 0 0', lineHeight: 1.5, textAlign: 'center' }}>
+            El acceso es solo para usuarios autorizados de Grupo Lizárraga.
+          </p>
+        </form>
       </main>
     </div>
   );

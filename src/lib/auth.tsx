@@ -25,20 +25,22 @@ export const PERMISOS: Record<Rol, { depts: string[] }> = {
   vendedor:        { depts: ['ventas'] },
 };
 
-// Stub: usuario admin quemado en código para desarrollo
-const STUB_USUARIO: Usuario = {
-  id: '00000000-0000-0000-0000-000000000001',
-  nombre: 'Daniel Lizárraga',
-  email: 'ddl.pml2@gmail.com',
-  rol: 'admin_total',
-  empresaId: 'pml',
-};
+// Usuarios dados de alta por nosotros (no hay auto-registro). Los 3 con permiso
+// de ver todo (admin_total). TRANSICIÓN: por ahora el login valida solo el
+// correo (la contraseña real se valida con Supabase Auth cuando se conecte —
+// pendiente #3). Las contraseñas NO viven en el código.
+const USUARIOS: Usuario[] = [
+  { id: '00000000-0000-0000-0000-000000000001', nombre: 'DIEGO DIAZ LIZARRAGA',          email: 'ddl.pml2@gmail.com',              rol: 'admin_total', empresaId: 'pml' },
+  { id: '00000000-0000-0000-0000-000000000002', nombre: 'ANA SILVIA LIZARRAGA JIMENEZ',   email: 'anasilvia_lizarraga@hotmail.com', rol: 'admin_total', empresaId: 'pml' },
+  { id: '00000000-0000-0000-0000-000000000003', nombre: 'JESUS LIZARRAGA JIMENEZ',        email: 'lizarragajesus@hotmail.com',      rol: 'admin_total', empresaId: 'pml' },
+];
 
 type AuthContextValue = {
   user: Usuario | null;
   empresaId: 'pml' | 'marlin';
   setEmpresa: (e: 'pml' | 'marlin') => void;
-  signIn: () => void;
+  /** Devuelve true si el correo corresponde a un usuario dado de alta. */
+  signIn: (email: string, password: string) => boolean;
   signOut: () => void;
   hasDept: (dept: string) => boolean;
 };
@@ -58,9 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       empresaId,
       setEmpresa: (e) => setEmpresaIdState(e),
-      signIn: () => {
-        localStorage.setItem('crm_user', JSON.stringify(STUB_USUARIO));
-        setUser(STUB_USUARIO);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      signIn: (email, _password) => {
+        const u = USUARIOS.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
+        if (!u) return false;
+        localStorage.setItem('crm_user', JSON.stringify(u));
+        setUser(u);
+        return true;
       },
       signOut: () => {
         localStorage.removeItem('crm_user');
