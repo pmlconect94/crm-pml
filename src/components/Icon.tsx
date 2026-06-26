@@ -42,6 +42,8 @@ import {
   Inbox,
   Anchor,
   Container,
+  Printer,
+  ExternalLink,
   type LucideProps,
 } from 'lucide-react';
 
@@ -89,6 +91,8 @@ const ICONS = {
   inbox: Inbox,
   anchor: Anchor,
   container: Container,
+  printer: Printer,
+  'external-link': ExternalLink,
 } as const;
 
 export type IconName = keyof typeof ICONS;

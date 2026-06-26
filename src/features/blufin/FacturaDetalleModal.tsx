@@ -2,6 +2,7 @@
  * Ficha de una factura revisada: comparación guardada (contrato vs factura),
  * enlace al PDF (URL firmada) y acción de aprobar si sigue pendiente.
  */
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -9,11 +10,9 @@ import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import { fmtUSD, fmtKg, fmtFechaCorta } from '@/lib/format';
-import {
-  fetchFacturaDetalle,
-  approveFactura,
-  getFacturaUrl,
-} from '@/features/blufin/facturas-queries';
+import { fetchFacturaDetalle, approveFactura } from '@/features/blufin/facturas-queries';
+import { signedUrlAnyBucket } from '@/features/blufin/import-queries';
+import { PdfViewerModal, type PdfTarget } from '@/features/blufin/PdfViewerModal';
 
 export function FacturaDetalleModal({
   facturaId,
@@ -24,6 +23,8 @@ export function FacturaDetalleModal({
 }) {
   const qc = useQueryClient();
   const backdrop = useBackdropDismiss(onClose);
+  const [pdf, setPdf] = useState<PdfTarget | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['blufin_factura_detalle', facturaId],
@@ -45,20 +46,35 @@ export function FacturaDetalleModal({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const verArchivo = async (path: string) => {
-    try {
-      const url = await getFacturaUrl(path);
-      window.open(url, '_blank', 'noopener');
-    } catch (e) {
-      toast.error('No se pudo abrir el archivo: ' + (e as Error).message);
-    }
-  };
-
   const f = data?.factura;
   const lineas = data?.lineas ?? [];
   const dif = f ? Number(f.total_factura ?? 0) - Number(f.total_contrato ?? 0) : 0;
 
+  const verPdf = async () => {
+    if (!f) return;
+    setPdfLoading(true);
+    try {
+      const titulo = `Factura ${f.contrato?.folio ?? ''}`.trim();
+      if (f.storage_path) {
+        const url = await signedUrlAnyBucket(f.storage_path);
+        if (url) setPdf({ title: titulo, embed: url, open: url });
+        else toast.error('No se encontró el archivo');
+      } else if (f.drive_pdf_id) {
+        setPdf({
+          title: titulo,
+          embed: `https://drive.google.com/file/d/${f.drive_pdf_id}/preview`,
+          open: `https://drive.google.com/file/d/${f.drive_pdf_id}/view`,
+        });
+      }
+    } catch (e) {
+      toast.error('No se pudo abrir el archivo: ' + (e as Error).message);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
+    <>
     <AnimatePresence>
       {facturaId && (
         <motion.div
@@ -131,16 +147,8 @@ export function FacturaDetalleModal({
                     {(f.storage_path || f.drive_pdf_id) && (
                       <button
                         className="btn btn-outline btn-sm"
-                        onClick={() =>
-                          f.storage_path
-                            ? verArchivo(f.storage_path)
-                            : window.open(
-                                `https://drive.google.com/file/d/${f.drive_pdf_id}/view`,
-                                '_blank',
-                                'noopener',
-                              )
-                        }
-                        title="Abrir el PDF de la factura para verificar el mapeo"
+                        onClick={verPdf}
+                        title="Ver el PDF de la factura para verificar el mapeo"
                       >
                         <Icon name="receipt" size={13} /> Ver PDF
                       </button>
@@ -275,5 +283,14 @@ export function FacturaDetalleModal({
         </motion.div>
       )}
     </AnimatePresence>
+    <PdfViewerModal
+      target={pdf}
+      loading={pdfLoading}
+      onClose={() => {
+        setPdf(null);
+        setPdfLoading(false);
+      }}
+    />
+    </>
   );
 }

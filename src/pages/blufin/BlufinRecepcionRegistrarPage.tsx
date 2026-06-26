@@ -10,27 +10,8 @@ import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtUSD, fmtFechaCorta } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
 import { createRecepcion, fetchContratoById } from '@/features/blufin/recepcion-queries';
-import { getImportPdfUrl, abrirFacturaDeContrato } from '@/features/blufin/import-queries';
-
-async function abrirPdf(path: string) {
-  try {
-    const url = await getImportPdfUrl(path);
-    if (url) window.open(url, '_blank');
-    else toast.error('No se encontró el PDF');
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
-  }
-}
-
-/** Abre la factura del contrato (Storage o Drive). */
-async function abrirFactura(c: { factura_pdf_path?: string | null; factura_drive_pdf_id?: string | null }) {
-  try {
-    const ok = await abrirFacturaDeContrato(c);
-    if (!ok) toast.error('No se encontró el PDF de la factura');
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
-  }
-}
+import { getImportPdfUrl, resolveFacturaPdf } from '@/features/blufin/import-queries';
+import { PdfViewerModal, type PdfTarget } from '@/features/blufin/PdfViewerModal';
 
 type LineaForm = {
   sku_id: string | null;
@@ -81,6 +62,36 @@ export function BlufinRecepcionRegistrarPage() {
   const [lote, setLote] = useState('');
   const [obsGenerales, setObsGenerales] = useState('');
   const [lineas, setLineas] = useState<LineaForm[]>([]);
+  const [pdf, setPdf] = useState<PdfTarget | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function verContratoPdf() {
+    if (!contrato?.contrato_pdf_path) return;
+    setPdfLoading(true);
+    try {
+      const url = await getImportPdfUrl(contrato.contrato_pdf_path);
+      if (url) setPdf({ title: `Contrato ${contrato.folio}`, embed: url, open: url });
+      else toast.error('No se encontró el PDF');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
+  async function verFacturaPdf() {
+    if (!contrato) return;
+    setPdfLoading(true);
+    try {
+      const u = await resolveFacturaPdf(contrato);
+      if (u) setPdf({ title: `Factura ${contrato.folio}`, embed: u.embed, open: u.open });
+      else toast.error('No se encontró el PDF de la factura');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   // Precargar líneas y defaults cuando llega el contrato.
   // kg recibidos arranca = kg contratados (solo se teclea si difiere).
@@ -258,8 +269,8 @@ export function BlufinRecepcionRegistrarPage() {
             {contrato.contrato_pdf_path && (
               <button
                 className="btn btn-outline btn-sm"
-                onClick={() => abrirPdf(contrato.contrato_pdf_path!)}
-                title="Descargar el PDF de la orden de compra"
+                onClick={verContratoPdf}
+                title="Ver el PDF de la orden de compra"
               >
                 <Icon name="file-text" size={13} /> Contrato
               </button>
@@ -267,8 +278,8 @@ export function BlufinRecepcionRegistrarPage() {
             {(contrato.factura_pdf_path || contrato.factura_drive_pdf_id) && (
               <button
                 className="btn btn-outline btn-sm"
-                onClick={() => abrirFactura(contrato)}
-                title="Descargar el PDF de la factura del proveedor"
+                onClick={verFacturaPdf}
+                title="Ver el PDF de la factura del proveedor"
               >
                 <Icon name="receipt" size={13} /> Factura
               </button>
@@ -640,6 +651,14 @@ export function BlufinRecepcionRegistrarPage() {
           </button>
         </div>
       </div>
+      <PdfViewerModal
+        target={pdf}
+        loading={pdfLoading}
+        onClose={() => {
+          setPdf(null);
+          setPdfLoading(false);
+        }}
+      />
     </>
   );
 }

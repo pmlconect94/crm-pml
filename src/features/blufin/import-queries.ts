@@ -42,28 +42,40 @@ export async function getImportPdfUrl(path: string): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
-/**
- * Abre el PDF de la factura del proveedor ligado a un contrato, venga de donde
- * venga: de Storage (`factura_pdf_path`, facturas históricas en el bucket
- * `documentos-importacion`) o de Google Drive (`factura_drive_pdf_id`, facturas
- * que llegaron por correo y se ligaron al aprobar). Devuelve false si no hay PDF.
- */
-export async function abrirFacturaDeContrato(c: {
+/** URL firmada probando los dos buckets donde pueden vivir PDFs de facturas:
+ *  documentos-importacion (contratos, facturas históricas y las de correo
+ *  migradas) y facturas-pdf (subidas manuales en la revisión). Devuelve la
+ *  primera que exista, o null. */
+export async function signedUrlAnyBucket(path: string): Promise<string | null> {
+  for (const bucket of ['documentos-importacion', 'facturas-pdf']) {
+    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+    if (data?.signedUrl) return data.signedUrl;
+  }
+  return null;
+}
+
+/** URLs de la factura del proveedor ligada a un contrato, para VERLA dentro de
+ *  la app (iframe `embed`) y para abrirla/imprimirla en pestaña nueva (`open`).
+ *  Storage (`factura_pdf_path`, URL firmada) o Google Drive (`factura_drive_pdf_id`,
+ *  /preview embebible + /view para abrir). null si no hay PDF. */
+export type FacturaPdfUrls = { embed: string; open: string };
+
+export async function resolveFacturaPdf(c: {
   factura_pdf_path?: string | null;
   factura_drive_pdf_id?: string | null;
-}): Promise<boolean> {
+}): Promise<FacturaPdfUrls | null> {
   if (c.factura_pdf_path) {
     const url = await getImportPdfUrl(c.factura_pdf_path);
-    if (url) {
-      window.open(url, '_blank');
-      return true;
-    }
+    return url ? { embed: url, open: url } : null;
   }
   if (c.factura_drive_pdf_id) {
-    window.open(`https://drive.google.com/file/d/${c.factura_drive_pdf_id}/view`, '_blank', 'noopener');
-    return true;
+    const id = c.factura_drive_pdf_id;
+    return {
+      embed: `https://drive.google.com/file/d/${id}/preview`,
+      open: `https://drive.google.com/file/d/${id}/view`,
+    };
   }
-  return false;
+  return null;
 }
 
 // ─── Edición de la revisión ──────────────────────────────────────────────────
