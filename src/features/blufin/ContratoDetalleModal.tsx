@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratoDetalle } from '@/features/blufin/queries';
 import { getImportPdfUrl, abrirFacturaDeContrato } from '@/features/blufin/import-queries';
+import { getTcDelDiaInfo } from '@/lib/tc';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 async function abrirPdf(path: string) {
@@ -64,6 +65,13 @@ export function ContratoDetalleModal({
     queryFn: () => fetchContratoDetalle(contratoId!),
     enabled: !!contratoId,
   });
+  // TC del día (tasa de mercado) para estimar pesos cuando el contrato no está
+  // liquidado. Cacheado por hora; compartido con Central de Costos.
+  const { data: tcInfo } = useQuery({
+    queryKey: ['tc-del-dia'],
+    queryFn: getTcDelDiaInfo,
+    staleTime: 1000 * 60 * 60,
+  });
 
   const backdrop = useBackdropDismiss(onClose);
   const c = data?.contrato;
@@ -75,6 +83,19 @@ export function ContratoDetalleModal({
     c && !(c.anticipo_pagado && c.saldo_pagado)
       ? Math.max(0, Number(c.total_usd ?? 0) - (data?.pagado ?? 0) - (data?.ncAplicado ?? 0))
       : 0;
+
+  // Precios en pesos: si el contrato está liquidado usamos el TC REAL (promedio
+  // ponderado de los pagos); si no, el TC del día como ESTIMADO (§6 / §14.2).
+  const pagosArr = data?.pagos ?? [];
+  const sumUsdPagos = pagosArr.reduce((s, p) => s + p.monto_usd, 0);
+  const tcReal =
+    sumUsdPagos > 0 ? pagosArr.reduce((s, p) => s + p.tc * p.monto_usd, 0) / sumUsdPagos : null;
+  const liquidado = !!c && restante <= 0.01;
+  const usaTcReal = liquidado && tcReal != null;
+  const tcMxn = usaTcReal ? tcReal : tcInfo?.tc ?? null;
+  const tcEstimado = !usaTcReal;
+  const totMxn = tcMxn != null ? totUsd * tcMxn : null;
+  const colMxn = tcEstimado ? '#92400E' : 'var(--ink-900)';
 
   return (
     <AnimatePresence>
@@ -222,6 +243,50 @@ export function ContratoDetalleModal({
                     ))}
                   </div>
 
+                  {/* Precios en pesos (TC real si liquidado, estimado si no) */}
+                  {tcMxn != null ? (
+                    <div
+                      className="hstack"
+                      style={{
+                        marginTop: 12,
+                        padding: '9px 14px',
+                        borderRadius: 'var(--r-sm)',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        flexWrap: 'wrap',
+                        background: tcEstimado
+                          ? 'color-mix(in srgb, var(--amber-500) 9%, white)'
+                          : 'color-mix(in srgb, var(--green-500) 8%, white)',
+                        border: `1px solid ${
+                          tcEstimado
+                            ? 'color-mix(in srgb, var(--amber-500) 32%, white)'
+                            : 'color-mix(in srgb, var(--green-500) 28%, white)'
+                        }`,
+                      }}
+                    >
+                      <div>
+                        <div className="text-xs muted">
+                          Total en pesos{tcEstimado ? ' (estimado)' : ''}
+                        </div>
+                        <div className="mono fw-700" style={{ fontSize: 16, color: colMxn }}>
+                          {fmtMXN(totMxn)}
+                        </div>
+                      </div>
+                      <div className="text-xs" style={{ color: 'var(--ink-600)', textAlign: 'right' }}>
+                        TC <span className="mono fw-700">{tcMxn.toFixed(4)}</span>
+                        <div style={{ marginTop: 2 }}>
+                          {usaTcReal
+                            ? 'promedio ponderado de pagos · liquidado'
+                            : `TC del día${tcInfo?.fecha ? ` ${fmtFechaCorta(tcInfo.fecha)}` : ''} · estimado hasta liquidar`}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs muted" style={{ marginTop: 12 }}>
+                      Precios en pesos no disponibles (sin pagos registrados y sin TC del día).
+                    </div>
+                  )}
+
                   {/* Productos — sección destacada con marco de acento */}
                   <div
                     style={{
@@ -261,6 +326,8 @@ export function ContratoDetalleModal({
                           <th style={{ textAlign: 'right' }}>Cajas</th>
                           <th style={{ textAlign: 'right' }}>USD/kg</th>
                           <th style={{ textAlign: 'right' }}>Total USD</th>
+                          <th style={{ textAlign: 'right' }}>MXN/kg</th>
+                          <th style={{ textAlign: 'right' }}>Total MXN</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -271,6 +338,8 @@ export function ContratoDetalleModal({
                             <td style={{ textAlign: 'right' }} className="mono">{p.cajas ?? '—'}</td>
                             <td style={{ textAlign: 'right' }} className="mono">{p.precio_usd != null ? '$' + Number(p.precio_usd).toFixed(4) : '—'}</td>
                             <td style={{ textAlign: 'right' }} className="mono fw-700">{fmtUSD(p.total_usd)}</td>
+                            <td style={{ textAlign: 'right' }} className="mono">{tcMxn != null && p.precio_usd != null ? fmtMXN(Number(p.precio_usd) * tcMxn) : '—'}</td>
+                            <td style={{ textAlign: 'right', color: colMxn }} className="mono fw-700">{tcMxn != null ? fmtMXN(Number(p.total_usd ?? 0) * tcMxn) : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -282,6 +351,10 @@ export function ContratoDetalleModal({
                           <td></td>
                           <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-700">
                             {fmtUSD(totUsd)}
+                          </td>
+                          <td></td>
+                          <td style={{ textAlign: 'right', color: colMxn }} className="mono fw-700">
+                            {tcMxn != null ? fmtMXN(totMxn) : '—'}
                           </td>
                         </tr>
                       </tfoot>

@@ -64,7 +64,13 @@ export async function updateLlegadaContrato(params: {
 }): Promise<void> {
   const { error } = await supabase
     .from('blufin_contratos')
-    .update({ eta_bodega: params.eta_bodega, bodega_destino: params.bodega_destino })
+    .update({
+      eta_bodega: params.eta_bodega,
+      bodega_destino: params.bodega_destino,
+      // Al programar, la ETA bodega deja de ser estimada (+7d) y pasa a oficial,
+      // aunque la fecha coincida con el estimado. Ver §14.4 / migración eta_bodega_confirmada.
+      eta_bodega_confirmada: true,
+    })
     .eq('id', params.contrato_id);
   if (error) throw error;
 }

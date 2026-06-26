@@ -68,6 +68,7 @@ export type Database = {
           status: string;
           eta_puerto: string | null;
           eta_bodega: string | null;
+          eta_bodega_confirmada: boolean; // true = llegada programada (oficial); false = estimada +7d
           llegada_real: string | null;
           presentacion: string | null;
           bodega_destino: string | null;
@@ -117,6 +118,7 @@ export type Database = {
           contrato_pdf_path?: string | null;
           factura_pdf_path?: string | null;
           factura_drive_pdf_id?: string | null;
+          eta_bodega_confirmada?: boolean;
           created_by?: string | null;
         };
         Update: {
@@ -146,6 +148,7 @@ export type Database = {
           contrato_pdf_path?: string | null;
           factura_pdf_path?: string | null;
           factura_drive_pdf_id?: string | null;
+          eta_bodega_confirmada?: boolean;
         };
         Relationships: Empty;
       };

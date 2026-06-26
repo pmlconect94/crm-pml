@@ -9,6 +9,7 @@ import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
 import { StatStrip } from '@/components/StatStrip';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { statusContrato } from '@/features/blufin/status';
+import { SkusContratoModal } from '@/features/blufin/SkusContratoModal';
 import { useAuth } from '@/lib/auth';
 import { fmtKg, fmtFechaCorta, fmtFecha, diasDesde } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
@@ -27,15 +28,6 @@ type View = 'por-recibir' | 'historial' | 'calendario';
 // vencidos/atrasados, que también hay que recibir). Contratos sin ETA siempre
 // se muestran (necesitan que se les programe llegada).
 const VENTANA_ADELANTE = 7;
-
-/** ETA bodega auto = ETA puerto + 7d (regla §14.4). Si la eta_bodega del
- *  contrato coincide con esto, sigue siendo la ESTIMADA; al "Programar llegada"
- *  se le pone otra fecha y esa pasa a ser la oficial. */
-const etaBodegaAuto = (etaPuerto: string) => {
-  const d = new Date(etaPuerto + 'T12:00:00');
-  d.setDate(d.getDate() + 7);
-  return d.toISOString().slice(0, 10);
-};
 
 export function BlufinRecepcionPage() {
   const { empresaId, user } = useAuth();
@@ -279,10 +271,10 @@ function PorRecibirView({
           const dias = diasDesde(c.eta_bodega);
           const productos = c.productos ?? [];
           const eta = c.eta_bodega ? new Date(c.eta_bodega + 'T12:00:00') : null;
-          const etaEstimada =
-            !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
-          // Ya programada = tiene ETA bodega OFICIAL (no la estimada +7d ni vacía)
-          const yaProgramada = !!c.eta_bodega && !etaEstimada;
+          // Ya programada = el usuario fijó la fecha oficial (bandera explícita),
+          // aunque coincida con el estimado +7d. Estimada = hay ETA pero sin programar.
+          const yaProgramada = !!c.eta_bodega_confirmada;
+          const etaEstimada = !!c.eta_bodega && !yaProgramada;
           return (
             <div
               key={c.id}
@@ -454,125 +446,6 @@ function PorRecibirView({
       )}
       <SkusContratoModal contrato={verSkus} onClose={() => setVerSkus(null)} />
     </div>
-  );
-}
-
-/* ─── SKUs del contrato (ventana chica) ───────────────────────────── */
-
-function SkusContratoModal({
-  contrato,
-  onClose,
-}: {
-  contrato: BlufinContratoConProductos | null;
-  onClose: () => void;
-}) {
-  const backdrop = useBackdropDismiss(onClose);
-  const prods = contrato?.productos ?? [];
-  const totalKg = prods.reduce((s, p) => s + Number(p.kg ?? 0), 0);
-  const totalCajas = prods.reduce((s, p) => s + Number(p.cajas ?? 0), 0);
-
-  return (
-    <AnimatePresence>
-      {contrato && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          {...backdrop}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(10, 37, 64, 0.55)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-            zIndex: 100,
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={SPRING.snappy}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: 'white',
-              borderRadius: 'var(--r-lg)',
-              boxShadow: 'var(--shadow-xl)',
-              maxWidth: 480,
-              width: '100%',
-              maxHeight: '80vh',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <div
-              style={{
-                padding: '14px 18px',
-                borderBottom: '1px solid var(--ink-100)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div>
-                <div className="mono fw-700 text-sm">{contrato.folio}</div>
-                <div className="text-xs muted">
-                  {prods.length} SKU{prods.length !== 1 ? 's' : ''} · {fmtKg(totalKg)} kg contratados
-                </div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ padding: 6 }} aria-label="Cerrar">
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-            <div style={{ overflowY: 'auto' }}>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>SKU / descripción</th>
-                    <th style={{ textAlign: 'right' }}>Kg</th>
-                    <th style={{ textAlign: 'right' }}>Cajas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {prods.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="muted text-sm" style={{ textAlign: 'center', padding: 16 }}>
-                        Este contrato no tiene productos capturados.
-                      </td>
-                    </tr>
-                  ) : (
-                    prods.map((p, i) => (
-                      <tr key={i}>
-                        <td className="text-sm">
-                          {p.descripcion ?? '—'}
-                          {p.talla ? <span className="muted"> · {p.talla}</span> : null}
-                        </td>
-                        <td className="mono text-sm" style={{ textAlign: 'right' }}>{fmtKg(p.kg)}</td>
-                        <td className="mono text-sm" style={{ textAlign: 'right' }}>{p.cajas ?? '—'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-                {prods.length > 0 && (
-                  <tfoot>
-                    <tr>
-                      <td className="fw-700">Total</td>
-                      <td className="mono fw-700" style={{ textAlign: 'right' }}>{fmtKg(totalKg)}</td>
-                      <td className="mono fw-700" style={{ textAlign: 'right' }}>{totalCajas || '—'}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }
 
@@ -773,6 +646,24 @@ function HistorialView({
   isLoading: boolean;
   onDelete: (r: BlufinRecepcionEnriquecida) => void;
 }) {
+  const [q, setQ] = useState('');
+  const [verDetalle, setVerDetalle] = useState<BlufinRecepcionEnriquecida | null>(null);
+
+  const filtradas = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return recepciones;
+    return recepciones.filter((r) => {
+      const fecha = `${fmtFecha(r.fecha_recepcion) ?? ''} ${r.fecha_recepcion ?? ''}`.toLowerCase();
+      return (
+        (r.contrato?.folio ?? '').toLowerCase().includes(query) ||
+        fecha.includes(query) ||
+        (r.bodega?.nombre ?? '').toLowerCase().includes(query) ||
+        (r.entrada_intelisis ?? '').toLowerCase().includes(query) ||
+        (r.lineas ?? []).some((l) => (l.sku?.descripcion ?? '').toLowerCase().includes(query))
+      );
+    });
+  }, [recepciones, q]);
+
   if (isLoading) return <SkeletonRows rows={3} />;
 
   if (recepciones.length === 0) {
@@ -790,88 +681,275 @@ function HistorialView({
   }
 
   return (
-    <div className="card">
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Contrato</th>
-            <th>Bodega</th>
-            <th>Intelisis</th>
-            <th>Presentación</th>
-            <th style={{ textAlign: 'right' }}>Kg recibidos</th>
-            <th style={{ textAlign: 'right' }}>Diferencia</th>
-            <th style={{ width: 40 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {recepciones.map((r) => {
-            const lineas = r.lineas ?? [];
-            const kgRecibidos = lineas.reduce((s, l) => s + Number(l.kg_recibidos), 0);
-            const kgDif = lineas.reduce((s, l) => s + Number(l.diferencia ?? 0), 0);
-            const presDif =
-              r.presentacion_recibida &&
-              r.contrato?.presentacion &&
-              r.presentacion_recibida !== r.contrato.presentacion;
-            return (
-              <tr key={r.id}>
-                <td>
-                  <div className="fw-600">{fmtFecha(r.fecha_recepcion)}</div>
-                </td>
-                <td>
-                  <div className="mono text-sm fw-600">{r.contrato?.folio ?? '—'}</div>
-                  <div className="text-xs muted" style={{ marginTop: 2, maxWidth: 300 }}>
-                    {lineas.slice(0, 3).map((l, i) => (
-                      <div
-                        key={i}
-                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={l.sku?.descripcion ?? ''}
-                      >
-                        {l.sku?.descripcion ?? '—'}
-                      </div>
-                    ))}
-                    {lineas.length > 3 && <div>+{lineas.length - 3} más</div>}
-                  </div>
-                </td>
-                <td className="text-sm">{r.bodega?.nombre ?? '—'}</td>
-                <td className="mono text-sm">{r.entrada_intelisis ?? '—'}</td>
-                <td>
-                  {presDif ? (
-                    <span className="badge badge-amber">
-                      {r.contrato?.presentacion} → {r.presentacion_recibida}
-                    </span>
-                  ) : (
-                    <span className="text-sm">{r.presentacion_recibida ?? '—'}</span>
-                  )}
-                </td>
-                <td style={{ textAlign: 'right' }} className="mono fw-600">
-                  {fmtKg(kgRecibidos)}
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  {kgDif < 0 ? (
-                    <span className="mono fw-600" style={{ color: 'var(--red-500)' }}>
-                      −{fmtKg(-kgDif)}
-                    </span>
-                  ) : (
-                    <span className="badge badge-green">Completo</span>
-                  )}
-                </td>
-                <td>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => onDelete(r)}
-                    title="Eliminar recepción"
-                    style={{ padding: 6, color: 'var(--red-500)' }}
-                  >
-                    <Icon name="trash" size={13} />
-                  </button>
+    <div className="vstack" style={{ gap: 12 }}>
+      <div
+        className="hstack"
+        style={{
+          gap: 8,
+          padding: '7px 12px',
+          background: 'var(--ink-50)',
+          border: '1px solid var(--ink-200)',
+          borderRadius: 'var(--r-md)',
+        }}
+      >
+        <Icon name="search" size={14} />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Busca por folio, día de llegada, bodega o producto"
+          style={{
+            border: 'none',
+            outline: 'none',
+            background: 'transparent',
+            flex: 1,
+            fontSize: 13,
+            color: 'var(--ink-900)',
+          }}
+        />
+        {q && (
+          <button onClick={() => setQ('')} className="btn btn-ghost btn-sm" style={{ padding: 4 }} aria-label="Limpiar">
+            <Icon name="x" size={13} />
+          </button>
+        )}
+      </div>
+
+      <div className="card">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Contrato</th>
+              <th>Bodega</th>
+              <th>Intelisis</th>
+              <th>Presentación</th>
+              <th style={{ textAlign: 'right' }}>Kg recibidos</th>
+              <th style={{ textAlign: 'right' }}>Diferencia</th>
+              <th style={{ width: 40 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtradas.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="muted text-sm" style={{ textAlign: 'center', padding: 20 }}>
+                  Ninguna recepción coincide con la búsqueda.
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ) : (
+              filtradas.map((r) => {
+                const lineas = r.lineas ?? [];
+                const kgRecibidos = lineas.reduce((s, l) => s + Number(l.kg_recibidos), 0);
+                const kgDif = lineas.reduce((s, l) => s + Number(l.diferencia ?? 0), 0);
+                const presDif =
+                  r.presentacion_recibida &&
+                  r.contrato?.presentacion &&
+                  r.presentacion_recibida !== r.contrato.presentacion;
+                return (
+                  <tr key={r.id}>
+                    <td>
+                      <div className="fw-600">{fmtFecha(r.fecha_recepcion)}</div>
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => setVerDetalle(r)}
+                        className="mono text-sm fw-600"
+                        title="Ver SKUs y cantidades recibidas"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          color: 'var(--blue-500)',
+                        }}
+                      >
+                        {r.contrato?.folio ?? '—'}
+                      </button>
+                      <div className="text-xs muted" style={{ marginTop: 2, maxWidth: 300 }}>
+                        {lineas.slice(0, 3).map((l, i) => (
+                          <div
+                            key={i}
+                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={l.sku?.descripcion ?? ''}
+                          >
+                            {l.sku?.descripcion ?? '—'}
+                          </div>
+                        ))}
+                        {lineas.length > 3 && <div>+{lineas.length - 3} más</div>}
+                      </div>
+                    </td>
+                    <td className="text-sm">{r.bodega?.nombre ?? '—'}</td>
+                    <td className="mono text-sm">{r.entrada_intelisis ?? '—'}</td>
+                    <td>
+                      {presDif ? (
+                        <span className="badge badge-amber">
+                          {r.contrato?.presentacion} → {r.presentacion_recibida}
+                        </span>
+                      ) : (
+                        <span className="text-sm">{r.presentacion_recibida ?? '—'}</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-600">
+                      {fmtKg(kgRecibidos)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      {kgDif < 0 ? (
+                        <span className="mono fw-600" style={{ color: 'var(--red-500)' }}>
+                          −{fmtKg(-kgDif)}
+                        </span>
+                      ) : (
+                        <span className="badge badge-green">Completo</span>
+                      )}
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => onDelete(r)}
+                        title="Eliminar recepción"
+                        style={{ padding: 6, color: 'var(--red-500)' }}
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <RecepcionDetalleModal recepcion={verDetalle} onClose={() => setVerDetalle(null)} />
     </div>
+  );
+}
+
+/* ─── Detalle de recepción (ventana: qué se recibió por SKU) ───────── */
+
+function RecepcionDetalleModal({
+  recepcion,
+  onClose,
+}: {
+  recepcion: BlufinRecepcionEnriquecida | null;
+  onClose: () => void;
+}) {
+  const backdrop = useBackdropDismiss(onClose);
+  const lineas = recepcion?.lineas ?? [];
+  const totalContratado = lineas.reduce((s, l) => s + Number(l.kg_contratados), 0);
+  const totalRecibido = lineas.reduce((s, l) => s + Number(l.kg_recibidos), 0);
+
+  return (
+    <AnimatePresence>
+      {recepcion && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          {...backdrop}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(10, 37, 64, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            zIndex: 100,
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={SPRING.snappy}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: 'var(--r-lg)',
+              boxShadow: 'var(--shadow-xl)',
+              maxWidth: 580,
+              width: '100%',
+              maxHeight: '82vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div
+              style={{
+                padding: '14px 18px',
+                borderBottom: '1px solid var(--ink-100)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div className="mono fw-700 text-sm">{recepcion.contrato?.folio ?? '—'}</div>
+                <div className="text-xs muted" style={{ marginTop: 2 }}>
+                  Recibido {fmtFecha(recepcion.fecha_recepcion)} · {recepcion.bodega?.nombre ?? 'sin bodega'} ·
+                  Intelisis <span className="mono">{recepcion.entrada_intelisis ?? '—'}</span>
+                  {recepcion.presentacion_recibida ? ` · ${recepcion.presentacion_recibida}` : ''}
+                </div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ padding: 6 }} aria-label="Cerrar">
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+            <div style={{ overflowY: 'auto' }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th style={{ textAlign: 'right' }}>Contratado</th>
+                    <th style={{ textAlign: 'right' }}>Recibido</th>
+                    <th style={{ textAlign: 'right' }}>Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineas.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="muted text-sm" style={{ textAlign: 'center', padding: 16 }}>
+                        Esta recepción no tiene líneas capturadas.
+                      </td>
+                    </tr>
+                  ) : (
+                    lineas.map((l, i) => (
+                      <tr key={i}>
+                        <td className="text-sm fw-600">{l.sku?.descripcion ?? '—'}</td>
+                        <td className="mono text-sm" style={{ textAlign: 'right' }}>{fmtKg(l.kg_contratados)}</td>
+                        <td className="mono text-sm" style={{ textAlign: 'right' }}>{fmtKg(l.kg_recibidos)}</td>
+                        <td
+                          className="mono fw-700 text-sm"
+                          style={{ textAlign: 'right', color: Number(l.diferencia ?? 0) < 0 ? 'var(--red-500)' : 'var(--green-500)' }}
+                        >
+                          {Number(l.diferencia ?? 0) < 0 ? `−${fmtKg(-Number(l.diferencia ?? 0))}` : 'OK'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {lineas.length > 0 && (
+                  <tfoot>
+                    <tr>
+                      <td className="fw-700">Total</td>
+                      <td className="mono fw-700" style={{ textAlign: 'right' }}>{fmtKg(totalContratado)}</td>
+                      <td className="mono fw-700" style={{ textAlign: 'right' }}>{fmtKg(totalRecibido)}</td>
+                      <td
+                        className="mono fw-700"
+                        style={{ textAlign: 'right', color: totalRecibido < totalContratado ? 'var(--red-500)' : 'var(--green-500)' }}
+                      >
+                        {totalRecibido < totalContratado ? `−${fmtKg(totalContratado - totalRecibido)}` : 'OK'}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -919,13 +997,11 @@ function CalendarioView({
       }),
     );
     porRecibir.forEach((c) => {
-      const estimada =
-        !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
       add(c.eta_bodega, {
         tipo: 'eta',
         folio: c.folio,
         contratoId: c.id,
-        programada: !!c.eta_bodega && !estimada,
+        programada: !!c.eta_bodega_confirmada,
       });
     });
     return map;

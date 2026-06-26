@@ -9,6 +9,7 @@ import { fetchContratos } from '@/features/blufin/queries';
 import { fetchRecepciones } from '@/features/blufin/recepcion-queries';
 import { statusContrato } from '@/features/blufin/status';
 import { StatusPill } from '@/features/blufin/StatusPill';
+import { SkusContratoModal } from '@/features/blufin/SkusContratoModal';
 import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida } from '@/types/database';
 
 /* ─── Helpers de fecha (hora local, YYYY-MM-DD) ──────────────────────── */
@@ -23,13 +24,6 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const isoDe = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const hoyISO = () => isoDe(new Date());
 
-// ETA bodega "auto" = ETA puerto + 7d (regla §14.4). Si coincide con la guardada,
-// la ETA bodega sigue siendo estimada; si difiere, ya es oficial.
-const etaBodegaAuto = (etaPuerto: string) => {
-  const d = new Date(etaPuerto + 'T12:00:00');
-  d.setDate(d.getDate() + 7);
-  return isoDe(d);
-};
 const addDiasISO = (iso: string, n: number) => {
   const d = new Date(iso + 'T12:00:00');
   d.setDate(d.getDate() + n);
@@ -95,7 +89,7 @@ export function BlufinCalendarioPage() {
           tipo: 'eta-bodega',
           fecha: c.eta_bodega,
           folio: c.folio,
-          estimada: !!c.eta_puerto && etaBodegaAuto(c.eta_puerto) === c.eta_bodega,
+          estimada: !c.eta_bodega_confirmada,
         });
     }
     for (const r of recepciones) {
@@ -171,6 +165,7 @@ export function BlufinCalendarioPage() {
 
 type ItemContenedor = {
   folio: string;
+  contratoId: string;
   status: ReturnType<typeof statusContrato>;
   contenedor: string | null;
   naviera: string | null;
@@ -199,6 +194,7 @@ function PorProductoView({
 }) {
   const [q, setQ] = useState('');
   const [abierto, setAbierto] = useState<Set<string>>(new Set());
+  const [verSkus, setVerSkus] = useState<string | null>(null);
 
   // Agrupa por SKU sumando lo que viene en contratos NO recibidos.
   const grupos = useMemo<GrupoSku[]>(() => {
@@ -209,8 +205,7 @@ function PorProductoView({
     for (const c of contratos) {
       const recibido = recibidoIds.has(c.id) || c.status === 'Entregado' || !!c.llegada_real;
       if (recibido) continue;
-      const etaEstimada =
-        !!c.eta_puerto && !!c.eta_bodega && etaBodegaAuto(c.eta_puerto) === c.eta_bodega;
+      const etaEstimada = !!c.eta_bodega && !c.eta_bodega_confirmada;
       for (const p of c.productos ?? []) {
         const key = p.sku_id ?? p.descripcion ?? 'sin-sku';
         let g = map.get(key);
@@ -221,6 +216,7 @@ function PorProductoView({
         g.totalKg += Number(p.kg ?? 0);
         g.items.push({
           folio: c.folio,
+          contratoId: c.id,
           status: statusContrato(c, hoy),
           contenedor: c.contenedor,
           naviera: c.naviera,
@@ -389,7 +385,20 @@ function PorProductoView({
                                   </td>
                                   <td>
                                     <span className="hstack" style={{ gap: 6 }}>
-                                      <span className="mono fw-700 text-xs">{it.folio}</span>
+                                      <button
+                                        onClick={() => setVerSkus(it.contratoId)}
+                                        className="mono fw-700 text-xs"
+                                        title="Ver los productos de este contenedor"
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          padding: 0,
+                                          cursor: 'pointer',
+                                          color: 'var(--blue-500)',
+                                        }}
+                                      >
+                                        {it.folio}
+                                      </button>
                                       <StatusPill status={it.status} />
                                     </span>
                                   </td>
@@ -409,6 +418,11 @@ function PorProductoView({
           </table>
         </div>
       )}
+
+      <SkusContratoModal
+        contrato={contratos.find((c) => c.id === verSkus) ?? null}
+        onClose={() => setVerSkus(null)}
+      />
     </div>
   );
 }
