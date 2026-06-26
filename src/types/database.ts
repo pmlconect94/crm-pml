@@ -658,6 +658,112 @@ export type Database = {
         };
         Relationships: Empty;
       };
+
+      // ─── Camanchaca SA (importación USD) ────────────────────────────────────
+      cam_ordenes_planeadas: {
+        Row: { id: string; empresa_id: string | null; oc_proveedor: string; descripcion: string | null; kg_estimados: number | null; llegada_estimada: string | null; status: string; folio_interno: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; oc_proveedor: string; descripcion?: string | null; kg_estimados?: number | null; llegada_estimada?: string | null; status?: string; folio_interno?: string | null; capturado_por?: string | null };
+        Update: { oc_proveedor?: string; descripcion?: string | null; kg_estimados?: number | null; llegada_estimada?: string | null; status?: string; folio_interno?: string | null };
+        Relationships: Empty;
+      };
+      cam_contenedores_sa: {
+        Row: { id: string; empresa_id: string | null; folio_interno: string; orden_planeada_id: string | null; oc_proveedor: string | null; factura: string | null; fecha_factura: string | null; fecha_vencimiento: string | null; status: string; eta_manzanillo: string | null; eta_bodega: string | null; eta_bodega_confirmada: boolean; naviera_id: number | null; naviera: string | null; contenedor: string | null; lote: string | null; presentacion: string | null; bodega_destino: string | null; llegada_real: string | null; entrada_intelisis: string | null; total_usd: number | null; total_kg: number | null; observaciones: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; folio_interno?: string; orden_planeada_id?: string | null; oc_proveedor?: string | null; factura?: string | null; fecha_factura?: string | null; fecha_vencimiento?: string | null; status?: string; eta_manzanillo?: string | null; eta_bodega?: string | null; eta_bodega_confirmada?: boolean; naviera_id?: number | null; naviera?: string | null; contenedor?: string | null; lote?: string | null; presentacion?: string | null; bodega_destino?: string | null; llegada_real?: string | null; entrada_intelisis?: string | null; total_usd?: number | null; total_kg?: number | null; observaciones?: string | null; capturado_por?: string | null };
+        Update: { empresa_id?: string | null; oc_proveedor?: string | null; factura?: string | null; fecha_factura?: string | null; fecha_vencimiento?: string | null; status?: string; eta_manzanillo?: string | null; eta_bodega?: string | null; eta_bodega_confirmada?: boolean; naviera_id?: number | null; naviera?: string | null; contenedor?: string | null; lote?: string | null; presentacion?: string | null; bodega_destino?: string | null; llegada_real?: string | null; entrada_intelisis?: string | null; total_usd?: number | null; total_kg?: number | null; observaciones?: string | null };
+        Relationships: Empty;
+      };
+      cam_productos_sa: {
+        Row: { id: string; contenedor_id: string | null; sku_id: string | null; descripcion: string | null; marca: string | null; pct: string | null; talla: string | null; kg_caja: number | null; cajas: number | null; kg: number | null; precio_usd: number | null; total_usd: number | null; orden: number | null };
+        Insert: { id?: string; contenedor_id?: string | null; sku_id?: string | null; descripcion?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja?: number | null; cajas?: number | null; kg?: number | null; precio_usd?: number | null; total_usd?: number | null; orden?: number | null };
+        Update: { sku_id?: string | null; descripcion?: string | null; kg?: number | null; cajas?: number | null; precio_usd?: number | null; total_usd?: number | null };
+        Relationships: Empty;
+      };
+      cam_pagos_sa: {
+        Row: { id: string; contenedor_id: string | null; tipo: string; monto_usd: number; tc: number; monto_mxn: number | null; fecha: string; banco_id: number | null; referencia: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; contenedor_id?: string | null; tipo: string; monto_usd: number; tc: number; monto_mxn?: number | null; fecha: string; banco_id?: number | null; referencia?: string | null; capturado_por?: string | null };
+        Update: { tipo?: string; monto_usd?: number; tc?: number; monto_mxn?: number | null; fecha?: string; banco_id?: number | null; referencia?: string | null };
+        Relationships: Empty;
+      };
+      cam_forwards_sa: {
+        Row: { id: string; contenedor_id: string | null; monto_usd: number; tc_forward: number; monto_mxn: number | null; fecha_cierre: string | null; fecha_entrega: string | null; banco_id: number | null; status: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; contenedor_id?: string | null; monto_usd: number; tc_forward: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; capturado_por?: string | null };
+        Update: { monto_usd?: number; tc_forward?: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; contenedor_id?: string | null };
+        Relationships: Empty;
+      };
+      cam_costo_importacion: {
+        Row: { id: string; contenedor_id: string | null; agencia_id: number | null; concepto: string | null; monto_mxn: number; pagado: boolean | null; fecha: string | null; observaciones: string | null; created_at: string | null };
+        Insert: { id?: string; contenedor_id?: string | null; agencia_id?: number | null; concepto?: string | null; monto_mxn: number; pagado?: boolean | null; fecha?: string | null; observaciones?: string | null };
+        Update: { agencia_id?: number | null; concepto?: string | null; monto_mxn?: number; pagado?: boolean | null; fecha?: string | null; observaciones?: string | null };
+        Relationships: Empty;
+      };
+      cam_recepcion_sa: {
+        Row: { id: string; contenedor_id: string | null; fecha: string; bodega_id: number | null; entrada_intelisis: string | null; presentacion_recibida: string | null; observaciones: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; contenedor_id?: string | null; fecha: string; bodega_id?: number | null; entrada_intelisis?: string | null; presentacion_recibida?: string | null; observaciones?: string | null; capturado_por?: string | null };
+        Update: { fecha?: string; bodega_id?: number | null; entrada_intelisis?: string | null; presentacion_recibida?: string | null; observaciones?: string | null };
+        Relationships: Empty;
+      };
+      cam_recepcion_sa_lineas: {
+        Row: { id: string; recepcion_id: string | null; sku_id: string | null; kg_contratados: number; kg_recibidos: number; diferencia: number | null; observaciones: string | null };
+        Insert: { id?: string; recepcion_id?: string | null; sku_id?: string | null; kg_contratados: number; kg_recibidos: number; observaciones?: string | null };
+        Update: { kg_contratados?: number; kg_recibidos?: number; observaciones?: string | null };
+        Relationships: Empty;
+      };
+      cam_nc_sa: {
+        Row: { id: string; contenedor_id: string | null; monto_usd: number; motivo: string; fecha: string; status: string | null; created_at: string | null };
+        Insert: { id?: string; contenedor_id?: string | null; monto_usd: number; motivo: string; fecha: string; status?: string | null };
+        Update: { monto_usd?: number; motivo?: string; fecha?: string; status?: string | null };
+        Relationships: Empty;
+      };
+      // ─── Camanchaca MX (compras MXN) ────────────────────────────────────────
+      cam_compras_mx: {
+        Row: { id: string; empresa_id: string | null; folio_interno: string; factura_num: string; entrada_intelisis: string | null; fecha_factura: string; fecha_vencimiento: string | null; status: string | null; total_mxn: number; saldo_pendiente: number | null; observaciones: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; folio_interno?: string; factura_num: string; entrada_intelisis?: string | null; fecha_factura: string; fecha_vencimiento?: string | null; status?: string | null; total_mxn: number; saldo_pendiente?: number | null; observaciones?: string | null; capturado_por?: string | null };
+        Update: { factura_num?: string; entrada_intelisis?: string | null; fecha_factura?: string; fecha_vencimiento?: string | null; status?: string | null; total_mxn?: number; saldo_pendiente?: number | null; observaciones?: string | null };
+        Relationships: Empty;
+      };
+      cam_productos_mx: {
+        Row: { id: string; compra_id: string | null; sku_id: string | null; descripcion: string | null; marca: string | null; pct: string | null; talla: string | null; kg_caja: number | null; cajas: number | null; kg: number | null; precio_mxn: number | null; total_mxn: number | null; orden: number | null };
+        Insert: { id?: string; compra_id?: string | null; sku_id?: string | null; descripcion?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja?: number | null; cajas?: number | null; kg?: number | null; precio_mxn?: number | null; total_mxn?: number | null; orden?: number | null };
+        Update: { sku_id?: string | null; descripcion?: string | null; kg?: number | null; cajas?: number | null; precio_mxn?: number | null; total_mxn?: number | null };
+        Relationships: Empty;
+      };
+      cam_pagos_mx: {
+        Row: { id: string; compra_id: string | null; monto: number; fecha: string; banco_id: number | null; referencia: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; compra_id?: string | null; monto: number; fecha: string; banco_id?: number | null; referencia?: string | null; capturado_por?: string | null };
+        Update: { monto?: number; fecha?: string; banco_id?: number | null; referencia?: string | null };
+        Relationships: Empty;
+      };
+      cam_nc_mx: {
+        Row: { id: string; compra_id: string | null; monto_mxn: number; motivo: string; fecha: string; status: string | null; created_at: string | null };
+        Insert: { id?: string; compra_id?: string | null; monto_mxn: number; motivo: string; fecha: string; status?: string | null };
+        Update: { monto_mxn?: number; motivo?: string; fecha?: string; status?: string | null };
+        Relationships: Empty;
+      };
+      // ─── Neptuno (factura = ID) ─────────────────────────────────────────────
+      nep_facturas: {
+        Row: { id: string; empresa_id: string | null; factura_num: string; entrada_intelisis: string | null; fecha_factura: string; fecha_vencimiento: string | null; status: string | null; total_usd: number; total_kg: number | null; saldo_usd: number | null; observaciones: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; factura_num: string; entrada_intelisis?: string | null; fecha_factura: string; fecha_vencimiento?: string | null; status?: string | null; total_usd: number; total_kg?: number | null; saldo_usd?: number | null; observaciones?: string | null; capturado_por?: string | null };
+        Update: { factura_num?: string; entrada_intelisis?: string | null; fecha_factura?: string; fecha_vencimiento?: string | null; status?: string | null; total_usd?: number; total_kg?: number | null; saldo_usd?: number | null; observaciones?: string | null };
+        Relationships: Empty;
+      };
+      nep_factura_productos: {
+        Row: { id: string; factura_id: string | null; sku_id: string | null; descripcion: string | null; marca: string | null; pct: string | null; talla: string | null; kg_caja: number | null; cajas: number | null; kg: number | null; precio_usd: number | null; total_usd: number | null; orden: number | null };
+        Insert: { id?: string; factura_id?: string | null; sku_id?: string | null; descripcion?: string | null; marca?: string | null; pct?: string | null; talla?: string | null; kg_caja?: number | null; cajas?: number | null; kg?: number | null; precio_usd?: number | null; total_usd?: number | null; orden?: number | null };
+        Update: { sku_id?: string | null; descripcion?: string | null; kg?: number | null; cajas?: number | null; precio_usd?: number | null; total_usd?: number | null };
+        Relationships: Empty;
+      };
+      nep_pagos: {
+        Row: { id: string; factura_id: string | null; tipo: string; monto_usd: number; tc: number; monto_mxn: number | null; fecha: string; banco_id: number | null; referencia: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; factura_id?: string | null; tipo: string; monto_usd: number; tc: number; monto_mxn?: number | null; fecha: string; banco_id?: number | null; referencia?: string | null; capturado_por?: string | null };
+        Update: { tipo?: string; monto_usd?: number; tc?: number; monto_mxn?: number | null; fecha?: string; banco_id?: number | null; referencia?: string | null };
+        Relationships: Empty;
+      };
+      nep_notas_credito: {
+        Row: { id: string; factura_id: string | null; monto_usd: number; motivo: string; fecha: string; status: string | null; created_at: string | null };
+        Insert: { id?: string; factura_id?: string | null; monto_usd: number; motivo: string; fecha: string; status?: string | null };
+        Update: { monto_usd?: number; motivo?: string; fecha?: string; status?: string | null };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -745,3 +851,50 @@ export type BlufinImportLoteEnriquecido = BlufinImportLote & {
 export type BlufinImportContratoConLineas = BlufinImportContrato & {
   lineas?: (BlufinImportLinea & { sku?: { code: string; descripcion: string } | null })[];
 };
+
+// ─── Camanchaca SA (importación USD) ──────────────────────────────────────
+export type CamOrdenPlaneada = Database['crm']['Tables']['cam_ordenes_planeadas']['Row'];
+export type CamOrdenPlaneadaInsert = Database['crm']['Tables']['cam_ordenes_planeadas']['Insert'];
+export type CamContenedorSA = Database['crm']['Tables']['cam_contenedores_sa']['Row'];
+export type CamContenedorSAInsert = Database['crm']['Tables']['cam_contenedores_sa']['Insert'];
+export type CamProductoSA = Database['crm']['Tables']['cam_productos_sa']['Row'];
+export type CamProductoSAInsert = Database['crm']['Tables']['cam_productos_sa']['Insert'];
+export type CamPagoSA = Database['crm']['Tables']['cam_pagos_sa']['Row'];
+export type CamPagoSAInsert = Database['crm']['Tables']['cam_pagos_sa']['Insert'];
+export type CamForwardSA = Database['crm']['Tables']['cam_forwards_sa']['Row'];
+export type CamForwardSAInsert = Database['crm']['Tables']['cam_forwards_sa']['Insert'];
+export type CamCostoImportacion = Database['crm']['Tables']['cam_costo_importacion']['Row'];
+export type CamCostoImportacionInsert = Database['crm']['Tables']['cam_costo_importacion']['Insert'];
+export type CamRecepcionSA = Database['crm']['Tables']['cam_recepcion_sa']['Row'];
+export type CamRecepcionSALinea = Database['crm']['Tables']['cam_recepcion_sa_lineas']['Row'];
+export type CamNcSa = Database['crm']['Tables']['cam_nc_sa']['Row'];
+export type CamNcSaInsert = Database['crm']['Tables']['cam_nc_sa']['Insert'];
+
+export type CamContenedorSAConProductos = CamContenedorSA & { productos?: CamProductoSA[] };
+export type CamRecepcionSAEnriquecida = CamRecepcionSA & {
+  contenedor?: { folio_interno: string; presentacion: string | null; total_kg: number | null } | null;
+  bodega?: { nombre: string } | null;
+  lineas?: (CamRecepcionSALinea & { sku?: { code: string; descripcion: string } | null })[];
+};
+
+// ─── Camanchaca MX (compras MXN) ──────────────────────────────────────────
+export type CamCompraMX = Database['crm']['Tables']['cam_compras_mx']['Row'];
+export type CamCompraMXInsert = Database['crm']['Tables']['cam_compras_mx']['Insert'];
+export type CamProductoMX = Database['crm']['Tables']['cam_productos_mx']['Row'];
+export type CamProductoMXInsert = Database['crm']['Tables']['cam_productos_mx']['Insert'];
+export type CamPagoMX = Database['crm']['Tables']['cam_pagos_mx']['Row'];
+export type CamPagoMXInsert = Database['crm']['Tables']['cam_pagos_mx']['Insert'];
+export type CamNcMx = Database['crm']['Tables']['cam_nc_mx']['Row'];
+export type CamNcMxInsert = Database['crm']['Tables']['cam_nc_mx']['Insert'];
+export type CamCompraMXConProductos = CamCompraMX & { productos?: CamProductoMX[] };
+
+// ─── Neptuno (factura = ID) ───────────────────────────────────────────────
+export type NepFactura = Database['crm']['Tables']['nep_facturas']['Row'];
+export type NepFacturaInsert = Database['crm']['Tables']['nep_facturas']['Insert'];
+export type NepFacturaProducto = Database['crm']['Tables']['nep_factura_productos']['Row'];
+export type NepFacturaProductoInsert = Database['crm']['Tables']['nep_factura_productos']['Insert'];
+export type NepPago = Database['crm']['Tables']['nep_pagos']['Row'];
+export type NepPagoInsert = Database['crm']['Tables']['nep_pagos']['Insert'];
+export type NepNotaCredito = Database['crm']['Tables']['nep_notas_credito']['Row'];
+export type NepNotaCreditoInsert = Database['crm']['Tables']['nep_notas_credito']['Insert'];
+export type NepFacturaConProductos = NepFactura & { productos?: NepFacturaProducto[] };

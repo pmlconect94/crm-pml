@@ -38,7 +38,7 @@ const PROVEEDORES: Proveedor[] = [
     href: '/app/importaciones/camanchaca',
     logo: '/assets/camanchaca-logo.png',
     accent: '#0EA5A1',
-    enabled: false,
+    enabled: true,
     descripcion: 'Salmón premium. Dos entidades fiscales: SA (importación) y México (compras locales).',
   },
   {
@@ -50,7 +50,7 @@ const PROVEEDORES: Proveedor[] = [
     href: '/app/importaciones/neptuno',
     logo: '/assets/neptuno-logo.png',
     accent: '#0EA5A1',
-    enabled: false,
+    enabled: true,
     descripcion: 'Pescados blancos, pulpo y calamar. Sin folio interno — la factura es el ID.',
   },
 ];
@@ -203,75 +203,64 @@ export function ImportacionesPickerPage() {
 
         {/* Tiles secundarios — stack */}
         <StaggerItem style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {secundarios.map((p) => (
-            <motion.div
-              key={p.id}
-              className="card"
-              style={{
-                padding: 20,
-                opacity: 0.62,
-                cursor: 'not-allowed',
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 12,
-              }}
-            >
-              <div
-                className="hstack"
-                style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}
-              >
-                <div
-                  style={{
-                    width: 80,
-                    height: 40,
-                    borderRadius: 'var(--r-sm)',
-                    background: 'white',
-                    border: '1px solid var(--ink-200)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 6,
-                  }}
-                >
-                  <img
-                    src={p.logo}
-                    alt={p.nombre}
-                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                  />
+          {secundarios.map((p) => {
+            const inner = (
+              <>
+                <div className="hstack" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div
+                    style={{
+                      width: 80, height: 40, borderRadius: 'var(--r-sm)', background: 'white',
+                      border: '1px solid var(--ink-200)', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', padding: 6,
+                    }}
+                  >
+                    <img src={p.logo} alt={p.nombre} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                  </div>
+                  {p.enabled ? (
+                    <span className="badge badge-blue"><span className="dot" /> Activo</span>
+                  ) : (
+                    <span className="badge badge-gray">Próximamente</span>
+                  )}
                 </div>
-                <span className="badge badge-gray">Próximamente</span>
-              </div>
-              <div>
-                <h3
-                  style={{
-                    margin: 0,
-                    fontSize: 15,
-                    fontWeight: 600,
-                    letterSpacing: '-0.01em',
-                    marginBottom: 2,
-                  }}
-                >
-                  {p.nombre}
-                </h3>
-                <div className="text-xs muted">{p.nombreInterno}</div>
-              </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: 'var(--ink-500)',
-                }}
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em', marginBottom: 2 }}>
+                    {p.nombre}
+                  </h3>
+                  <div className="text-xs muted">{p.nombreInterno}</div>
+                </div>
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-500)' }}>{p.descripcion}</p>
+                <div className="hstack" style={{ gap: 6, marginTop: 'auto', justifyContent: 'space-between' }}>
+                  <div className="hstack" style={{ gap: 6 }}>
+                    <span className="badge badge-gray" style={{ fontSize: 10 }}>{p.ciudad}</span>
+                    <span className="badge badge-gray" style={{ fontSize: 10 }}>{p.moneda}</span>
+                  </div>
+                  {p.enabled && (
+                    <span className="hstack" style={{ gap: 4, color: p.accent, fontSize: 12, fontWeight: 600 }}>
+                      Abrir <Icon name="arrow-right" size={13} />
+                    </span>
+                  )}
+                </div>
+              </>
+            );
+            return p.enabled ? (
+              <Link
+                key={p.id}
+                to={p.href}
+                className="card card-lift"
+                style={{ padding: 20, flex: 1, display: 'flex', flexDirection: 'column', gap: 12, textDecoration: 'none', color: 'inherit' }}
               >
-                {p.descripcion}
-              </p>
-              <div className="hstack" style={{ gap: 6, marginTop: 'auto' }}>
-                <span className="badge badge-gray" style={{ fontSize: 10 }}>{p.ciudad}</span>
-                <span className="badge badge-gray" style={{ fontSize: 10 }}>{p.moneda}</span>
-              </div>
-            </motion.div>
-          ))}
+                {inner}
+              </Link>
+            ) : (
+              <motion.div
+                key={p.id}
+                className="card"
+                style={{ padding: 20, opacity: 0.62, cursor: 'not-allowed', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}
+              >
+                {inner}
+              </motion.div>
+            );
+          })}
         </StaggerItem>
       </Stagger>
     </>

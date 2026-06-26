@@ -20,6 +20,32 @@ import { BlufinCalendarioPage } from '@/pages/blufin/BlufinCalendarioPage';
 import { BlufinNotasCreditoPage } from '@/pages/blufin/BlufinNotasCreditoPage';
 import { BlufinFacturasPage } from '@/pages/blufin/BlufinFacturasPage';
 import { BlufinFacturaRevisarPage } from '@/pages/blufin/BlufinFacturaRevisarPage';
+// Camanchaca (SA + MX)
+import { CamanchacaLayout } from '@/pages/camanchaca/CamanchacaLayout';
+import { CamSAPlaneacionPage } from '@/pages/camanchaca/CamSAPlaneacionPage';
+import { CamSAContenedoresListPage } from '@/pages/camanchaca/CamSAContenedoresListPage';
+import { CamSANuevoContenedorPage } from '@/pages/camanchaca/CamSANuevoContenedorPage';
+import { CamSAPagosPage } from '@/pages/camanchaca/CamSAPagosPage';
+import { CamSARecepcionPage } from '@/pages/camanchaca/CamSARecepcionPage';
+import { CamSARecepcionRegistrarPage } from '@/pages/camanchaca/CamSARecepcionRegistrarPage';
+import { CamSACostosPage } from '@/pages/camanchaca/CamSACostosPage';
+import { CamSANotasCreditoPage } from '@/pages/camanchaca/CamSANotasCreditoPage';
+import { CamSACalendarioPage } from '@/pages/camanchaca/CamSACalendarioPage';
+import { CamanchacaProductosPage } from '@/pages/camanchaca/CamanchacaProductosPage';
+import { CamMXComprasListPage } from '@/pages/camanchaca/CamMXComprasListPage';
+import { CamMXNuevaCompraPage } from '@/pages/camanchaca/CamMXNuevaCompraPage';
+import { CamMXPagosPage } from '@/pages/camanchaca/CamMXPagosPage';
+import { CamMXNotasCreditoPage } from '@/pages/camanchaca/CamMXNotasCreditoPage';
+import { CamMXCostosPage } from '@/pages/camanchaca/CamMXCostosPage';
+// Neptuno
+import { NeptunoLayout } from '@/pages/neptuno/NeptunoLayout';
+import { NeptunoFacturasListPage } from '@/pages/neptuno/NeptunoFacturasListPage';
+import { NeptunoNuevaFacturaPage } from '@/pages/neptuno/NeptunoNuevaFacturaPage';
+import { NeptunoPagosPage } from '@/pages/neptuno/NeptunoPagosPage';
+import { NeptunoNotasCreditoPage } from '@/pages/neptuno/NeptunoNotasCreditoPage';
+import { NeptunoCostosPage } from '@/pages/neptuno/NeptunoCostosPage';
+import { NeptunoCalendarioPage } from '@/pages/neptuno/NeptunoCalendarioPage';
+import { NeptunoProductosPage } from '@/pages/neptuno/NeptunoProductosPage';
 
 export default function App() {
   return (
@@ -54,15 +80,44 @@ export default function App() {
             <Route path="facturas/revisar" element={<BlufinFacturaRevisarPage />} />
           </Route>
 
-          {/* Stubs */}
-          <Route
-            path="camanchaca/*"
-            element={<PlaceholderPage title="Salmones Camanchaca" subtitle="Próximamente" />}
-          />
-          <Route
-            path="neptuno/*"
-            element={<PlaceholderPage title="Neptuno Seafood" subtitle="Próximamente" />}
-          />
+          {/* Camanchaca (SA + MX) */}
+          <Route path="camanchaca" element={<CamanchacaLayout />}>
+            <Route index element={<Navigate to="sa/contenedores" replace />} />
+            <Route path="sa">
+              <Route index element={<Navigate to="contenedores" replace />} />
+              <Route path="planeacion" element={<CamSAPlaneacionPage />} />
+              <Route path="contenedores" element={<CamSAContenedoresListPage />} />
+              <Route path="contenedores/nuevo" element={<CamSANuevoContenedorPage />} />
+              <Route path="pagos" element={<CamSAPagosPage />} />
+              <Route path="recepcion" element={<CamSARecepcionPage />} />
+              <Route path="recepcion/registrar/:contenedorId" element={<CamSARecepcionRegistrarPage />} />
+              <Route path="costos" element={<CamSACostosPage />} />
+              <Route path="notas-credito" element={<CamSANotasCreditoPage />} />
+              <Route path="calendario" element={<CamSACalendarioPage />} />
+              <Route path="productos" element={<CamanchacaProductosPage />} />
+            </Route>
+            <Route path="mx">
+              <Route index element={<Navigate to="compras" replace />} />
+              <Route path="compras" element={<CamMXComprasListPage />} />
+              <Route path="compras/nueva" element={<CamMXNuevaCompraPage />} />
+              <Route path="pagos" element={<CamMXPagosPage />} />
+              <Route path="notas-credito" element={<CamMXNotasCreditoPage />} />
+              <Route path="costos" element={<CamMXCostosPage />} />
+              <Route path="productos" element={<CamanchacaProductosPage />} />
+            </Route>
+          </Route>
+
+          {/* Neptuno */}
+          <Route path="neptuno" element={<NeptunoLayout />}>
+            <Route index element={<Navigate to="facturas" replace />} />
+            <Route path="facturas" element={<NeptunoFacturasListPage />} />
+            <Route path="facturas/nueva" element={<NeptunoNuevaFacturaPage />} />
+            <Route path="pagos" element={<NeptunoPagosPage />} />
+            <Route path="notas-credito" element={<NeptunoNotasCreditoPage />} />
+            <Route path="costos" element={<NeptunoCostosPage />} />
+            <Route path="calendario" element={<NeptunoCalendarioPage />} />
+            <Route path="productos" element={<NeptunoProductosPage />} />
+          </Route>
         </Route>
 
         {/* Resto de departamentos */}
