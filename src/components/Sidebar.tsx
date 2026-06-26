@@ -5,9 +5,9 @@ import { Icon, type IconName } from './Icon';
 import { useAuth } from '@/lib/auth';
 
 const PROVEEDORES = [
-  { id: 'blufin',     label: 'Blufin Seafood',       href: '/app/importaciones/blufin',     enabled: true  },
-  { id: 'camanchaca', label: 'Salmones Camanchaca',  href: '/app/importaciones/camanchaca', enabled: false },
-  { id: 'neptuno',    label: 'Neptuno Seafood',      href: '/app/importaciones/neptuno',    enabled: false },
+  { id: 'blufin',     label: 'Blufin Seafood',       href: '/app/importaciones/blufin',     enabled: true },
+  { id: 'camanchaca', label: 'Salmones Camanchaca',  href: '/app/importaciones/camanchaca', enabled: true },
+  { id: 'neptuno',    label: 'Neptuno Seafood',      href: '/app/importaciones/neptuno',    enabled: true },
 ];
 
 const DEPTS: { id: string; label: string; icon: IconName; href: string }[] = [
