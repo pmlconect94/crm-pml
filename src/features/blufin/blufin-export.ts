@@ -111,3 +111,42 @@ export function exportProductosPorContrato(contratos: BlufinContratoConProductos
   ];
   downloadXlsx(`Productos_por_contrato_Blufin_${hoy()}`, [{ name: 'Productos x contrato', rows }]);
 }
+
+/**
+ * Reporte línea-por-SKU de la mercancía POR LLEGAR (pestaña Llegadas). Una fila
+ * por producto de cada contrato — pensado para que el área comercial vea qué
+ * SKU, cuánto y a qué precio viene en camino. `codeDeSku` resuelve el código del
+ * catálogo a partir del sku_id de la línea. Ordenado por fecha de llegada a
+ * bodega (los próximos primero).
+ */
+export function exportLlegadasPorSku(
+  contratos: BlufinContratoConProductos[],
+  codeDeSku: (skuId: string | null) => string,
+) {
+  const flat: { c: BlufinContratoConProductos; p: BlufinProducto }[] = [];
+  for (const c of contratos) {
+    for (const p of c.productos ?? []) flat.push({ c, p });
+  }
+  const llegada = (c: BlufinContratoConProductos) => c.eta_bodega ?? c.eta_puerto ?? '9999-99-99';
+  flat.sort(
+    (a, b) =>
+      llegada(a.c).localeCompare(llegada(b.c)) ||
+      a.c.folio.localeCompare(b.c.folio) ||
+      (a.p.orden ?? 0) - (b.p.orden ?? 0),
+  );
+
+  const rows: XlsxCell[][] = [
+    ['Contrato', 'Código', 'Producto', 'Cantidad (kg)', 'Precio USD', 'Total USD', 'Llegada (ETA bodega)', 'Status'],
+    ...flat.map(({ c, p }) => [
+      c.folio,
+      codeDeSku(p.sku_id),
+      p.descripcion ?? '',
+      num(p.kg),
+      num(p.precio_usd),
+      num(p.total_usd),
+      fecha(c.eta_bodega),
+      statusContrato(c),
+    ]),
+  ];
+  downloadXlsx(`Llegadas_por_SKU_Blufin_${hoy()}`, [{ name: 'Llegadas x SKU', rows }]);
+}

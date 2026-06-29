@@ -10,7 +10,9 @@ import { fetchRecepciones } from '@/features/blufin/recepcion-queries';
 import { statusContrato } from '@/features/blufin/status';
 import { StatusPill } from '@/features/blufin/StatusPill';
 import { SkusContratoModal } from '@/features/blufin/SkusContratoModal';
-import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida } from '@/types/database';
+import { fetchSkusBlufin } from '@/features/blufin/productos-queries';
+import { exportLlegadasPorSku } from '@/features/blufin/blufin-export';
+import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida, CatalogoSku } from '@/types/database';
 
 /* ─── Helpers de fecha (hora local, YYYY-MM-DD) ──────────────────────── */
 
@@ -72,6 +74,10 @@ export function BlufinCalendarioPage() {
   const { data: recepciones = [] } = useQuery({
     queryKey: ['blufin_recepciones', empresaId],
     queryFn: () => fetchRecepciones(empresaId),
+  });
+  const { data: skus = [] } = useQuery({
+    queryKey: ['blufin_catalogo_skus', empresaId],
+    queryFn: () => fetchSkusBlufin(empresaId),
   });
 
   // Solo eventos de LLEGADA: ETA puerto, ETA bodega y recepciones. Sin pagos.
@@ -144,7 +150,7 @@ export function BlufinCalendarioPage() {
       </div>
 
       {vista === 'producto' ? (
-        <PorProductoView contratos={contratos} recepciones={recepciones} hoy={hoy} />
+        <PorProductoView contratos={contratos} recepciones={recepciones} hoy={hoy} skus={skus} />
       ) : (
         <>
           <StatStrip
@@ -187,14 +193,31 @@ function PorProductoView({
   contratos,
   recepciones,
   hoy,
+  skus,
 }: {
   contratos: BlufinContratoConProductos[];
   recepciones: BlufinRecepcionEnriquecida[];
   hoy: string;
+  skus: CatalogoSku[];
 }) {
   const [q, setQ] = useState('');
   const [abierto, setAbierto] = useState<Set<string>>(new Set());
   const [verSkus, setVerSkus] = useState<string | null>(null);
+
+  // Para el reporte Excel línea-por-SKU: resolver el código del catálogo y la
+  // lista de contratos POR LLEGAR (no recibidos), igual criterio que los grupos.
+  const codeDeSku = useMemo(() => {
+    const m = new Map(skus.map((s) => [s.id, s.code]));
+    return (id: string | null) => (id ? m.get(id) ?? '' : '');
+  }, [skus]);
+  const porLlegar = useMemo(() => {
+    const recibidoIds = new Set(
+      recepciones.map((r) => r.contrato_id).filter((id): id is string => !!id),
+    );
+    return contratos.filter(
+      (c) => !(recibidoIds.has(c.id) || c.status === 'Entregado' || !!c.llegada_real),
+    );
+  }, [contratos, recepciones]);
 
   // Agrupa por SKU sumando lo que viene en contratos NO recibidos.
   const grupos = useMemo<GrupoSku[]>(() => {
@@ -271,9 +294,11 @@ function PorProductoView({
 
   return (
     <div className="vstack" style={{ gap: 12 }}>
+      <div className="hstack" style={{ gap: 8 }}>
       <div
         className="hstack"
         style={{
+          flex: 1,
           gap: 8,
           padding: '7px 12px',
           background: 'var(--ink-50)',
@@ -300,6 +325,16 @@ function PorProductoView({
             <Icon name="x" size={13} />
           </button>
         )}
+      </div>
+        <button
+          className="btn btn-outline btn-sm"
+          onClick={() => exportLlegadasPorSku(porLlegar, codeDeSku)}
+          disabled={porLlegar.length === 0}
+          title="Descargar Excel: una fila por SKU de la mercancía por llegar"
+          style={{ flexShrink: 0 }}
+        >
+          <Icon name="download" size={13} /> Exportar
+        </button>
       </div>
 
       <StatStrip
