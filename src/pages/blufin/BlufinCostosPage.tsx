@@ -894,7 +894,10 @@ function ContenedoresView({
       (c) =>
         c.folio.toLowerCase().includes(q) ||
         (c.contenedor ?? '').toLowerCase().includes(q) ||
-        (c.naviera ?? '').toLowerCase().includes(q),
+        (c.naviera ?? '').toLowerCase().includes(q) ||
+        c.lineas.some(
+          (l) => l.descripcion.toLowerCase().includes(q) || l.code.toLowerCase().includes(q),
+        ),
     );
   }, [contenedores, query]);
 
@@ -916,7 +919,7 @@ function ContenedoresView({
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar contenedor, folio o naviera…"
+          placeholder="Buscar contenedor, folio, naviera o producto/SKU…"
           style={{
             border: 'none',
             outline: 'none',

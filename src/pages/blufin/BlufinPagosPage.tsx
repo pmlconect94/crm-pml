@@ -12,16 +12,20 @@ import {
   fetchForwards,
   fetchContratosConPendiente,
   fetchForwardsActivos,
+  fetchSaldosPorContrato,
   deletePago,
   deleteForward,
   executeForward,
   type ContratoConPendiente,
   type ForwardActivo,
+  type SaldoContrato,
 } from '@/features/blufin/pagos-queries';
 import { fetchCatalogos } from '@/features/blufin/queries';
+import { resolveFacturaPdf } from '@/features/blufin/import-queries';
 import { PagoModal } from '@/features/blufin/PagoModal';
 import { ForwardModal } from '@/features/blufin/ForwardModal';
 import { AsignarForwardModal } from '@/features/blufin/AsignarForwardModal';
+import { PdfViewerModal, type PdfTarget } from '@/features/blufin/PdfViewerModal';
 import type { BlufinPagoEnriquecido, BlufinForwardEnriquecido } from '@/types/database';
 
 type View = 'pendientes' | 'realizados' | 'forwards';
@@ -97,6 +101,7 @@ export function BlufinPagosPage() {
       qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -123,6 +128,10 @@ export function BlufinPagosPage() {
     queryKey: ['blufin_contratos_pendientes', empresaId],
     queryFn: () => fetchContratosConPendiente(empresaId),
   });
+  const { data: saldos } = useQuery({
+    queryKey: ['blufin_saldos', empresaId],
+    queryFn: () => fetchSaldosPorContrato(empresaId),
+  });
   const { data: cat } = useQuery({
     queryKey: ['blufin_catalogos', empresaId],
     queryFn: () => fetchCatalogos(empresaId),
@@ -141,6 +150,7 @@ export function BlufinPagosPage() {
       qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -153,15 +163,19 @@ export function BlufinPagosPage() {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
     const esteMes = pagos.filter((p) => new Date(p.fecha + 'T12:00:00') >= inicioMes).length;
 
+    // Pendiente REAL por contrato = total − pagado − NCs aplicadas (con o sin
+    // descuentos), no el anticipo/saldo programado fijo.
     const usdPendiente = pendientes.reduce((s, c) => {
-      let pdte = 0;
-      if (!c.anticipo_pagado) pdte += Number(c.anticipo_usd ?? 0);
-      if (!c.saldo_pagado) pdte += Number(c.saldo_usd ?? 0);
-      return s + pdte;
+      const sal = saldos?.get(c.id);
+      const restante = Math.max(
+        0,
+        Number(c.total_usd ?? 0) - (sal?.pagado ?? 0) - (sal?.ncAplicado ?? 0),
+      );
+      return s + restante;
     }, 0);
 
     return { totalUsd, totalMxn, tcEfectivo, esteMes, usdPendiente };
-  }, [pagos, pendientes]);
+  }, [pagos, pendientes, saldos]);
 
   const openModal = (p?: { contratoId?: string; tipo?: 'anticipo' | 'saldo' | 'abono' }) => {
     setPrefill(p ?? {});
@@ -253,6 +267,7 @@ export function BlufinPagosPage() {
         <PendientesView
           pendientes={pendientes}
           forwardsActivos={forwardsActivos}
+          saldos={saldos}
           isLoading={loadingPendientes}
           onPay={openModal}
         />
@@ -339,6 +354,8 @@ type PendItem = {
   status: string;
   monto: number;
   fecha: string | null;
+  facturaPdfPath: string | null;
+  facturaDrivePdfId: string | null;
 };
 
 type GrupoSemana = {
@@ -373,15 +390,35 @@ function addDias(iso: string, n: number): string {
 function PendientesView({
   pendientes,
   forwardsActivos,
+  saldos,
   isLoading,
   onPay,
 }: {
   pendientes: ContratoConPendiente[];
   forwardsActivos: ForwardActivo[];
+  saldos: Map<string, SaldoContrato> | undefined;
   isLoading: boolean;
   onPay: (p: { contratoId: string; tipo: 'anticipo' | 'saldo' }) => void;
 }) {
   const [tipoTab, setTipoTab] = useState<TipoPend>('saldo');
+  const [pdf, setPdf] = useState<PdfTarget | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const verFactura = async (it: PendItem) => {
+    setPdfLoading(true);
+    try {
+      const u = await resolveFacturaPdf({
+        factura_pdf_path: it.facturaPdfPath,
+        factura_drive_pdf_id: it.facturaDrivePdfId,
+      });
+      if (u) setPdf({ title: `Factura ${it.folio}`, embed: u.embed, open: u.open });
+      else toast.error('No se encontró el PDF de la factura');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo abrir el PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   // Conteo por tipo para los chips del toggle.
   const conteo = useMemo(() => {
@@ -400,6 +437,10 @@ function PendientesView({
   const { grupos, totalSemana, totalAtrasado } = useMemo(() => {
     const items: PendItem[] = [];
     for (const c of pendientes) {
+      const factura = {
+        facturaPdfPath: c.factura_pdf_path,
+        facturaDrivePdfId: c.factura_drive_pdf_id,
+      };
       if (tipoTab === 'anticipo' && !c.anticipo_pagado && c.anticipo_usd) {
         items.push({
           contratoId: c.id,
@@ -407,15 +448,26 @@ function PendientesView({
           status: c.status,
           monto: Number(c.anticipo_usd),
           fecha: c.anticipo_fecha,
+          ...factura,
         });
       } else if (tipoTab === 'saldo' && !c.saldo_pagado && c.saldo_usd) {
-        items.push({
-          contratoId: c.id,
-          folio: c.folio,
-          status: c.status,
-          monto: Number(c.saldo_usd),
-          fecha: c.saldo_fecha,
-        });
+        // Saldo REAL a pagar = total − pagado − NCs (con o sin descuentos), no el
+        // saldo programado fijo (que ignora el anticipo no pagado y las NCs).
+        const sal = saldos?.get(c.id);
+        const restante = Math.max(
+          0,
+          Number(c.total_usd ?? 0) - (sal?.pagado ?? 0) - (sal?.ncAplicado ?? 0),
+        );
+        if (restante > 0.01) {
+          items.push({
+            contratoId: c.id,
+            folio: c.folio,
+            status: c.status,
+            monto: restante,
+            fecha: c.saldo_fecha,
+            ...factura,
+          });
+        }
       }
     }
 
@@ -489,7 +541,7 @@ function PendientesView({
       totalSemana: sem?.total ?? 0,
       totalAtrasado: atrasado.length ? sum(atrasado) : 0,
     };
-  }, [pendientes, tipoTab]);
+  }, [pendientes, tipoTab, saldos]);
 
   if (isLoading) return <SkeletonList rows={4} />;
 
@@ -654,7 +706,7 @@ function PendientesView({
                         padding: '10px 16px',
                         borderBottom: i < g.items.length - 1 ? '1px solid var(--ink-100)' : 'none',
                         display: 'grid',
-                        gridTemplateColumns: '150px 1fr 1fr 130px',
+                        gridTemplateColumns: '150px 1fr 1fr 220px',
                         gap: 16,
                         alignItems: 'center',
                       }}
@@ -727,14 +779,24 @@ function PendientesView({
                           )
                         )}
                       </div>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => onPay({ contratoId: it.contratoId, tipo: tipoTab })}
-                        style={{ justifySelf: 'end' }}
-                        title={fwd ? 'Pagar al TC del día (spot, sin usar el forward)' : undefined}
-                      >
-                        <Icon name="check" size={12} /> {fwd ? 'Pagar spot' : 'Pagar'}
-                      </button>
+                      <div className="hstack" style={{ gap: 6, justifySelf: 'end' }}>
+                        {(it.facturaPdfPath || it.facturaDrivePdfId) && (
+                          <button
+                            className="btn btn-outline btn-sm"
+                            onClick={() => verFactura(it)}
+                            title="Ver la factura del proveedor"
+                          >
+                            <Icon name="receipt" size={12} /> Factura
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => onPay({ contratoId: it.contratoId, tipo: tipoTab })}
+                          title={fwd ? 'Pagar al TC del día (spot, sin usar el forward)' : undefined}
+                        >
+                          <Icon name="check" size={12} /> {fwd ? 'Pagar spot' : 'Pagar'}
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -743,6 +805,15 @@ function PendientesView({
           );
         })
       )}
+
+      <PdfViewerModal
+        target={pdf}
+        loading={pdfLoading}
+        onClose={() => {
+          setPdf(null);
+          setPdfLoading(false);
+        }}
+      />
     </div>
   );
 }

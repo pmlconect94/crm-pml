@@ -36,7 +36,7 @@ export type ContenedorCosto = {
   total_kg: number;
   tc: number | null; // TC efectivo REAL (null si no hay pagos/forward/ponderado)
   tc_origen: TcOrigen;
-  lineas: { descripcion: string; kg: number; precio_usd: number; total_usd: number }[];
+  lineas: { code: string; descripcion: string; kg: number; precio_usd: number; total_usd: number }[];
 };
 
 export type CostosData = {
@@ -173,6 +173,7 @@ export async function fetchCostosData(empresaId: string): Promise<CostosData> {
     for (const linea of c.productos ?? []) {
       const kg = Number(linea.kg ?? 0);
       contLineas.push({
+        code: linea.sku_id ? (skuById.get(linea.sku_id)?.code ?? '') : '',
         descripcion: linea.descripcion ?? '—',
         kg,
         precio_usd: Number(linea.precio_usd ?? 0),

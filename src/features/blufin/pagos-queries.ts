@@ -562,6 +562,8 @@ export type ContratoConPendiente = {
   total_kg: number | null;
   status: string;
   contenedor: string | null;
+  factura_pdf_path: string | null;
+  factura_drive_pdf_id: string | null;
 };
 
 export async function fetchContratosConPendiente(
@@ -570,7 +572,7 @@ export async function fetchContratosConPendiente(
   const { data, error } = await supabase
     .from('blufin_contratos')
     .select(
-      'id, folio, fecha, anticipo_usd, anticipo_fecha, anticipo_pagado, saldo_usd, saldo_fecha, saldo_pagado, total_usd, total_kg, status, contenedor',
+      'id, folio, fecha, anticipo_usd, anticipo_fecha, anticipo_pagado, saldo_usd, saldo_fecha, saldo_pagado, total_usd, total_kg, status, contenedor, factura_pdf_path, factura_drive_pdf_id',
     )
     .eq('empresa_id', empresaId)
     .or('anticipo_pagado.is.false,saldo_pagado.is.false')
