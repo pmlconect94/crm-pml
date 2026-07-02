@@ -1247,18 +1247,20 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 
 ## 16. Estado de construcción real (lo que está live en producción)
 
-Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east-1), **schema namespace `crm`** (coexiste con WMS en `public`). RLS habilitado con políticas `dev_open` temporales — endurecer al integrar Supabase Auth.
+**EN PRODUCCIÓN ✅ (2026-06-23):** desplegado en Vercel → **https://pml-connect.vercel.app** (auto-deploy en cada push a `main`). Backend Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east-1), **schema namespace `crm`**. ⚠️ La base de Supabase es **COMPARTIDA** con otros sistemas del usuario (RH/Logística/WMS) — **NO borrar nada que no sea del CRM**, limitar cambios al schema `crm` (ver [[project-supabase-db-compartida]]). Ya con **Supabase Auth real** (correo+contraseña), **RLS endurecida** (`auth_all`, solo `authenticated`; la anon key sola ya no accede) y **bitácora de auditoría** (`crm.audit_log`, quién hizo cada movimiento).
 
 ### Infraestructura del proyecto
 
 | Pieza | Valor |
 |---|---|
+| **Producción (Vercel)** ✅ | **https://pml-connect.vercel.app** · proyecto `crm-pml` (id `prj_YOcR0ZEDnSaiVGzmDjDqNqbCLYB9`, team `team_50ehqq8196yW0uMKTuEO8eXF` = `ddlpml2-6030s-projects`). Ligado al repo GitHub → **auto-deploy en cada push a `main`** (~1 min). Framework Vite. `vercel.json` con rewrite SPA. **Env vars en Vercel**: `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` (SOLO esas 2; la service_role NUNCA va a Vercel). El conector MCP de Vercel está conectado a la cuenta del usuario (deploy/logs vía MCP) |
 | Repo GitHub | `https://github.com/pmlconect94/crm-pml` (privado, rama `main`) |
-| Supabase | proyecto `crm-pml` · ref `xjbhfeqcjjqyjkvdbyxy` · región us-east-1 · schema `crm` |
-| Dev server | `npm run dev` → puerto 5174 (5173 lo ocupa el sistema de nómina local; `strictPort: false`, toma el siguiente libre) |
-| Credenciales frontend | `.env.local` (NO versionado — plantilla en `.env.example`; keys en Supabase Dashboard → Settings → API) |
-| PIN super admin | default `1234`, override en `localStorage.crm_admin_pin` (stub hasta auth real) |
-| Workflow de cierre | al terminar un bloque de trabajo: actualizar §16, commit descriptivo en español, push a `main` |
+| Supabase | proyecto `crm-pml` · ref `xjbhfeqcjjqyjkvdbyxy` · us-east-1 · schema `crm` · **base COMPARTIDA con RH/Logística/WMS — no borrar lo ajeno** |
+| **Auth** ✅ | **Supabase Auth real** correo+contraseña (sin SSO). **5 usuarios** (nombre/rol/permisos en `user_metadata`, marcados `app:'crm-pml'`): 3 admin_total (ddl.pml2@gmail.com, anasilvia_lizarraga@hotmail.com, lizarragajesus@hotmail.com) + 2 operativos (aleabaroa@hotmail.com = ALEJANDRO ABAROA solo-ver, jefealmacenlizarraga@gmail.com = FERNANDO MAGALLANES captura). **Crear usuarios** = re-habilitar Edge Function `seed-users` (neutralizada/410) con `{email,password,nombre,rol,tabs,capturar}`. **Cambiar password** = engrane del topbar (solo ddl.pml2) → `UsuariosModal` → Edge Function `admin-set-password` (filtra por `app:'crm-pml'`) |
+| Dev server | `npm run dev` → puerto 5174 (5173 lo ocupa el sistema de nómina local; `strictPort: false`) |
+| Credenciales frontend | `.env.local` (NO versionado — plantilla `.env.example`; keys en Supabase Dashboard → Settings → API). **Los scripts de `scripts/` ahora requieren `SUPABASE_SERVICE_ROLE_KEY` en `.env.local`** (la RLS bloquea la anon key) |
+| PIN super admin | default `1234`, override en `localStorage.crm_admin_pin` (para borrados destructivos con `<DeleteConfirmModal>`) |
+| Workflow de cierre | al terminar un bloque: actualizar §16, commit en español, push a `main` (**se auto-despliega a Vercel**) |
 
 ### Cuentas y sesiones conectadas (LEER ANTES de operar GitHub o Supabase)
 
@@ -1276,11 +1278,39 @@ Schema PostgreSQL en Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east
 
 ### SIGUIENTE PASO (handoff de sesión)
 
-**Blufin queda funcionalmente COMPLETO** (2026-06-22): todos los tabs operativos están LIVE — Contratos, Carga masiva, Pagos, Recepción, Notas de crédito, Facturas, **Calendario** (nuevo — ver su fila abajo), Central de Costos y Productos. Pendientes que NO bloquean operación:
-- Pendiente transversal: extender el borrador `useDraft` a `BlufinRecepcionRegistrarPage` y `BlufinPagoMultiplePage` (ver §17).
-- ✅ **Edge Function `tc-del-dia` LIVE (2026-06-22):** trae el TC USD→MXN de una tasa de mercado en vivo (frankfurter, respaldo open-er-api; sin token), lo cachea por día en `crm.tc_dia` y prellena solo el "TC del día (estimado)" en Central de Costos. Pendiente opcional: migrar la fuente al FIX oficial de Banxico (requiere token gratis del usuario).
+**ÚLTIMA SESIÓN (2026-06-26 → 07-02):** la app se renombró a **ERP** (solo el nombre VISIBLE — título de pestaña "ERP Grupo Lizárraga" + login "ERP Corporativo"; schema `crm`, repo y metadata `app:'crm-pml'` intactos). **La URL de producción cambió a https://pml-connect.vercel.app** (antes `crm-pml.vercel.app`; mismo proyecto Vercel `crm-pml`, auto-deploy en cada push a `main`). Cerrado:
+- ✅ **Facturas de correo migradas a Storage** (41): las que solo vivían en Google Drive (`drive_pdf_id`) se copiaron al bucket `documentos-importacion` (`facturas-correo/<C####>.pdf`) y se ligaron (`blufin_facturas.storage_path` + `blufin_contratos.factura_pdf_path`). Antes la app las abría con link de Drive → Google pedía "Solicitar acceso" a quien no era dueño del Drive. Script `scripts/ligar_facturas_correo.py` (modos local y `--drive`; requiere `SUPABASE_SERVICE_ROLE_KEY`). Verificado: abren por URL firmada para cualquier autenticado.
+- ✅ **Visor de PDF embebido** (`src/features/blufin/PdfViewerModal.tsx`): Contrato/Factura/Ver PDF abren DENTRO de la app (iframe); el botón "Imprimir" abre pestaña nueva. Los PDFs de Storage se embeben (sin `X-Frame-Options`); los de Drive usan `/preview` (embed) + `/view` (abrir). `resolveFacturaPdf` + `signedUrlAnyBucket` (prueba `documentos-importacion` y luego `facturas-pdf`) en `import-queries.ts`. Usado en ContratoDetalleModal, BlufinRecepcionRegistrarPage, FacturaDetalleModal y Pagos→Pendientes.
+- ✅ **4 mejoras Blufin**: (a) ficha con **precios en MXN** (TC real ponderado si liquidado; TC del día estimado, en ámbar, si no). (b) Llegadas→Por producto: folio del contenedor clicable → `SkusContratoModal` (sin precios). (c) Recepción→Por recibir: **fix del "mismo día"** con columna real `blufin_contratos.eta_bodega_confirmada` (migración `20260626120000` + backfill; `updateLlegadaContrato` la pone `true` — ya NO se infiere comparando fechas). (d) Recepción→Historial: buscador + folio clicable → `RecepcionDetalleModal`.
+- ✅ **Llegadas: exportar Excel línea-por-SKU** de mercancía por llegar (`exportLlegadasPorSku`: Contrato, Código, Producto, Cantidad, Precio USD, Total USD, ETA bodega, Status).
+- ✅ **Pagos→Pendientes**: el monto del **saldo ahora es el REAL** = total − pagado − NCs (con o sin descuentos), no el saldo programado fijo (usa `fetchSaldosPorContrato`); + **botón "Factura"** por contrato (visor embebido). **Costos→Por contenedor**: el buscador ahora también filtra por **producto/SKU** (`ContenedorCosto.lineas` incluye `code`).
+- ✅ **Camanchaca (SA + MX) y Neptuno — 1ª versión construida** (commit `0009037`; sidebar + picker habilitados en `27604db`; ver §16 y §7/§8).
 
-Con Blufin completo, el siguiente módulo grande es **Salmones Camanchaca** (SA + MX) — schema aún sin migrar (ver §7).
+**PENDIENTE para otra sesión (el usuario lo dejó explícito 2026-07-02):**
+1. **Editar contratos a mano** (Blufin) — botón "Editar" que abra el formulario de alta en modo edición (UPDATE, no INSERT), idealmente con edición de los renglones de producto (recalcula totales). NO construido aún.
+2. **Versión celular (responsive)** — hoy la app está pensada para escritorio (tablas densas); falta un pase de responsive. Priorizar con el usuario las pantallas de teléfono (ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes).
+3. Pulir Camanchaca/Neptuno conforme el usuario los pruebe (no verificados interactivamente — se generaron con subagentes).
+
+---
+
+**Sesión 2026-06-22/23 (previa):** la app quedó LIVE, Blufin funcionalmente completo y endurecido para producción. Lo que se cerró:
+- ✅ **Deploy a Vercel** (auto-deploy desde GitHub; env vars configuradas — verificado en el bundle).
+- ✅ **Supabase Auth real** (correo+contraseña, sin SSO) — `signInWithPassword` + sesión persistente; nombre/rol/permisos en `user_metadata` (ver fila Auth en Foundation).
+- ✅ **RLS endurecida** `auth_all` (solo `authenticated`) — migración `20260623120000`. La anon key sola ya no lee/escribe; los scripts usan `SUPABASE_SERVICE_ROLE_KEY`.
+- ✅ **Bitácora de auditoría** `crm.audit_log` + trigger `crm.fn_audit` (migración `20260623130000`) — cada movimiento guarda quién (auth.uid()), qué, cuándo. Verificado.
+- ✅ **Permisos por usuario** (`user_metadata`: rol + tabs + capturar; rol `operativo`). `BlufinLayout` filtra pestañas + guard de ruta; Recepción oculta captura si `capturar=false`.
+- ✅ **Sync del Calendario de llegadas** automático (Apps Script + tarea local `calendario-menita`).
+- ✅ **Tab "Llegadas"** (antes Calendario): "Por producto" (default, mercancía por llegar para ventas) + "Calendario" (solo llegadas, sin precios). **Header Blufin** compacto sin datos de Menita.
+
+Pendientes que NO bloquean operación (en orden de valor):
+- **RLS por-permiso**: hoy el "solo ver" es de UI (el RLS `auth_all` deja escribir a cualquier autenticado — la bitácora da rendición de cuentas). Endurecer si se quiere candado a prueba de API directa.
+- **Pantalla de "restablecer contraseña"** + envío de correo (para que el "¿Olvidaste tu contraseña?" funcione; hoy solo el admin cambia passwords desde el engrane).
+- Extender el borrador `useDraft` a `BlufinRecepcionRegistrarPage` y `BlufinPagoMultiplePage` (ver §17).
+- Facturación por correo de Menita: Increments 2-3 (ver [[project_facturacion_correo]]).
+- TC del día: opción de migrar la fuente al FIX oficial de Banxico (token gratis).
+- Las 5 contraseñas se escribieron en el chat de esta sesión — recordar al usuario cambiarlas desde el engrane.
+
+**Camanchaca (SA + MX) y Neptuno YA están construidos** (1ª versión, 2026-06-26 — ver la subsección abajo y §7/§8). Lo que sigue: probarlos/pulirlos, el **editor de contratos** y la **versión celular** (ver el bloque de PENDIENTE arriba).
 
 ### Foundation ✅
 
@@ -1310,7 +1340,13 @@ Con Blufin completo, el siguiente módulo grande es **Salmones Camanchaca** (SA 
 
 ### Importaciones — Camanchaca y Neptuno
 
-Picker UI los muestra como "Próximamente". Schema Camanchaca y Neptuno **no** migrado todavía. Habilitar cuando Blufin esté completo.
+**Construidos — 1ª versión (2026-06-26, commit `0009037`).** Esquemas migrados (`supabase/migrations/20260626130000_camanchaca_schema.sql` con `cam_*` + secuencia `next_cam_folio`; `20260626140000_neptuno_schema.sql` con `nep_*`; RLS `auth_all`). Tipos en `src/types/database.ts`. Picker + sidebar habilitados; `CamanchacaLayout` (switch SA/MX) + `NeptunoLayout`; rutas en `App.tsx`. Páginas en `src/pages/{camanchaca,neptuno}/`, queries/modales en `src/features/{camanchaca,neptuno}/`.
+
+- **Camanchaca SA** (USD): planeación → contenedores (folio `CAM-###` por secuencia BD; ETA bodega = ETA Manzanillo +7d con `eta_bodega_confirmada`), pagos sin anticipos (completo/abono) + forwards + costo de importación MXN a agencias + **"Comparación internación"** (% del FOB con semáforo), recepción, NC simplificada, central de costos (FOB + importación), calendario, productos.
+- **Camanchaca MX** (MXN): compras (Intelisis obligatoria, vencimiento +30d), pagos parciales, NC MXN, central de costos MXN directo. Comparte el catálogo `proveedor='camanchaca'` con SA.
+- **Neptuno** (USD): la **factura ES el ID** (sin folio interno/planeación/naviera/recepción) — facturas con líneas SKU-first, pagos completo/abono, NC simplificada, central de costos (la factura es el inventario), calendario, productos.
+
+⚠️ **Construidos con 3 subagentes en paralelo calcando Blufin; build (`tsc -b && vite build`) en verde pero NO probados interactivamente** (login) — el usuario itera sobre el live. Catálogos arrancan vacíos (dar de alta SKUs en la pestaña Productos). Sin datos aún.
 
 ### Resto de módulos
 
