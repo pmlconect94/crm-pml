@@ -24,7 +24,7 @@ const EMPRESAS = [
   { id: 'marlin' as const, name: 'Marlin Lizárraga',            sub: 'Productora · Próximamente',  disabled: true  },
 ];
 
-export function Sidebar() {
+export function Sidebar({ open = false }: { open?: boolean }) {
   const { user, hasDept, empresaId, setEmpresa, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -36,7 +36,7 @@ export function Sidebar() {
   const importActiva = location.pathname.startsWith('/app/importaciones');
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' open' : ''}`}>
       {/* ── Switcher de empresa ── */}
       <div style={{ position: 'relative', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <button

@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth';
 
 const ADMIN_EMAIL = 'ddl.pml2@gmail.com';
 
-export function Topbar() {
+export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
   const { empresaId, user } = useAuth();
   const [usuariosOpen, setUsuariosOpen] = useState(false);
   const esAdmin = (user?.email ?? '').toLowerCase() === ADMIN_EMAIL;
@@ -14,6 +14,14 @@ export function Topbar() {
   return (
     <div className="topbar">
       <div className="hstack" style={{ gap: 8, fontSize: 12 }}>
+        <button
+          className="btn btn-ghost btn-sm topbar-menu-btn"
+          onClick={onToggleMenu}
+          aria-label="Abrir menú"
+          style={{ padding: 6 }}
+        >
+          <Icon name="menu" size={18} />
+        </button>
         <span
           className="dot"
           style={{ background: empresaId === 'pml' ? 'var(--blue-500)' : 'var(--cyan-500)' }}

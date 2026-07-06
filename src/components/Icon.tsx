@@ -44,6 +44,7 @@ import {
   Container,
   Printer,
   ExternalLink,
+  Menu,
   type LucideProps,
 } from 'lucide-react';
 
@@ -93,6 +94,7 @@ const ICONS = {
   container: Container,
   printer: Printer,
   'external-link': ExternalLink,
+  menu: Menu,
 } as const;
 
 export type IconName = keyof typeof ICONS;
