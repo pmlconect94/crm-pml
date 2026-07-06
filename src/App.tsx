@@ -66,6 +66,7 @@ export default function App() {
             <Route index element={<Navigate to="contratos" replace />} />
             <Route path="contratos" element={<BlufinContratosListPage />} />
             <Route path="contratos/nuevo" element={<BlufinNuevoContratoPage />} />
+            <Route path="contratos/editar/:contratoId" element={<BlufinNuevoContratoPage />} />
             <Route path="contratos/carga-masiva" element={<BlufinCargaMasivaPage />} />
             <Route path="contratos/carga-masiva/:loteId" element={<BlufinCargaMasivaRevisarPage />} />
             <Route path="pagos" element={<BlufinPagosPage />} />

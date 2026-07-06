@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
-import { createContrato, fetchCatalogos } from '@/features/blufin/queries';
+import { createContrato, updateContrato, fetchCatalogos } from '@/features/blufin/queries';
+import { fetchContratoById } from '@/features/blufin/recepcion-queries';
+import { recalcFlagsContrato } from '@/features/blufin/pagos-queries';
 import { useAuth } from '@/lib/auth';
 import { useDraft } from '@/lib/useDraft';
 import { fmtUSD, fmtKg } from '@/lib/format';
@@ -71,10 +73,18 @@ export function BlufinNuevoContratoPage() {
   const { empresaId } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { contratoId } = useParams<{ contratoId?: string }>();
+  const isEdit = !!contratoId;
 
   const { data: cat } = useQuery({
     queryKey: ['blufin_catalogos', empresaId],
     queryFn: () => fetchCatalogos(empresaId),
+  });
+  // Modo edición: carga el contrato existente para precargar el formulario.
+  const { data: existing } = useQuery({
+    queryKey: ['blufin_contrato_edit', contratoId],
+    queryFn: () => fetchContratoById(contratoId!),
+    enabled: isEdit,
   });
 
   // Cabecera del contrato
@@ -97,8 +107,50 @@ export function BlufinNuevoContratoPage() {
   // Líneas
   const [lineas, setLineas] = useState<LineaProducto[]>([emptyLinea()]);
 
+  // ── Precarga en modo edición (una sola vez, cuando contrato y catálogo listos) ──
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (!isEdit || prefilledRef.current || !existing || !cat) return;
+    prefilledRef.current = true;
+    setFolio(existing.folio);
+    setFecha(existing.fecha ?? hoyISO());
+    setStatus(existing.status ?? 'Contratado');
+    setEtaPuerto(existing.eta_puerto ?? '');
+    setEtaBodegaOverride(existing.eta_bodega ?? null);
+    setBodegaDestino(existing.bodega_destino ?? '');
+    setPresentacion(existing.presentacion === 'Granel' ? 'Granel' : 'Paletizado');
+    setContenedor(existing.contenedor ?? '');
+    setAnticipoUsdOverride(existing.anticipo_usd != null ? String(existing.anticipo_usd) : null);
+    setAnticipoFecha(existing.anticipo_fecha ?? '');
+    setSaldoFecha(existing.saldo_fecha ?? '');
+    setObservaciones(existing.observaciones ?? '');
+    const labelById = new Map((cat.skus ?? []).map((s) => [s.id, `${s.code} — ${s.descripcion}`]));
+    const prods = existing.productos ?? [];
+    setLineas(
+      prods.length
+        ? prods.map((p) => ({
+            uid: crypto.randomUUID(),
+            sku_id: p.sku_id,
+            skuText: p.sku_id ? (labelById.get(p.sku_id) ?? p.descripcion ?? '') : (p.descripcion ?? ''),
+            descripcion: p.descripcion ?? '',
+            marca: p.marca ?? '',
+            pct: p.pct ?? '',
+            talla: p.talla ?? '',
+            kg: p.kg != null ? String(p.kg) : '',
+            kg_caja: p.kg_caja != null ? String(p.kg_caja) : '',
+            cajas: p.cajas != null ? String(p.cajas) : '',
+            precio_usd: p.precio_usd != null ? String(p.precio_usd) : '',
+          }))
+        : [emptyLinea()],
+    );
+  }, [isEdit, existing, cat]);
+
   // ── Borrador automático: nada de lo capturado se pierde al salir ──
-  const draftKey = `crm:draft:blufin-nuevo-contrato:${empresaId}`;
+  // En edición se usa una key aparte y el applyDraft NO restaura (la precarga
+  // desde el contrato manda) — así no se contamina el borrador de "nuevo".
+  const draftKey = isEdit
+    ? `crm:draft:blufin-editar-contrato:${contratoId}`
+    : `crm:draft:blufin-nuevo-contrato:${empresaId}`;
 
   const draftSnapshot = useMemo<ContratoDraft>(
     () => ({
@@ -124,6 +176,7 @@ export function BlufinNuevoContratoPage() {
   );
 
   const applyDraft = (d: ContratoDraft) => {
+    if (isEdit) return; // en edición manda la precarga del contrato, no el borrador
     setFolio(d.folio ?? FOLIO_INICIAL);
     setFecha(d.fecha ?? hoyISO());
     setStatus(d.status ?? 'Contratado');
@@ -257,53 +310,83 @@ export function BlufinNuevoContratoPage() {
       if (lineasValidas.length === 0) {
         throw new Error('Agrega al menos una línea con SKU elegido y kg capturados');
       }
+      const lineasPayload = lineasValidas.map((l) => ({
+        sku_id: l.sku_id,
+        descripcion: l.descripcion || null,
+        marca: l.marca || null,
+        pct: l.pct || null,
+        talla: l.talla || null,
+        kg: toNum(l.kg),
+        kg_caja: toNum(l.kg_caja),
+        cajas: Math.round(toNum(l.cajas)) || null,
+        precio_usd: toNum(l.precio_usd),
+        total_usd: toNum(l.kg) * toNum(l.precio_usd),
+      }));
 
-      // TC del día (Banxico) — stub por ahora, será Edge Function
-      const tcDelDia = await getTcDelDia();
-
-      await createContrato(
-        {
-          empresa_id: empresaId,
-          folio: folio.trim(),
-          fecha: fecha || null,
-          // lote: se llena cuando llega la factura (no se captura al crear contrato)
-          status,
-          eta_puerto: etaPuerto || null,
-          eta_bodega: etaBodega || null,
-          presentacion,
-          bodega_destino: bodegaDestino || null,
-          contenedor: contenedor || null,
-          // naviera: se llena cuando se confirma el embarque (no se captura al crear contrato)
-          total_usd: totales.totalUsd,
-          total_kg: totales.totalKg,
-          anticipo_usd: toNum(anticipoUsd) || null,
-          anticipo_fecha: anticipoFecha || null,
-          anticipo_pagado: false,
-          saldo_usd: saldoUsd || null,
-          saldo_fecha: saldoFecha || null,
-          saldo_pagado: false,
-          tc_ponderado: tcDelDia,
-          observaciones: observaciones || null,
-          // created_by se setea cuando integremos auth real (FK a crm.usuarios)
-        },
-        lineasValidas.map((l) => ({
-          sku_id: l.sku_id,
-          descripcion: l.descripcion || null,
-          marca: l.marca || null,
-          pct: l.pct || null,
-          talla: l.talla || null,
-          kg: toNum(l.kg),
-          kg_caja: toNum(l.kg_caja),
-          cajas: Math.round(toNum(l.cajas)) || null,
-          precio_usd: toNum(l.precio_usd),
-          total_usd: toNum(l.kg) * toNum(l.precio_usd),
-        })),
-      );
+      if (isEdit && contratoId) {
+        // Edición: NO se tocan anticipo_pagado/saldo_pagado/tc_ponderado ni
+        // lote/naviera/llegada_real (vienen de pagos y de la recepción).
+        await updateContrato(
+          contratoId,
+          {
+            folio: folio.trim(),
+            fecha: fecha || null,
+            status,
+            eta_puerto: etaPuerto || null,
+            eta_bodega: etaBodega || null,
+            presentacion,
+            bodega_destino: bodegaDestino || null,
+            contenedor: contenedor || null,
+            total_usd: totales.totalUsd,
+            total_kg: totales.totalKg,
+            anticipo_usd: toNum(anticipoUsd) || null,
+            anticipo_fecha: anticipoFecha || null,
+            saldo_usd: saldoUsd || null,
+            saldo_fecha: saldoFecha || null,
+            observaciones: observaciones || null,
+          },
+          lineasPayload,
+        );
+        // Recalcular flags por si cambió total/anticipo/saldo vs los pagos ya hechos.
+        await recalcFlagsContrato(contratoId);
+      } else {
+        // TC del día para el tc_ponderado de respaldo
+        const tcDelDia = await getTcDelDia();
+        await createContrato(
+          {
+            empresa_id: empresaId,
+            folio: folio.trim(),
+            fecha: fecha || null,
+            // lote/naviera: se llenan al llegar la factura / confirmar embarque
+            status,
+            eta_puerto: etaPuerto || null,
+            eta_bodega: etaBodega || null,
+            presentacion,
+            bodega_destino: bodegaDestino || null,
+            contenedor: contenedor || null,
+            total_usd: totales.totalUsd,
+            total_kg: totales.totalKg,
+            anticipo_usd: toNum(anticipoUsd) || null,
+            anticipo_fecha: anticipoFecha || null,
+            anticipo_pagado: false,
+            saldo_usd: saldoUsd || null,
+            saldo_fecha: saldoFecha || null,
+            saldo_pagado: false,
+            tc_ponderado: tcDelDia,
+            observaciones: observaciones || null,
+          },
+          lineasPayload,
+        );
+      }
     },
     onSuccess: () => {
-      toast.success(`Contrato ${folio} creado correctamente`);
+      toast.success(isEdit ? `Contrato ${folio} actualizado` : `Contrato ${folio} creado correctamente`);
       draft.clear();
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_costos'] });
+      qc.invalidateQueries({ queryKey: ['blufin_contrato_detalle'] });
       navigate('/app/importaciones/blufin/contratos');
     },
     onError: (err: Error) => {
@@ -315,11 +398,17 @@ export function BlufinNuevoContratoPage() {
     <>
       <div className="hstack" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Nuevo contrato</h2>
-          <p className="page-subtitle">Captura manual de una orden de compra Blufin</p>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
+            {isEdit ? 'Editar contrato' : 'Nuevo contrato'}
+          </h2>
+          <p className="page-subtitle">
+            {isEdit
+              ? 'Edición manual del contrato — cabecera y renglones de producto'
+              : 'Captura manual de una orden de compra Blufin'}
+          </p>
         </div>
         <div className="hstack" style={{ gap: 10 }}>
-          {hasContent && (
+          {!isEdit && hasContent && (
             <div
               className="hstack"
               style={{
@@ -757,7 +846,7 @@ export function BlufinNuevoContratoPage() {
               </>
             ) : (
               <>
-                <Icon name="check" size={14} /> Guardar contrato
+                <Icon name="check" size={14} /> {isEdit ? 'Guardar cambios' : 'Guardar contrato'}
               </>
             )}
           </button>

@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/lib/auth';
 import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { StatusPill } from '@/features/blufin/StatusPill';
@@ -55,9 +57,12 @@ export function ContratoDetalleModal({
   });
   const [pdf, setPdf] = useState<PdfTarget | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const backdrop = useBackdropDismiss(onClose);
   const c = data?.contrato;
+  const puedeEditar = user?.rol === 'admin_total' || !!user?.capturar;
   const prods = c?.productos ?? [];
   const totKg = prods.reduce((s, p) => s + Number(p.kg ?? 0), 0);
   const totCajas = prods.reduce((s, p) => s + Number(p.cajas ?? 0), 0);
@@ -186,6 +191,18 @@ export function ContratoDetalleModal({
                     </div>
                   </div>
                   <div className="hstack" style={{ gap: 6, flexShrink: 0 }}>
+                    {puedeEditar && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => {
+                          onClose();
+                          navigate(`/app/importaciones/blufin/contratos/editar/${c.id}`);
+                        }}
+                        title="Editar el contrato a mano"
+                      >
+                        <Icon name="edit" size={13} /> Editar
+                      </button>
+                    )}
                     {c.contrato_pdf_path && (
                       <button
                         className="btn btn-outline btn-sm"

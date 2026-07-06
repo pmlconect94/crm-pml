@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type {
+  Database,
   BlufinContrato,
   BlufinContratoConProductos,
   BlufinContratoInsert,
@@ -53,6 +54,34 @@ export async function createContrato(
   }
 
   return contrato as BlufinContrato;
+}
+
+/**
+ * Editar un contrato a mano: actualiza la cabecera y REEMPLAZA los renglones de
+ * producto (borra los existentes e inserta los nuevos con su orden). No toca
+ * pagos, forwards, NCs ni recepción (esos referencian al contrato, no a las
+ * líneas). El recálculo de flags (anticipo/saldo pagado) lo hace el caller con
+ * `recalcFlagsContrato` por si cambió el total/anticipo/saldo.
+ */
+export async function updateContrato(
+  id: string,
+  payload: Database['crm']['Tables']['blufin_contratos']['Update'],
+  productos: Omit<BlufinProductoInsert, 'contrato_id'>[],
+): Promise<void> {
+  const { error: uErr } = await supabase.from('blufin_contratos').update(payload).eq('id', id);
+  if (uErr) throw uErr;
+
+  const { error: dErr } = await supabase
+    .from('blufin_contrato_productos')
+    .delete()
+    .eq('contrato_id', id);
+  if (dErr) throw dErr;
+
+  if (productos.length > 0) {
+    const lineas = productos.map((p, idx) => ({ ...p, contrato_id: id, orden: idx }));
+    const { error: iErr } = await supabase.from('blufin_contrato_productos').insert(lineas);
+    if (iErr) throw iErr;
+  }
 }
 
 export type ContratoDetalle = {

@@ -1286,10 +1286,11 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 - ✅ **Pagos→Pendientes**: el monto del **saldo ahora es el REAL** = total − pagado − NCs (con o sin descuentos), no el saldo programado fijo (usa `fetchSaldosPorContrato`); + **botón "Factura"** por contrato (visor embebido). **Costos→Por contenedor**: el buscador ahora también filtra por **producto/SKU** (`ContenedorCosto.lineas` incluye `code`).
 - ✅ **Camanchaca (SA + MX) y Neptuno — 1ª versión construida** (commit `0009037`; sidebar + picker habilitados en `27604db`; ver §16 y §7/§8).
 
-**PENDIENTE para otra sesión (el usuario lo dejó explícito 2026-07-02):**
-1. **Editar contratos a mano** (Blufin) — botón "Editar" que abra el formulario de alta en modo edición (UPDATE, no INSERT), idealmente con edición de los renglones de producto (recalcula totales). NO construido aún.
-2. **Versión celular (responsive)** — hoy la app está pensada para escritorio (tablas densas); falta un pase de responsive. Priorizar con el usuario las pantallas de teléfono (ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes).
-3. Pulir Camanchaca/Neptuno conforme el usuario los pruebe (no verificados interactivamente — se generaron con subagentes).
+**Editor de contratos ✅ (2026-07-06):** botón **"Editar"** en la ficha del contrato (`ContratoDetalleModal`, gated a admin_total/`capturar`) → reusa `BlufinNuevoContratoPage` en **modo edición** (ruta `contratos/editar/:contratoId`): precarga cabecera + renglones (resuelve el SKU-label desde el catálogo), y al guardar hace `updateContrato` (UPDATE de cabecera + **REEMPLAZA** los renglones de producto — borra e inserta) en vez de INSERT, recalculando totales y luego `recalcFlagsContrato`. **NO toca** pagos/forwards/NCs/recepción ni `anticipo_pagado`/`saldo_pagado`/`tc_ponderado`/`lote`/`naviera`/`llegada_real`. El borrador `useDraft` se desactiva en edición (la precarga del contrato manda). Ojo: editar los renglones no re-sincroniza una recepción ya registrada (son snapshots independientes).
+
+**PENDIENTE para otra sesión:**
+1. **Versión celular (responsive)** — hoy la app está pensada para escritorio (tablas densas); falta un pase de responsive. Priorizar con el usuario las pantallas de teléfono (ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes).
+2. Pulir Camanchaca/Neptuno conforme el usuario los pruebe (no verificados interactivamente — se generaron con subagentes).
 
 ---
 
