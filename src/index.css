@@ -555,4 +555,23 @@ textarea.field-input { resize: vertical; min-height: 80px; }
      en vez de desbordar horizontalmente toda la pantalla. */
   .card { overflow-x: auto; }
   .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+
+  /* Rejillas de formularios y KPIs → una sola columna (no apretar 3-4 cols) */
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+
+  /* Headers de página y de tarjeta: apilar en vez de apretar */
+  .page-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .card-header { flex-wrap: wrap; gap: 8px; padding: 14px 16px; }
+  .page-title { font-size: 16px; }
+
+  /* Tablas y tarjetas más compactas para que quepan mejor */
+  .tbl th, .tbl td { padding: 8px 10px; font-size: 12px; }
+  .card-body { padding: 14px; }
+
+  /* iOS: inputs a >=16px para que Safari NO haga auto-zoom al enfocarlos
+     (causa típica del "mal escalado" en iPhone). El !important vence al
+     font-size inline que traen muchos inputs. */
+  input, select, textarea, .field-input {
+    font-size: 16px !important;
+  }
 }
