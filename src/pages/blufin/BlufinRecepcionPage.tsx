@@ -18,6 +18,7 @@ import {
   fetchContratosPorRecibir,
   deleteRecepcion,
   updateLlegadaContrato,
+  updateRecepcion,
 } from '@/features/blufin/recepcion-queries';
 import type { BlufinContratoConProductos, BlufinRecepcionEnriquecida } from '@/types/database';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
@@ -648,6 +649,7 @@ function HistorialView({
 }) {
   const [q, setQ] = useState('');
   const [verDetalle, setVerDetalle] = useState<BlufinRecepcionEnriquecida | null>(null);
+  const [editar, setEditar] = useState<BlufinRecepcionEnriquecida | null>(null);
 
   const filtradas = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -724,7 +726,7 @@ function HistorialView({
               <th>Presentación</th>
               <th style={{ textAlign: 'right' }}>Kg recibidos</th>
               <th style={{ textAlign: 'right' }}>Diferencia</th>
-              <th style={{ width: 40 }}></th>
+              <th style={{ width: 84 }}></th>
             </tr>
           </thead>
           <tbody>
@@ -800,14 +802,24 @@ function HistorialView({
                       )}
                     </td>
                     <td>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => onDelete(r)}
-                        title="Eliminar recepción"
-                        style={{ padding: 6, color: 'var(--red-500)' }}
-                      >
-                        <Icon name="trash" size={13} />
-                      </button>
+                      <div className="hstack" style={{ gap: 2 }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setEditar(r)}
+                          title="Editar fecha y lugar de llegada"
+                          style={{ padding: 6, color: 'var(--blue-500)' }}
+                        >
+                          <Icon name="edit" size={13} />
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => onDelete(r)}
+                          title="Eliminar recepción"
+                          style={{ padding: 6, color: 'var(--red-500)' }}
+                        >
+                          <Icon name="trash" size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -818,7 +830,190 @@ function HistorialView({
       </div>
 
       <RecepcionDetalleModal recepcion={verDetalle} onClose={() => setVerDetalle(null)} />
+      <EditarRecepcionModal recepcion={editar} onClose={() => setEditar(null)} />
     </div>
+  );
+}
+
+/* ─── Editar recepción (fecha + lugar de llegada) ─────────────────── */
+
+function EditarRecepcionModal({
+  recepcion,
+  onClose,
+}: {
+  recepcion: BlufinRecepcionEnriquecida | null;
+  onClose: () => void;
+}) {
+  const { empresaId } = useAuth();
+  const qc = useQueryClient();
+  const backdrop = useBackdropDismiss(onClose);
+  const [fecha, setFecha] = useState('');
+  const [bodegaId, setBodegaId] = useState('');
+  const [ventaCliente, setVentaCliente] = useState('');
+  const [ventaCiudad, setVentaCiudad] = useState('');
+
+  const { data: cat } = useQuery({
+    queryKey: ['blufin_catalogos', empresaId],
+    queryFn: () => fetchCatalogos(empresaId),
+    enabled: !!recepcion,
+  });
+
+  useEffect(() => {
+    if (!recepcion) return;
+    setFecha(recepcion.fecha_recepcion ?? '');
+    setBodegaId(recepcion.bodega_id != null ? String(recepcion.bodega_id) : '');
+    setVentaCliente(recepcion.venta_cliente ?? '');
+    setVentaCiudad(recepcion.venta_ciudad ?? '');
+  }, [recepcion]);
+
+  const bodegaSel = cat?.bodegas.find((b) => String(b.id) === bodegaId) ?? null;
+  const esVentaDirecta = bodegaSel?.nombre === 'VENTA DIRECTA';
+  const puedeGuardar = !!fecha && (!esVentaDirecta || ventaCliente.trim() !== '');
+
+  const mut = useMutation({
+    mutationFn: () =>
+      updateRecepcion({
+        id: recepcion!.id,
+        contrato_id: recepcion!.contrato_id,
+        fecha_recepcion: fecha,
+        bodega_id: bodegaSel?.id ?? null,
+        bodega_nombre: bodegaSel?.nombre ?? null,
+        venta_cliente: esVentaDirecta ? (ventaCliente.trim() || null) : null,
+        venta_ciudad: esVentaDirecta ? (ventaCiudad.trim() || null) : null,
+      }),
+    onSuccess: () => {
+      toast.success('Recepción actualizada — fecha y lugar de llegada');
+      qc.invalidateQueries({ queryKey: ['blufin_recepciones'] });
+      qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
+      onClose();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <AnimatePresence>
+      {recepcion && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          {...backdrop}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(10, 37, 64, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            zIndex: 100,
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={SPRING.snappy}
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: 'white', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-xl)', maxWidth: 440, width: '100%' }}
+          >
+            <div
+              style={{
+                padding: '18px 22px',
+                borderBottom: '1px solid var(--ink-100)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 16,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>
+                  Editar recepción
+                </h2>
+                <p className="card-subtitle" style={{ marginTop: 4 }}>
+                  <span className="mono fw-600">{recepcion.contrato?.folio ?? '—'}</span> — corrige la
+                  fecha y el lugar de llegada
+                </p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 22px', display: 'grid', gap: 12 }}>
+              <div>
+                <label className="field-label">Fecha de llegada *</label>
+                <input type="date" className="field-input" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label">Lugar de llegada (almacén)</label>
+                <select className="field-input" value={bodegaId} onChange={(e) => setBodegaId(e.target.value)}>
+                  <option value="">— Selecciona —</option>
+                  {(cat?.bodegas ?? []).map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {esVentaDirecta && (
+                <>
+                  <div>
+                    <label className="field-label">Cliente (venta directa) *</label>
+                    <input
+                      className="field-input"
+                      value={ventaCliente}
+                      onChange={(e) => setVentaCliente(e.target.value)}
+                      placeholder="¿A qué cliente se le vendió?"
+                      style={{ borderColor: ventaCliente.trim() ? undefined : 'var(--amber-500)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Ciudad donde llegó</label>
+                    <input
+                      className="field-input"
+                      value={ventaCiudad}
+                      onChange={(e) => setVentaCiudad(e.target.value)}
+                      placeholder="Ciudad"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '14px 22px',
+                borderTop: '1px solid var(--ink-100)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+                background: 'var(--ink-50)',
+                borderRadius: '0 0 var(--r-lg) var(--r-lg)',
+              }}
+            >
+              <button className="btn btn-ghost btn-sm" onClick={onClose}>
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!puedeGuardar || mut.isPending}
+                onClick={() => mut.mutate()}
+              >
+                {mut.isPending ? (
+                  <div className="spinner" style={{ width: 12, height: 12 }} />
+                ) : (
+                  <Icon name="check" size={13} />
+                )}
+                Guardar cambios
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -890,6 +1085,9 @@ function RecepcionDetalleModal({
                   Recibido {fmtFecha(recepcion.fecha_recepcion)} · {recepcion.bodega?.nombre ?? 'sin bodega'} ·
                   Intelisis <span className="mono">{recepcion.entrada_intelisis ?? '—'}</span>
                   {recepcion.presentacion_recibida ? ` · ${recepcion.presentacion_recibida}` : ''}
+                  {recepcion.venta_cliente
+                    ? ` · Venta directa: ${recepcion.venta_cliente}${recepcion.venta_ciudad ? ` (${recepcion.venta_ciudad})` : ''}`
+                    : ''}
                 </div>
               </div>
               <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ padding: 6 }} aria-label="Cerrar">

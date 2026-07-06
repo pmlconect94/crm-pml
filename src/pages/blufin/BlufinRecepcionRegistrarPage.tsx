@@ -58,6 +58,8 @@ export function BlufinRecepcionRegistrarPage() {
   const [fecha, setFecha] = useState(hoyISO());
   const [bodegaId, setBodegaId] = useState<string>('');
   const [presRecibida, setPresRecibida] = useState('');
+  const [ventaCliente, setVentaCliente] = useState('');
+  const [ventaCiudad, setVentaCiudad] = useState('');
   const [intelisis, setIntelisis] = useState('');
   const [lote, setLote] = useState('');
   const [obsGenerales, setObsGenerales] = useState('');
@@ -114,14 +116,20 @@ export function BlufinRecepcionRegistrarPage() {
     );
     setPresRecibida(contrato.presentacion ?? '');
     setLote(contrato.lote ?? '');
+    // Si la llegada ya estaba programada (fecha + almacén oficiales), precargar
+    // esa fecha como fecha de recepción por default.
+    if (contrato.eta_bodega_confirmada && contrato.eta_bodega) setFecha(contrato.eta_bodega);
   }, [contrato]);
 
   useEffect(() => {
     if (!bodegaId && cat?.bodegas.length) {
+      // Default: el almacén ya acordado (bodega_destino de "Programar llegada"),
+      // si no MERCADO (el principal), si no la primera disponible.
       const porDefecto = contrato?.bodega_destino
         ? cat.bodegas.find((b) => b.nombre === contrato.bodega_destino)
         : null;
-      setBodegaId(String((porDefecto ?? cat.bodegas[0]).id));
+      const mercado = cat.bodegas.find((b) => b.nombre === 'MERCADO');
+      setBodegaId(String((porDefecto ?? mercado ?? cat.bodegas[0]).id));
     }
   }, [cat, contrato, bodegaId]);
 
@@ -178,9 +186,13 @@ export function BlufinRecepcionRegistrarPage() {
 
   const faltaIntelisis = intelisis.trim() === '';
 
+  const bodegaSel = cat?.bodegas.find((b) => String(b.id) === bodegaId) ?? null;
+  const esVentaDirecta = bodegaSel?.nombre === 'VENTA DIRECTA';
+
   const canConfirm =
     !!fecha &&
     !faltaIntelisis &&
+    (!esVentaDirecta || ventaCliente.trim() !== '') &&
     lineas.length > 0 &&
     lineas.every((l) => l.kg_recibidos !== '' && (parseFloat(l.kg_recibidos) || 0) > 0);
 
@@ -196,6 +208,8 @@ export function BlufinRecepcionRegistrarPage() {
         entrada_intelisis: intelisis.trim() || null,
         presentacion_recibida: presRecibida || null,
         presentacion_pactada: contrato?.presentacion ?? null,
+        venta_cliente: esVentaDirecta ? (ventaCliente.trim() || null) : null,
+        venta_ciudad: esVentaDirecta ? (ventaCiudad.trim() || null) : null,
         observaciones: obsGenerales.trim() || null,
         lote: lote.trim() || null,
         lineas: lineas.map((l) => ({
@@ -353,6 +367,29 @@ export function BlufinRecepcionRegistrarPage() {
               ))}
             </select>
           </div>
+          {esVentaDirecta && (
+            <>
+              <div>
+                <label className="field-label">Cliente (venta directa) *</label>
+                <input
+                  className="field-input"
+                  value={ventaCliente}
+                  onChange={(e) => setVentaCliente(e.target.value)}
+                  placeholder="¿A qué cliente se le vendió?"
+                  style={{ borderColor: ventaCliente.trim() ? undefined : 'var(--amber-500)' }}
+                />
+              </div>
+              <div>
+                <label className="field-label">Ciudad donde llegó</label>
+                <input
+                  className="field-input"
+                  value={ventaCiudad}
+                  onChange={(e) => setVentaCiudad(e.target.value)}
+                  placeholder="Ciudad"
+                />
+              </div>
+            </>
+          )}
           <div>
             <label className="field-label">Presentación recibida</label>
             <select

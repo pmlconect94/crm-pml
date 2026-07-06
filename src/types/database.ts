@@ -51,9 +51,9 @@ export type Database = {
         Relationships: Empty;
       };
       bodegas: {
-        Row: { id: number; nombre: string; ciudad: string | null; empresa_id: string | null };
-        Insert: { id?: number; nombre: string; ciudad?: string | null; empresa_id?: string | null };
-        Update: { id?: number; nombre?: string; ciudad?: string | null; empresa_id?: string | null };
+        Row: { id: number; nombre: string; ciudad: string | null; empresa_id: string | null; activo: boolean };
+        Insert: { id?: number; nombre: string; ciudad?: string | null; empresa_id?: string | null; activo?: boolean };
+        Update: { id?: number; nombre?: string; ciudad?: string | null; empresa_id?: string | null; activo?: boolean };
         Relationships: Empty;
       };
 
@@ -291,6 +291,8 @@ export type Database = {
           bodega_id: number | null;
           entrada_intelisis: string | null;
           presentacion_recibida: string | null;
+          venta_cliente: string | null;
+          venta_ciudad: string | null;
           observaciones: string | null;
           capturado_por: string | null;
           created_at: string | null;
@@ -302,6 +304,8 @@ export type Database = {
           bodega_id?: number | null;
           entrada_intelisis?: string | null;
           presentacion_recibida?: string | null;
+          venta_cliente?: string | null;
+          venta_ciudad?: string | null;
           observaciones?: string | null;
           capturado_por?: string | null;
         };
@@ -312,6 +316,8 @@ export type Database = {
           bodega_id?: number | null;
           entrada_intelisis?: string | null;
           presentacion_recibida?: string | null;
+          venta_cliente?: string | null;
+          venta_ciudad?: string | null;
           observaciones?: string | null;
           capturado_por?: string | null;
         };

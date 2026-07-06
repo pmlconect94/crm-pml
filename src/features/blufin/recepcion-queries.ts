@@ -13,7 +13,7 @@ export async function fetchRecepciones(empresaId: string): Promise<BlufinRecepci
   const { data, error } = await supabase
     .from('blufin_recepciones')
     .select(
-      'id, contrato_id, fecha_recepcion, bodega_id, entrada_intelisis, presentacion_recibida, observaciones, capturado_por, created_at, ' +
+      'id, contrato_id, fecha_recepcion, bodega_id, entrada_intelisis, presentacion_recibida, venta_cliente, venta_ciudad, observaciones, capturado_por, created_at, ' +
         'contrato:blufin_contratos!inner(folio, empresa_id, presentacion, total_kg), ' +
         'bodega:bodegas(nombre), ' +
         'lineas:blufin_recepcion_lineas(*, sku:catalogo_sku(code, descripcion))',
@@ -75,6 +75,41 @@ export async function updateLlegadaContrato(params: {
   if (error) throw error;
 }
 
+/**
+ * Editar una recepción YA capturada (por si se equivocaron): cambia la fecha y
+ * el lugar de llegada (bodega) — y cliente/ciudad si es VENTA DIRECTA. Refleja
+ * el cambio en el contrato (llegada_real = fecha, bodega_destino = nombre).
+ * No toca las líneas por SKU ni el status.
+ */
+export async function updateRecepcion(params: {
+  id: string;
+  contrato_id: string | null;
+  fecha_recepcion: string;
+  bodega_id: number | null;
+  bodega_nombre: string | null;
+  venta_cliente: string | null;
+  venta_ciudad: string | null;
+}): Promise<void> {
+  const { error: rErr } = await supabase
+    .from('blufin_recepciones')
+    .update({
+      fecha_recepcion: params.fecha_recepcion,
+      bodega_id: params.bodega_id,
+      venta_cliente: params.venta_cliente,
+      venta_ciudad: params.venta_ciudad,
+    })
+    .eq('id', params.id);
+  if (rErr) throw rErr;
+
+  if (params.contrato_id) {
+    const { error: cErr } = await supabase
+      .from('blufin_contratos')
+      .update({ llegada_real: params.fecha_recepcion, bodega_destino: params.bodega_nombre })
+      .eq('id', params.contrato_id);
+    if (cErr) throw cErr;
+  }
+}
+
 export async function fetchContratoById(id: string): Promise<BlufinContratoConProductos | null> {
   const { data, error } = await supabase
     .from('blufin_contratos')
@@ -101,6 +136,8 @@ export type RecepcionParams = {
   entrada_intelisis: string | null;
   presentacion_recibida: string | null;
   presentacion_pactada: string | null; // del contrato, para detectar diferencia
+  venta_cliente: string | null; // solo si bodega = VENTA DIRECTA
+  venta_ciudad: string | null;
   observaciones: string | null;
   lote: string | null; // se captura AL RECIBIR — actualiza el contrato
   lineas: RecepcionLineaParam[];
@@ -139,6 +176,8 @@ export async function createRecepcion(params: RecepcionParams): Promise<number> 
       bodega_id: params.bodega_id,
       entrada_intelisis: params.entrada_intelisis,
       presentacion_recibida: params.presentacion_recibida,
+      venta_cliente: params.venta_cliente,
+      venta_ciudad: params.venta_ciudad,
       observaciones: params.observaciones,
     })
     .select('id')

@@ -239,7 +239,7 @@ export async function fetchCatalogos(empresaId: string): Promise<{
       .eq('activo', true)
       .order('code'),
     supabase.from('navieras').select('*').order('nombre'),
-    supabase.from('bodegas').select('*').eq('empresa_id', empresaId).order('nombre'),
+    supabase.from('bodegas').select('*').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
     supabase.from('bancos').select('*').order('nombre'),
   ]);
   if (skus.error) throw skus.error;
