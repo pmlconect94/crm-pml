@@ -120,13 +120,26 @@ export function calcularPromedio(
   };
 }
 
-/** TC efectivo de un contenedor: pagos ponderados → forward → tc_ponderado → null. */
+/**
+ * TC efectivo REAL de un contenedor. Decisión del usuario 2026-07-07: el TC solo
+ * es OFICIAL cuando el contenedor está pagado por completo (saldo liquidado). Si
+ * solo se pagó el anticipo (o nada), el TC del contenedor todavía NO está definido
+ * — antes se tomaba el TC del anticipo, lo cual daba un costo MXN engañoso. Ahora
+ * se devuelve `null` para que la página use el TC del día estimado (en ámbar),
+ * tanto en Inventario como en Por contenedor.
+ *
+ * Cuando SÍ está liquidado: pagos ponderados → forward → tc_ponderado → null.
+ */
 function tcEfectivo(
   contratoId: string,
+  liquidado: boolean,
   pagos: { contrato_id: string | null; monto_usd: number; tc: number }[],
   forwards: { contrato_id: string | null; tc_forward: number | null }[],
   tcPonderado: number | null,
 ): { tc: number | null; origen: TcOrigen } {
+  // Sin liquidar por completo → no hay TC oficial (se estima con el TC del día).
+  if (!liquidado) return { tc: null, origen: 'ninguno' };
+
   const ps = pagos.filter((p) => p.contrato_id === contratoId);
   if (ps.length > 0) {
     const sumMonto = ps.reduce((s, p) => s + Number(p.monto_usd), 0);
@@ -135,6 +148,7 @@ function tcEfectivo(
       return { tc: sumProd / sumMonto, origen: 'pagos' };
     }
   }
+  // Liquidado pero sin pagos con TC (raro: flag puesto a mano) → forward → ponderado.
   const fwd = forwards.find((f) => f.contrato_id === contratoId && f.tc_forward != null);
   if (fwd?.tc_forward != null) return { tc: Number(fwd.tc_forward), origen: 'forward' };
   if (tcPonderado != null) return { tc: Number(tcPonderado), origen: 'ponderado' };
@@ -165,7 +179,8 @@ export async function fetchCostosData(empresaId: string): Promise<CostosData> {
   const forwardsLite = forwards.map((f) => ({ contrato_id: f.contrato_id, tc_forward: f.tc_forward }));
 
   for (const c of contratos) {
-    const { tc, origen } = tcEfectivo(c.id, pagosLite, forwardsLite, c.tc_ponderado);
+    const liquidado = c.saldo_pagado === true;
+    const { tc, origen } = tcEfectivo(c.id, liquidado, pagosLite, forwardsLite, c.tc_ponderado);
     const llego = !!c.llegada_real;
 
     const contLineas: ContenedorCosto['lineas'] = [];
@@ -223,7 +238,7 @@ export async function fetchCostosData(empresaId: string): Promise<CostosData> {
       eta_bodega: c.eta_bodega,
       llegada_real: c.llegada_real ?? null,
       llego,
-      liquidado: c.saldo_pagado === true,
+      liquidado,
       status: c.status,
       total_usd: Number(c.total_usd ?? 0),
       total_kg: contKg,

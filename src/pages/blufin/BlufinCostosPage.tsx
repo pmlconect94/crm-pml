@@ -803,7 +803,7 @@ function TcCell({ f, tcEstimado }: { f: FuenteCosto; tcEstimado?: number | null 
     return (
       <span
         className="mono"
-        title="TC estimado del día (no oficial) — el contenedor aún no tiene pagos ni forward"
+        title="TC estimado del día (no oficial) — el contenedor aún no está liquidado (falta pagar el saldo)"
         style={{ color: 'var(--amber-500)', borderBottom: '1px dotted var(--amber-500)', cursor: 'help' }}
       >
         {tcEstimado.toFixed(4)}<span className="text-xs"> est.</span>
@@ -1066,8 +1066,8 @@ function ContenedoresView({
                           {!c.liquidado && (
                             <div className="text-xs muted" style={{ marginTop: 8 }}>
                               {esEstimado
-                                ? 'Este contenedor aún no está liquidado: el costo en pesos es ESTIMADO con el TC del día. Quedará oficial al registrar los pagos.'
-                                : 'TC tomado de pagos/forward/TC ponderado. El costo será oficial al liquidar el saldo.'}
+                                ? 'Este contenedor aún no está liquidado: el costo en pesos es ESTIMADO con el TC del día. Quedará oficial al pagar el saldo completo.'
+                                : 'Este contenedor aún no está liquidado y no hay TC del día — captura el TC del día arriba para estimar el costo en pesos.'}
                             </div>
                           )}
                         </div>
