@@ -1,0 +1,48 @@
+name: Sincronizar facturas SAT
+
+# Corre 3 veces al día (hora Ciudad de México, UTC-6 todo el año desde que
+# México eliminó el horario de verano en la zona centro en 2022):
+#   7:30 am  -> 13:30 UTC
+#   11:00 am -> 17:00 UTC
+#   1:00 pm  -> 19:00 UTC
+# GitHub puede retrasar unos minutos una corrida programada en horas pico —
+# no importa para este caso de uso. `workflow_dispatch` permite correrlo a
+# mano desde la pestaña Actions para probar sin esperar al cron.
+on:
+  schedule:
+    - cron: '30 13 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 19 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sat-sync
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - name: Preparar credenciales de e.firma
+        run: |
+          mkdir -p credentials
+          echo "${{ secrets.SAT_EFIRMA_CERT_B64 }}" | base64 -d > credentials/efirma.cer
+          echo "${{ secrets.SAT_EFIRMA_KEY_B64 }}" | base64 -d > credentials/efirma.key
+
+      - name: Sincronizar con el SAT
+        env:
+          SAT_RFC: ${{ secrets.SAT_RFC }}
+          SAT_EFIRMA_CERT_PATH: credentials/efirma.cer
+          SAT_EFIRMA_KEY_PATH: credentials/efirma.key
+          SAT_EFIRMA_PASSWORD: ${{ secrets.SAT_EFIRMA_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EMPRESA_ID: pml
+        run: python run_sync.py --dias 5 --tipo recibidas

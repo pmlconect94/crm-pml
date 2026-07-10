@@ -19,6 +19,12 @@ vite.config.js.map
 # Python (scripts de carga/utilidades)
 __pycache__/
 *.pyc
+.venv/
+
+# sat-sync: nunca subir la e.firma ni datos descargados (solo existen local para pruebas -
+# en GitHub Actions esos mismos archivos se recrean desde Secrets en cada corrida)
+sat-sync/credentials/
+sat-sync/data/
 
 # Editor / OS
 .DS_Store
