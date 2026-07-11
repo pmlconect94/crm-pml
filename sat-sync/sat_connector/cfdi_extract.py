@@ -79,10 +79,63 @@ def extract_factura(invoice: dict, *, tipo: str, empresa_id: str, xml_storage_pa
         "sello_sat": tfd.get("SelloSAT"),
         "rfc_prov_certif": tfd.get("RfcProvCertif"),
 
+        "exportacion": _code(invoice.get("Exportacion")),
+
         "estatus_sat": "vigente",
         "xml_storage_path": xml_storage_path,
         "id_solicitud": id_solicitud,
     }
+
+
+def extract_relaciones(invoice: dict) -> list[dict]:
+    """CfdiRelacionados: liga este CFDI con el/los UUID de documentos originales
+    (ej. la factura que una nota de credito esta corrigiendo)."""
+    relaciones = []
+    for rel in invoice.get("CfdiRelacionados") or []:
+        tipo_code = _code(rel.get("TipoRelacion"))
+        tipo_desc = _code_desc(rel.get("TipoRelacion"))
+        for uuid_rel in rel.get("CfdiRelacionado") or []:
+            relaciones.append({
+                "uuid_relacionado": str(uuid_rel),
+                "tipo_relacion": tipo_code,
+                "tipo_relacion_desc": tipo_desc,
+            })
+    return relaciones
+
+
+def extract_pagos(invoice: dict) -> list[dict]:
+    """Complemento de Pago (comprobantes tipo P): que factura(s) se pagaron, cuanto,
+    y el saldo que queda — la fuente real para saber que PPD ya esta liquidada."""
+    pagos_complemento = (invoice.get("Complemento") or {}).get("Pagos") or {}
+    result = []
+    for pago in pagos_complemento.get("Pago") or []:
+        documentos = []
+        for doc in pago.get("DoctoRelacionado") or []:
+            documentos.append({
+                "id_documento": str(doc.get("IdDocumento") or ""),
+                "serie": doc.get("Serie"),
+                "folio": doc.get("Folio"),
+                "moneda_dr": _code(doc.get("MonedaDR")),
+                "num_parcialidad": doc.get("NumParcialidad"),
+                "imp_saldo_ant": _num(doc.get("ImpSaldoAnt")),
+                "imp_pagado": _num(doc.get("ImpPagado")),
+                "imp_saldo_insoluto": _num(doc.get("ImpSaldoInsoluto")),
+                "objeto_imp_dr": _code(doc.get("ObjetoImpDR")),
+            })
+
+        result.append({
+            "fecha_pago": _iso(pago.get("FechaPago")),
+            "forma_pago": _code(pago.get("FormaDePagoP")),
+            "moneda": _code(pago.get("MonedaP")),
+            "tipo_cambio": _num(pago.get("TipoCambioP")),
+            "monto": _num(pago.get("Monto")),
+            "num_operacion": pago.get("NumOperacion"),
+            "rfc_emisor_cta_ord": pago.get("RfcEmisorCtaOrd"),
+            "rfc_emisor_cta_ben": pago.get("RfcEmisorCtaBen"),
+            "cta_beneficiario": pago.get("CtaBeneficiario"),
+            "documentos": documentos,
+        })
+    return result
 
 
 def extract_conceptos(invoice: dict) -> list[dict]:

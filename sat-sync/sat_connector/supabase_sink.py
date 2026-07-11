@@ -95,6 +95,65 @@ class SupabaseSink:
             )
             imp_resp.raise_for_status()
 
+    def replace_relaciones(self, factura_uuid: str, relaciones: list[dict]) -> None:
+        del_resp = self.session.delete(
+            f"{self.base_url}/rest/v1/cont_relaciones",
+            params={"factura_uuid": f"eq.{factura_uuid}"},
+            headers=self._headers(write=True, prefer="return=minimal"),
+        )
+        del_resp.raise_for_status()
+
+        if not relaciones:
+            return
+        rows = [{**r, "factura_uuid": factura_uuid} for r in relaciones]
+        resp = self.session.post(
+            f"{self.base_url}/rest/v1/cont_relaciones",
+            json=rows,
+            headers=self._headers(write=True, prefer="return=minimal"),
+        )
+        resp.raise_for_status()
+
+    def replace_pagos(self, factura_uuid: str, pagos: list[dict]) -> None:
+        """Borra los pagos previos de esta factura (P-type) y reinserta — mismo
+        patron delete+insert que replace_conceptos para que reimportar sea idempotente."""
+        del_resp = self.session.delete(
+            f"{self.base_url}/rest/v1/cont_pagos",
+            params={"factura_uuid": f"eq.{factura_uuid}"},
+            headers=self._headers(write=True, prefer="return=minimal"),
+        )
+        del_resp.raise_for_status()
+
+        if not pagos:
+            return
+
+        rows = []
+        documentos_por_pago = []
+        for p in pagos:
+            documentos = p.pop("documentos", [])
+            rows.append({**p, "factura_uuid": factura_uuid})
+            documentos_por_pago.append(documentos)
+
+        resp = self.session.post(
+            f"{self.base_url}/rest/v1/cont_pagos",
+            json=rows,
+            headers=self._headers(write=True, prefer="return=representation"),
+        )
+        resp.raise_for_status()
+        inserted = resp.json()
+
+        all_documentos = []
+        for pago_row, documentos in zip(inserted, documentos_por_pago):
+            for doc in documentos:
+                all_documentos.append({**doc, "pago_id": pago_row["id"]})
+
+        if all_documentos:
+            doc_resp = self.session.post(
+                f"{self.base_url}/rest/v1/cont_pagos_documentos",
+                json=all_documentos,
+                headers=self._headers(write=True, prefer="return=minimal"),
+            )
+            doc_resp.raise_for_status()
+
     # ---- solicitudes --------------------------------------------------------
 
     def save_solicitud(self, id_solicitud: str, empresa_id: str, tipo: str, fecha_inicial: date, fecha_final: date) -> None:

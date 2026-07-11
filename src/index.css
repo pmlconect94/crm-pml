@@ -162,6 +162,15 @@ input, select, textarea { font-family: inherit; }
 .tbl td { padding: 14px 16px; border-bottom: 1px solid var(--ink-100); color: var(--ink-800); vertical-align: middle; }
 .tbl tr { transition: background-color 140ms var(--ease-soft); }
 .tbl tr:last-child td { border-bottom: none; }
+
+/* Variante compacta — tablas con muchas filas donde se prioriza ver más
+   registros por pantalla sobre el espaciado (ej. Contabilidad › Facturas). */
+.tbl-dense th { padding: 6px 12px; }
+.tbl-dense td { padding: 5px 12px; white-space: nowrap; }
+/* Unica columna con texto que puede ser largo (razon social) — las demas nunca
+   deben envolver, o su contenido corto se parte a la mitad cuando esta columna
+   sí crece a 2 lineas y el renglón se hace mas alto. */
+.tbl-dense td.wrap { white-space: normal; }
 @media (hover: hover) and (pointer: fine) {
   .tbl tr:hover td { background: var(--blue-50); }
 }

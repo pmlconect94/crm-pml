@@ -38,3 +38,6 @@ uploads/
 # Claude Code session-local artifacts (no son del proyecto)
 .claude/.credentials.json
 .claude/settings.local.json
+
+.vercel
+.env*

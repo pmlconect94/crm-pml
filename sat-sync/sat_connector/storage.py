@@ -5,7 +5,7 @@ from pathlib import Path
 
 from satcfdi.cfdi import CFDI
 
-from .cfdi_extract import extract_conceptos, extract_factura
+from .cfdi_extract import extract_conceptos, extract_factura, extract_pagos, extract_relaciones
 from .config import Config
 from .supabase_sink import SupabaseSink
 
@@ -55,6 +55,12 @@ def import_zip(sink: SupabaseSink, config: Config, zip_path: Path, tipo: str, id
 
             conceptos = extract_conceptos(invoice)
             sink.replace_conceptos(uuid, conceptos)
+
+            relaciones = extract_relaciones(invoice)
+            sink.replace_relaciones(uuid, relaciones)
+
+            pagos = extract_pagos(invoice)
+            sink.replace_pagos(uuid, pagos)
 
             imported += 1
 

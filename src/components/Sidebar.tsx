@@ -150,13 +150,20 @@ export function Sidebar({ open = false }: { open?: boolean }) {
         </>
       )}
 
-      {DEPTS.map((d) => (
-        <button key={d.id} className="nav-item disabled" disabled title="Próximamente">
-          <Icon name={d.icon} size={15} />
-          <span>{d.label}</span>
-          <span className="nav-prox">PRÓX</span>
-        </button>
-      ))}
+      {DEPTS.map((d) =>
+        d.id === 'contabilidad' && hasDept('contabilidad') ? (
+          <NavLink key={d.id} to={d.href} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <Icon name={d.icon} size={15} />
+            <span>{d.label}</span>
+          </NavLink>
+        ) : (
+          <button key={d.id} className="nav-item disabled" disabled title="Próximamente">
+            <Icon name={d.icon} size={15} />
+            <span>{d.label}</span>
+            <span className="nav-prox">PRÓX</span>
+          </button>
+        ),
+      )}
 
       <div className="spacer" />
 

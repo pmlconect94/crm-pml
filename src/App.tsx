@@ -46,6 +46,8 @@ import { NeptunoNotasCreditoPage } from '@/pages/neptuno/NeptunoNotasCreditoPage
 import { NeptunoCostosPage } from '@/pages/neptuno/NeptunoCostosPage';
 import { NeptunoCalendarioPage } from '@/pages/neptuno/NeptunoCalendarioPage';
 import { NeptunoProductosPage } from '@/pages/neptuno/NeptunoProductosPage';
+// Contabilidad
+import { ContabilidadFacturasPage } from '@/pages/contabilidad/ContabilidadFacturasPage';
 
 export default function App() {
   return (
@@ -126,7 +128,7 @@ export default function App() {
         <Route path="administracion" element={<PlaceholderPage title="Administración" subtitle="Próximamente" />} />
         <Route path="ventas" element={<PlaceholderPage title="Ventas" subtitle="Próximamente" />} />
         <Route path="cobranza" element={<PlaceholderPage title="Cobranza" subtitle="Próximamente" />} />
-        <Route path="contabilidad" element={<PlaceholderPage title="Contabilidad" subtitle="Próximamente" />} />
+        <Route path="contabilidad" element={<ContabilidadFacturasPage />} />
         <Route path="rh" element={<PlaceholderPage title="Recursos Humanos" subtitle="Próximamente" />} />
       </Route>
 

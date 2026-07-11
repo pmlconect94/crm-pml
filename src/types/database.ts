@@ -770,6 +770,251 @@ export type Database = {
         Update: { monto_usd?: number; motivo?: string; fecha?: string; status?: string | null };
         Relationships: Empty;
       };
+      // ─── Contabilidad (facturas recibidas, sincronizadas del SAT) ───────────
+      cont_facturas: {
+        Row: {
+          uuid: string;
+          empresa_id: string | null;
+          tipo: string; // 'recibida' | 'emitida' (hoy solo 'recibida' tiene datos)
+          version: string | null;
+          serie: string | null;
+          folio: string | null;
+          fecha_emision: string;
+          fecha_timbrado: string | null;
+          lugar_expedicion: string | null;
+          no_certificado: string | null;
+          no_certificado_sat: string | null;
+          subtotal: number | null;
+          descuento: number | null;
+          total: number;
+          moneda: string | null; // 'MXN' | 'USD' | 'EUR' | 'XXX' (sin efecto monetario — comprobantes P/T)
+          tipo_cambio: number | null;
+          tipo_comprobante: string | null; // I/E/T/N/P (catálogo SAT c_TipoDeComprobante)
+          metodo_pago: string | null; // 'PUE' | 'PPD'
+          forma_pago: string | null; // clave SAT, ej. '99','03'
+          condiciones_de_pago: string | null;
+          confirmacion: string | null;
+          total_impuestos_trasladados: number | null;
+          total_impuestos_retenidos: number | null;
+          emisor_rfc: string;
+          emisor_nombre: string | null;
+          emisor_regimen_fiscal: string | null;
+          receptor_rfc: string;
+          receptor_nombre: string | null;
+          receptor_domicilio_fiscal: string | null;
+          receptor_regimen_fiscal: string | null;
+          receptor_uso_cfdi: string | null;
+          sello_cfdi: string | null;
+          sello_sat: string | null;
+          rfc_prov_certif: string | null;
+          estatus_sat: string; // 'vigente' | 'cancelado'
+          xml_storage_path: string; // path en el bucket privado 'cont-facturas'
+          id_solicitud: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          uuid: string;
+          empresa_id?: string | null;
+          tipo?: string;
+          version?: string | null;
+          serie?: string | null;
+          folio?: string | null;
+          fecha_emision: string;
+          fecha_timbrado?: string | null;
+          lugar_expedicion?: string | null;
+          no_certificado?: string | null;
+          no_certificado_sat?: string | null;
+          subtotal?: number | null;
+          descuento?: number | null;
+          total: number;
+          moneda?: string | null;
+          tipo_cambio?: number | null;
+          tipo_comprobante?: string | null;
+          metodo_pago?: string | null;
+          forma_pago?: string | null;
+          condiciones_de_pago?: string | null;
+          confirmacion?: string | null;
+          total_impuestos_trasladados?: number | null;
+          total_impuestos_retenidos?: number | null;
+          emisor_rfc: string;
+          emisor_nombre?: string | null;
+          emisor_regimen_fiscal?: string | null;
+          receptor_rfc: string;
+          receptor_nombre?: string | null;
+          receptor_domicilio_fiscal?: string | null;
+          receptor_regimen_fiscal?: string | null;
+          receptor_uso_cfdi?: string | null;
+          sello_cfdi?: string | null;
+          sello_sat?: string | null;
+          rfc_prov_certif?: string | null;
+          estatus_sat?: string;
+          xml_storage_path: string;
+          id_solicitud?: string | null;
+        };
+        Update: {
+          empresa_id?: string | null;
+          tipo?: string;
+          version?: string | null;
+          serie?: string | null;
+          folio?: string | null;
+          fecha_emision?: string;
+          fecha_timbrado?: string | null;
+          lugar_expedicion?: string | null;
+          no_certificado?: string | null;
+          no_certificado_sat?: string | null;
+          subtotal?: number | null;
+          descuento?: number | null;
+          total?: number;
+          moneda?: string | null;
+          tipo_cambio?: number | null;
+          tipo_comprobante?: string | null;
+          metodo_pago?: string | null;
+          forma_pago?: string | null;
+          condiciones_de_pago?: string | null;
+          confirmacion?: string | null;
+          total_impuestos_trasladados?: number | null;
+          total_impuestos_retenidos?: number | null;
+          emisor_rfc?: string;
+          emisor_nombre?: string | null;
+          emisor_regimen_fiscal?: string | null;
+          receptor_rfc?: string;
+          receptor_nombre?: string | null;
+          receptor_domicilio_fiscal?: string | null;
+          receptor_regimen_fiscal?: string | null;
+          receptor_uso_cfdi?: string | null;
+          sello_cfdi?: string | null;
+          sello_sat?: string | null;
+          rfc_prov_certif?: string | null;
+          estatus_sat?: string;
+          xml_storage_path?: string;
+          id_solicitud?: string | null;
+        };
+        Relationships: Empty;
+      };
+      cont_conceptos: {
+        Row: {
+          id: string;
+          factura_uuid: string;
+          num_linea: number;
+          clave_prod_serv: string | null;
+          clave_prod_serv_desc: string | null;
+          no_identificacion: string | null;
+          cantidad: number | null;
+          clave_unidad: string | null;
+          clave_unidad_desc: string | null;
+          unidad: string | null;
+          descripcion: string | null;
+          valor_unitario: number | null;
+          importe: number | null;
+          descuento: number | null;
+          objeto_imp: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          factura_uuid: string;
+          num_linea?: number;
+          clave_prod_serv?: string | null;
+          clave_prod_serv_desc?: string | null;
+          no_identificacion?: string | null;
+          cantidad?: number | null;
+          clave_unidad?: string | null;
+          clave_unidad_desc?: string | null;
+          unidad?: string | null;
+          descripcion?: string | null;
+          valor_unitario?: number | null;
+          importe?: number | null;
+          descuento?: number | null;
+          objeto_imp?: string | null;
+        };
+        Update: {
+          factura_uuid?: string;
+          num_linea?: number;
+          clave_prod_serv?: string | null;
+          clave_prod_serv_desc?: string | null;
+          no_identificacion?: string | null;
+          cantidad?: number | null;
+          clave_unidad?: string | null;
+          clave_unidad_desc?: string | null;
+          unidad?: string | null;
+          descripcion?: string | null;
+          valor_unitario?: number | null;
+          importe?: number | null;
+          descuento?: number | null;
+          objeto_imp?: string | null;
+        };
+        Relationships: Empty;
+      };
+      cont_concepto_impuestos: {
+        Row: {
+          id: string;
+          concepto_id: string;
+          tipo: string; // 'traslado' | 'retencion'
+          impuesto: string; // '001' ISR | '002' IVA | '003' IEPS
+          tipo_factor: string | null;
+          tasa_o_cuota: number | null;
+          base: number | null;
+          importe: number | null;
+        };
+        Insert: {
+          id?: string;
+          concepto_id: string;
+          tipo: string;
+          impuesto: string;
+          tipo_factor?: string | null;
+          tasa_o_cuota?: number | null;
+          base?: number | null;
+          importe?: number | null;
+        };
+        Update: {
+          concepto_id?: string;
+          tipo?: string;
+          impuesto?: string;
+          tipo_factor?: string | null;
+          tasa_o_cuota?: number | null;
+          base?: number | null;
+          importe?: number | null;
+        };
+        Relationships: Empty;
+      };
+      cont_solicitudes: {
+        Row: {
+          id_solicitud: string;
+          empresa_id: string | null;
+          tipo: string;
+          fecha_inicial: string;
+          fecha_final: string;
+          estado: string;
+          procesada: boolean;
+          facturas_importadas: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id_solicitud: string;
+          empresa_id?: string | null;
+          tipo: string;
+          fecha_inicial: string;
+          fecha_final: string;
+          estado?: string;
+          procesada?: boolean;
+          facturas_importadas?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          empresa_id?: string | null;
+          tipo?: string;
+          fecha_inicial?: string;
+          fecha_final?: string;
+          estado?: string;
+          procesada?: boolean;
+          facturas_importadas?: number;
+          updated_at?: string;
+        };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -904,3 +1149,14 @@ export type NepPagoInsert = Database['crm']['Tables']['nep_pagos']['Insert'];
 export type NepNotaCredito = Database['crm']['Tables']['nep_notas_credito']['Row'];
 export type NepNotaCreditoInsert = Database['crm']['Tables']['nep_notas_credito']['Insert'];
 export type NepFacturaConProductos = NepFactura & { productos?: NepFacturaProducto[] };
+
+// ─── Contabilidad (facturas recibidas, sincronizadas del SAT) ─────────────
+export type ContFactura = Database['crm']['Tables']['cont_facturas']['Row'];
+export type ContConcepto = Database['crm']['Tables']['cont_conceptos']['Row'];
+export type ContConceptoImpuesto = Database['crm']['Tables']['cont_concepto_impuestos']['Row'];
+
+// Concepto + sus impuestos anidados (traslados/retenciones), tal como los devuelve
+// el select embebido `cont_conceptos(*, cont_concepto_impuestos(*))` — para el detalle.
+export type ContConceptoConImpuestos = ContConcepto & {
+  cont_concepto_impuestos?: ContConceptoImpuesto[];
+};
