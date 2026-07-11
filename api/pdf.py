@@ -11,11 +11,13 @@ restringir a usuarios con sesion de CRM PML, aqui es donde se agregaria la
 verificacion del JWT de Supabase Auth.
 """
 import os
+import sys
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
 import requests
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pdf_generator import generar_pdf_desde_xml
 
 BUCKET = "cont-facturas"
