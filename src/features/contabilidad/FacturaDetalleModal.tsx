@@ -11,7 +11,7 @@ import { SPRING } from '@/components/motion';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import { fmtPorMoneda, fmtFechaHoraTS } from '@/lib/format';
 import { fetchFacturaDetalle, getFacturaXmlUrl } from '@/features/contabilidad/facturas-queries';
-import { formaPagoLabel } from '@/features/contabilidad/catalogos-sat';
+import { formaPagoLabel, formaPagoCorto, tipoComprobanteLabel } from '@/features/contabilidad/catalogos-sat';
 
 // Función serverless de Vercel (api/pdf.py) — genera el PDF al vuelo, no hay
 // nada guardado en Storage. Ruta relativa: funciona en cualquier deploy sin
@@ -44,6 +44,10 @@ export function FacturaDetalleModal({ uuid, onClose }: { uuid: string | null; on
 
   const f = data?.factura;
   const conceptos = data?.conceptos ?? [];
+  const relaciones = data?.relaciones ?? [];
+  const pagos = data?.pagos ?? [];
+  const pagosRecibidos = data?.pagosRecibidos ?? [];
+  const esComprobantePago = f?.tipo_comprobante === 'P';
 
   // Suma de impuestos (traslados/retenciones) de todos los conceptos, agrupada por
   // tipo+clave — de aquí sale el desglose IVA/IEPS/ISR (los dos totales agregados que
@@ -279,6 +283,101 @@ export function FacturaDetalleModal({ uuid, onClose }: { uuid: string | null; on
                     </div>
                   ))}
                 </div>
+
+                {/* Comprobantes relacionados (CfdiRelacionados) — ej. de qué factura viene una NC */}
+                {relaciones.length > 0 && (
+                  <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--ink-100)' }}>
+                    <div className="text-xs fw-700" style={sectionLabel}>
+                      Comprobantes relacionados
+                    </div>
+                    <div className="vstack">
+                      {relaciones.map((r) => (
+                        <div
+                          key={r.id}
+                          className="hstack"
+                          style={{ gap: 10, padding: '8px 12px', background: 'var(--ink-50)', borderRadius: 'var(--r-sm)' }}
+                        >
+                          <span className="badge badge-blue" style={{ flexShrink: 0 }}>
+                            {r.tipo_relacion_desc ?? (r.tipo_relacion ? `Clave ${r.tipo_relacion}` : 'Relación')}
+                          </span>
+                          {r.relacionada ? (
+                            <span className="text-sm">
+                              {tipoComprobanteLabel(r.relacionada.tipo_comprobante)}
+                              {r.relacionada.folio ? ` ${r.relacionada.serie ? r.relacionada.serie + '-' : ''}${r.relacionada.folio}` : ''}
+                              {' · '}
+                              {fmtPorMoneda(r.relacionada.total, r.relacionada.moneda)}
+                              {' · '}
+                              {fmtFechaHoraTS(r.relacionada.fecha_emision)}
+                            </span>
+                          ) : (
+                            <span className="mono text-xs muted">{r.uuid_relacionado}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pagos: si ESTE comprobante es un Pago (P), qué facturas liquida; si es
+                    una factura normal, qué pagos (de otros comprobantes P) la liquidaron. */}
+                {(esComprobantePago ? pagos.length > 0 : pagosRecibidos.length > 0) && (
+                  <div style={{ padding: '14px 22px', borderBottom: '1px solid var(--ink-100)' }}>
+                    <div className="text-xs fw-700" style={sectionLabel}>
+                      {esComprobantePago ? 'Este comprobante liquida' : 'Pagos aplicados'}
+                    </div>
+                    {esComprobantePago ? (
+                      <div className="vstack">
+                        {pagos.map((p) => (
+                          <div key={p.id} style={{ padding: '8px 12px', background: 'var(--ink-50)', borderRadius: 'var(--r-sm)' }}>
+                            <div className="hstack" style={{ justifyContent: 'space-between' }}>
+                              <span className="text-sm fw-600">
+                                {fmtFechaHoraTS(p.fecha_pago)} · {formaPagoCorto(p.forma_pago)}
+                              </span>
+                              <span className="mono fw-700 text-sm">{fmtPorMoneda(p.monto, p.moneda)}</span>
+                            </div>
+                            {(p.cont_pagos_documentos ?? []).map((d) => (
+                              <div key={d.id} className="text-xs muted" style={{ marginTop: 4 }}>
+                                Doc. {d.serie ? `${d.serie}-` : ''}
+                                {d.folio ?? d.id_documento} · pagado {fmtPorMoneda(d.imp_pagado, d.moneda_dr)} · saldo{' '}
+                                {fmtPorMoneda(d.imp_saldo_insoluto, d.moneda_dr)}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="vstack">
+                        {pagosRecibidos.map((p) => (
+                          <div
+                            key={p.id}
+                            className="hstack"
+                            style={{ justifyContent: 'space-between', padding: '8px 12px', background: 'var(--ink-50)', borderRadius: 'var(--r-sm)' }}
+                          >
+                            <span className="text-sm">
+                              {fmtFechaHoraTS(p.pago.fecha_pago)} · {formaPagoCorto(p.pago.forma_pago)}
+                              {p.comprobante?.folio && (
+                                <span className="mono text-xs muted">
+                                  {' '}
+                                  · comprobante {p.comprobante.serie ? `${p.comprobante.serie}-` : ''}
+                                  {p.comprobante.folio}
+                                </span>
+                              )}
+                            </span>
+                            <span className="mono fw-700 text-sm">{fmtPorMoneda(p.imp_pagado, p.moneda_dr)}</span>
+                          </div>
+                        ))}
+                        {(() => {
+                          const ultimo = pagosRecibidos[pagosRecibidos.length - 1];
+                          return ultimo?.imp_saldo_insoluto != null && Number(ultimo.imp_saldo_insoluto) > 0 ? (
+                            <div className="text-xs fw-600" style={{ color: 'var(--amber-500)' }}>
+                              Saldo pendiente: {fmtPorMoneda(ultimo.imp_saldo_insoluto, ultimo.moneda_dr)}
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Conceptos */}
                 <div style={{ padding: '14px 22px 8px', overflowX: 'auto' }}>

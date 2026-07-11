@@ -1015,6 +1015,110 @@ export type Database = {
         };
         Relationships: Empty;
       };
+      cont_relaciones: {
+        Row: {
+          id: string;
+          factura_uuid: string;
+          uuid_relacionado: string;
+          tipo_relacion: string | null; // clave SAT c_TipoRelacion, ej. '01' nota de crédito
+          tipo_relacion_desc: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          factura_uuid: string;
+          uuid_relacionado: string;
+          tipo_relacion?: string | null;
+          tipo_relacion_desc?: string | null;
+        };
+        Update: {
+          factura_uuid?: string;
+          uuid_relacionado?: string;
+          tipo_relacion?: string | null;
+          tipo_relacion_desc?: string | null;
+        };
+        Relationships: Empty;
+      };
+      cont_pagos: {
+        Row: {
+          id: string;
+          factura_uuid: string; // factura del Complemento de Pago (REP)
+          fecha_pago: string | null;
+          forma_pago: string | null; // clave SAT
+          moneda: string | null;
+          tipo_cambio: number | null;
+          monto: number | null;
+          num_operacion: string | null;
+          rfc_emisor_cta_ord: string | null;
+          rfc_emisor_cta_ben: string | null;
+          cta_beneficiario: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          factura_uuid: string;
+          fecha_pago?: string | null;
+          forma_pago?: string | null;
+          moneda?: string | null;
+          tipo_cambio?: number | null;
+          monto?: number | null;
+          num_operacion?: string | null;
+          rfc_emisor_cta_ord?: string | null;
+          rfc_emisor_cta_ben?: string | null;
+          cta_beneficiario?: string | null;
+        };
+        Update: {
+          fecha_pago?: string | null;
+          forma_pago?: string | null;
+          moneda?: string | null;
+          tipo_cambio?: number | null;
+          monto?: number | null;
+          num_operacion?: string | null;
+          rfc_emisor_cta_ord?: string | null;
+          rfc_emisor_cta_ben?: string | null;
+          cta_beneficiario?: string | null;
+        };
+        Relationships: Empty;
+      };
+      cont_pagos_documentos: {
+        Row: {
+          id: string;
+          pago_id: string;
+          id_documento: string; // UUID de la factura que se esta pagando (DoctoRelacionado)
+          serie: string | null;
+          folio: string | null;
+          moneda_dr: string | null;
+          num_parcialidad: number | null;
+          imp_saldo_ant: number | null;
+          imp_pagado: number | null;
+          imp_saldo_insoluto: number | null;
+          objeto_imp_dr: string | null;
+        };
+        Insert: {
+          id?: string;
+          pago_id: string;
+          id_documento: string;
+          serie?: string | null;
+          folio?: string | null;
+          moneda_dr?: string | null;
+          num_parcialidad?: number | null;
+          imp_saldo_ant?: number | null;
+          imp_pagado?: number | null;
+          imp_saldo_insoluto?: number | null;
+          objeto_imp_dr?: string | null;
+        };
+        Update: {
+          serie?: string | null;
+          folio?: string | null;
+          moneda_dr?: string | null;
+          num_parcialidad?: number | null;
+          imp_saldo_ant?: number | null;
+          imp_pagado?: number | null;
+          imp_saldo_insoluto?: number | null;
+          objeto_imp_dr?: string | null;
+        };
+        Relationships: Empty;
+      };
     };
     Views: { [_ in never]: never };
     Functions: { [_ in never]: never };
@@ -1159,4 +1263,14 @@ export type ContConceptoImpuesto = Database['crm']['Tables']['cont_concepto_impu
 // el select embebido `cont_conceptos(*, cont_concepto_impuestos(*))` — para el detalle.
 export type ContConceptoConImpuestos = ContConcepto & {
   cont_concepto_impuestos?: ContConceptoImpuesto[];
+};
+
+export type ContRelacion = Database['crm']['Tables']['cont_relaciones']['Row'];
+export type ContPago = Database['crm']['Tables']['cont_pagos']['Row'];
+export type ContPagoDocumento = Database['crm']['Tables']['cont_pagos_documentos']['Row'];
+
+// Pago (Complemento de Pago) + los documentos que liquida, tal como lo devuelve
+// el select embebido `cont_pagos(*, cont_pagos_documentos(*))` — para el detalle.
+export type ContPagoConDocumentos = ContPago & {
+  cont_pagos_documentos?: ContPagoDocumento[];
 };
