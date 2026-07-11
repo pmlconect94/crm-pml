@@ -4,10 +4,12 @@
  */
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { FacturaDetalleModal } from '@/features/contabilidad/FacturaDetalleModal';
 import { fetchFacturas, fetchUltimaSincronizacion, FACTURAS_PAGE_SIZE, type FacturasFiltros } from '@/features/contabilidad/facturas-queries';
+import { exportFacturasDetallado } from '@/features/contabilidad/facturas-export';
 import { TIPO_COMPROBANTE_FILTROS, METODO_PAGO_FILTROS, formaPagoCorto } from '@/features/contabilidad/catalogos-sat';
 import { useAuth } from '@/lib/auth';
 import { fmtPorMoneda, fmtFechaTS, fmtFechaHoraTS } from '@/lib/format';
@@ -47,6 +49,7 @@ export function ContabilidadFacturasPage() {
   const [metodoPago, setMetodoPago] = useState<string | undefined>(undefined);
   const [page, setPage] = useState(0);
   const [detalleUuid, setDetalleUuid] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
 
   const filtros: FacturasFiltros = useMemo(
     () => ({ q: q.trim() || undefined, desde: desde || undefined, hasta: hasta || undefined, tipoComprobante, metodoPago }),
@@ -77,6 +80,18 @@ export function ContabilidadFacturasPage() {
 
   const irPagina = (p: number) => setPage(Math.max(0, Math.min(totalPaginas - 1, p)));
 
+  const descargarExcel = async () => {
+    setExportando(true);
+    try {
+      const n = await exportFacturasDetallado(empresaId, filtros);
+      toast.success(`Excel generado: ${n} factura${n === 1 ? '' : 's'}${hayFiltros ? ' (según filtros activos)' : ''}.`);
+    } catch (e) {
+      toast.error('No se pudo generar el Excel: ' + (e as Error).message);
+    } finally {
+      setExportando(false);
+    }
+  };
+
   return (
     <>
       <PageEnter className="page-header" style={{ marginBottom: 8 }}>
@@ -84,8 +99,19 @@ export function ContabilidadFacturasPage() {
           <h1 className="page-title">Facturas recibidas</h1>
           <p className="page-subtitle">CFDIs sincronizados automáticamente del SAT — proveedores y gastos de PML</p>
         </div>
-        <div className="text-xs muted" style={{ flexShrink: 0 }} title="El sincronizador corre 3 veces al día (7:30, 11:00 y 13:00)">
-          Última actualización: {ultimaSync ? <span className="fw-600">{fmtFechaHoraTS(ultimaSync)}</span> : '—'}
+        <div className="hstack" style={{ gap: 14, flexShrink: 0 }}>
+          <div className="text-xs muted" title="El sincronizador corre 3 veces al día (7:30, 11:00 y 13:00)">
+            Última actualización: {ultimaSync ? <span className="fw-600">{fmtFechaHoraTS(ultimaSync)}</span> : '—'}
+          </div>
+          <button
+            className="btn btn-outline btn-sm"
+            onClick={descargarExcel}
+            disabled={exportando}
+            title="Descarga en Excel todas las facturas que matchean los filtros activos, línea por concepto, con IVA/IEPS/retenciones desglosados"
+          >
+            {exportando ? <div className="spinner" style={{ width: 12, height: 12 }} /> : <Icon name="download" size={13} />}
+            Descargar Excel
+          </button>
         </div>
       </PageEnter>
 
