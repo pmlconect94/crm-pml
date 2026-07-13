@@ -77,7 +77,24 @@ def revisar_pendientes(config: Config) -> list[dict]:
         tipo = solicitud["tipo"]
 
         estado_resp = consultar_estado(sat_service, id_solicitud)
-        estado = EstadoSolicitud(estado_resp["EstadoSolicitud"])
+        try:
+            estado = EstadoSolicitud(estado_resp["EstadoSolicitud"])
+        except ValueError:
+            # El SAT a veces "pierde" una solicitud (ej. CodEstatus 5004 "No se
+            # encontro la informacion") y regresa un EstadoSolicitud fuera del
+            # catalogo (0) en vez de un estado valido (1-6). No hay nada que
+            # reintentar sobre esa solicitud puntual: se marca como fallida para
+            # dejar de revisarla en cada corrida (el siguiente sync incremental,
+            # dias_atras=5 por default, vuelve a cubrir ese rango de fechas con
+            # una solicitud nueva). Sin este manejo, una sola solicitud "perdida"
+            # tumba el resto de la sincronizacion en cada corrida.
+            sink.update_solicitud(id_solicitud, estado="ERROR", procesada=True)
+            resultados.append({
+                "id_solicitud": id_solicitud, "tipo": tipo, "estado": "ERROR",
+                "mensaje": estado_resp.get("Mensaje") or f"EstadoSolicitud invalido: {estado_resp.get('EstadoSolicitud')!r}",
+                "codigo": estado_resp.get("CodEstatus") or estado_resp.get("CodigoEstadoSolicitud"),
+            })
+            continue
 
         if estado == EstadoSolicitud.TERMINADA:
             total_importadas = 0
