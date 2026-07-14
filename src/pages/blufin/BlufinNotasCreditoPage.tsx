@@ -131,7 +131,7 @@ export function BlufinNotasCreditoPage() {
             Por presentación, descuento o faltante — se aplican a contratos y consumen saldo
           </p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setNuevaOpen(true)}>
+        <button className="btn btn-primary btn-sm hide-on-mobile" onClick={() => setNuevaOpen(true)}>
           <Icon name="plus" size={13} /> Nueva NC
         </button>
       </PageEnter>

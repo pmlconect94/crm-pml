@@ -83,7 +83,7 @@ export function BlufinProductosPage() {
             Master de SKUs Blufin — se referencia en contratos, recepciones y costos
           </p>
         </div>
-        <div className="hstack" style={{ gap: 8 }}>
+        <div className="hstack hide-on-mobile" style={{ gap: 8 }}>
           <button
             className="btn btn-outline btn-sm"
             onClick={() => exportProductos(skus)}

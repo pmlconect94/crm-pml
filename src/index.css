@@ -575,10 +575,17 @@ textarea.field-input { resize: vertical; min-height: 80px; }
      renglones y comen mucho espacio; el tab activo ya dice en qué pantalla
      estás. :has() lo soporta iOS Safari 15.4+. Solo oculta el título que va
      ACOMPAÑADO de subtítulo — así el header "Blufin Seafood" (sin subtítulo) se
-     conserva, y los botones de acción del header no se tocan. */
+     conserva. */
   .content .page-subtitle { display: none; }
   .content h2:has(+ .page-subtitle),
   .content .page-title:has(+ .page-subtitle) { display: none; }
+
+  /* Botones de acción de página (Exportar Excel, Carga masiva, Nuevo contrato,
+     Nueva NC, Registrar pago, etc.): fuera en móvil — el teléfono se usa para
+     consultar; la captura y las exportaciones se hacen en computadora. Se marcan
+     explícitamente con .hide-on-mobile para no tocar los botones de operación
+     por fila (Pagar, Registrar recepción, filtros…). */
+  .hide-on-mobile { display: none !important; }
 
   /* Que el contenido ancho (tablas densas) haga scroll dentro de su tarjeta
      en vez de desbordar horizontalmente toda la pantalla. */

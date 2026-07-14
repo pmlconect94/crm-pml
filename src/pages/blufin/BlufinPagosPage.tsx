@@ -194,7 +194,7 @@ export function BlufinPagosPage() {
           </h2>
           <p className="page-subtitle">Anticipos, saldos, abonos y forwards cambiarios</p>
         </div>
-        <div className="hstack" style={{ gap: 8 }}>
+        <div className="hstack hide-on-mobile" style={{ gap: 8 }}>
           <a
             href="/app/importaciones/blufin/pagos/multiple"
             className="btn btn-outline btn-sm"

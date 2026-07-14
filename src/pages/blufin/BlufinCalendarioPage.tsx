@@ -327,7 +327,7 @@ function PorProductoView({
         )}
       </div>
         <button
-          className="btn btn-outline btn-sm"
+          className="btn btn-outline btn-sm hide-on-mobile"
           onClick={() => exportLlegadasPorSku(porLlegar, codeDeSku)}
           disabled={porLlegar.length === 0}
           title="Descargar Excel: una fila por SKU de la mercancía por llegar"

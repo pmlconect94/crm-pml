@@ -72,7 +72,7 @@ export function BlufinFacturasPage() {
           <p className="page-subtitle">Revisa la factura de Blufin contra el contrato, línea por línea</p>
         </div>
         <button
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm hide-on-mobile"
           onClick={() => navigate('/app/importaciones/blufin/facturas/revisar')}
         >
           <Icon name="plus" size={13} /> Revisar factura

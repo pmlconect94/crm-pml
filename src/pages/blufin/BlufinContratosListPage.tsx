@@ -163,7 +163,7 @@ export function BlufinContratosListPage() {
             Órdenes de compra individuales (folio MCO-CV-XXXXXX)
           </p>
         </div>
-        <div className="hstack" style={{ gap: 8 }}>
+        <div className="hstack hide-on-mobile" style={{ gap: 8 }}>
           {contratos.length > 0 && (
             <ExportMenu
               items={[
