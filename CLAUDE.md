@@ -1239,7 +1239,7 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 | Administración | 🔜 Dashboard básico | Diseñar en prototipo primero |
 | Ventas | 🔜 Placeholder | Diseñar en prototipo primero |
 | Cobranza | 🔜 Placeholder | Diseñar en prototipo primero |
-| Contabilidad | 🔜 Placeholder | Diseñar en prototipo primero |
+| **Contabilidad** | Sin prototipo HTML | **✅ Construido directo en producción** (2026-07-09/13, saltó el flujo de prototipo — pedido explícito del usuario). Ver §16 |
 | Recursos Humanos | 🔜 Dashboard básico | Diseñar en prototipo primero |
 | Marlin Lizárraga | 🔜 Deshabilitado | Habilitar cuando esté listo |
 
@@ -1247,7 +1247,7 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 
 ## 16. Estado de construcción real (lo que está live en producción)
 
-**EN PRODUCCIÓN ✅ (2026-06-23):** desplegado en Vercel → **https://pml-connect.vercel.app** (auto-deploy en cada push a `main`). Backend Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east-1), **schema namespace `crm`**. ⚠️ La base de Supabase es **COMPARTIDA** con otros sistemas del usuario (RH/Logística/WMS) — **NO borrar nada que no sea del CRM**, limitar cambios al schema `crm` (ver [[project-supabase-db-compartida]]). Ya con **Supabase Auth real** (correo+contraseña), **RLS endurecida** (`auth_all`, solo `authenticated`; la anon key sola ya no accede) y **bitácora de auditoría** (`crm.audit_log`, quién hizo cada movimiento).
+**EN PRODUCCIÓN ✅ (2026-06-23):** desplegado en Vercel → **https://pml-connect.vercel.app** (auto-deploy en cada push a `main`). Backend Supabase project `crm-pml` (`xjbhfeqcjjqyjkvdbyxy`, us-east-1), **schema namespace `crm`**. ⚠️ La base de Supabase es **COMPARTIDA** con otros sistemas del usuario (RH/Logística/WMS) — **NO borrar nada que no sea del CRM**, limitar cambios al schema `crm` (ver [[project-supabase-db-compartida]]). Ya con **Supabase Auth real** (correo+contraseña), **RLS endurecida** (`auth_all`, solo `authenticated`; la anon key sola ya no accede) y **bitácora de auditoría** (`crm.audit_log`, quién hizo cada movimiento). **Desde 2026-07-13 también corre infraestructura fuera de Vercel/Supabase:** GitHub Actions (`.github/workflows/sat-sync.yml`) sincroniza facturas del SAT 3x/día (repo `pmlconect94/crm-pml`), y una función Python serverless de Vercel (`api/pdf.py`) genera PDFs de factura on-demand — ver la subsección `### Contabilidad` más abajo.
 
 ### Infraestructura del proyecto
 
@@ -1292,9 +1292,12 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 
 **Versión celular — fundación ✅ (2026-07-06):** shell responsivo — en pantallas `<= 768px` el sidebar pasa a **drawer** (cajón deslizante) con botón **hamburguesa** en el topbar + backdrop (estado `menuOpen` lifteado en `AppLayout`, se cierra al navegar por `useEffect` sobre `location.pathname`); contenido a todo el ancho con padding reducido; `.card { overflow-x:auto }` + `.tabs` con scroll para que las tablas densas no desborden la pantalla. Cambios: `AppLayout`/`Sidebar` (prop `open`)/`Topbar` (prop `onToggleMenu` + botón `.topbar-menu-btn`) + media query `@media (max-width:768px)` en `index.css` + icono `menu`. **Pase global de responsive ✅ (2026-07-06):** en `@media (max-width:768px)` — `.grid-2/3/4` → 1 columna, `.page-header`/`.card-header` apilan, `.tbl`/`.card-body` más compactos, y **`input,select,textarea,.field-input { font-size:16px !important }`** para evitar el **auto-zoom de iOS Safari** al enfocar inputs (causa típica del "mal escalado" en iPhone; el `!important` vence al font-size inline). Verificado en el login a 375px (inputs=16px, sin overflow horizontal). **Falta:** las **filas de datos armadas con `display:grid` inline** (Pagos→Pendientes, Recepción→Por recibir, y varias listas) NO reflowean por CSS (los estilos inline no se pueden sobrescribir con media query) — hacen scroll horizontal dentro de su tarjeta; **refactor por pantalla pendiente** (idealmente con screenshot del usuario para targetear). App usada mayormente en **iPhone**.
 
+**Contabilidad — módulo completo (2026-07-09 → 07-13):** construido de cero (saltó el flujo de prototipo, pedido directo del usuario) — sync SAT→Supabase corriendo en GitHub Actions 3x/día, visor de facturas con filtros, PDF on-demand vía función de Vercel, relaciones (NC↔factura) y pagos/saldo pendiente en el detalle, export a Excel línea-por-concepto con desglose de impuestos, y un fix de robustez en el sync (el SAT a veces "pierde" una solicitud y sin manejarlo tumbaba TODA la sincronización). **Detalle completo, gotchas y las 9 propuestas de features contables pendientes: ver la subsección `### Contabilidad` arriba (dentro de §16) y la fila de §15.**
+
 **PENDIENTE para otra sesión:**
-1. **Versión celular — pulir pantalla por pantalla** (la fundación/shell ya está — ver nota arriba). Priorizar con el usuario: ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes, Contratos.
-2. Pulir Camanchaca/Neptuno conforme el usuario los pruebe (no verificados interactivamente — se generaron con subagentes).
+1. **Contabilidad**: ver la lista de 9 propuestas en la subsección `### Contabilidad` arriba — las más directas de construir con lo que ya está son **antigüedad de saldos (AP aging)** y la **alerta de PPD sin complemento de pago**.
+2. **Versión celular — pulir pantalla por pantalla** (la fundación/shell ya está — ver nota arriba). Priorizar con el usuario: ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes, Contratos.
+3. Pulir Camanchaca/Neptuno conforme el usuario los pruebe (no verificados interactivamente — se generaron con subagentes).
 
 ---
 
@@ -1353,9 +1356,39 @@ Pendientes que NO bloquean operación (en orden de valor):
 
 ⚠️ **Construidos con 3 subagentes en paralelo calcando Blufin; build (`tsc -b && vite build`) en verde pero NO probados interactivamente** (login) — el usuario itera sobre el live. Catálogos arrancan vacíos (dar de alta SKUs en la pestaña Productos). Sin datos aún.
 
+### Contabilidad ✅ (2026-07-09 → 07-13)
+
+**Qué es:** visor de facturas recibidas (CFDI) de PML, sincronizadas **directo del SAT** (no de Intelisis — decisión explícita del usuario) vía e.firma. Construido saltando el flujo de prototipo HTML habitual (pedido directo del usuario: "métete a ver las facturas... conecta el sistema"). Hermano de este repo: **`Contabilidad PML`** (`C:\Users\ddlpm\Proyectos\GrupoLizarraga\Contabilidad PML`, NO es repo git) — ahí vive el conector Python original (`sat_connector/`) que se **copió trimeado** a `sat-sync/` dentro de este repo para poder correr en GitHub Actions. **Las dos copias de `sat_connector/` se mantienen a mano** — si se toca la lógica de sync/extracción en una, replicar en la otra.
+
+**Infraestructura — nada depende de una computadora prendida:**
+- **Sync**: GitHub Actions (`.github/workflows/sat-sync.yml`), cron 3x/día (7:30/11:00/13:00 hora CDMX = UTC-6 fijo, sin horario de verano). Corre `sat-sync/run_sync.py --dias 5 --tipo recibidas`. Credenciales de e.firma como GitHub Secrets (`SAT_EFIRMA_CERT_B64`/`KEY_B64`/`PASSWORD`, cert/key en base64). El flujo real: pide el rango de los últimos 5 días con timestamp exacto (`solicitar_incremental`) y revisa solicitudes previas pendientes (`revisar_pendientes`) — el SAT tarda de minutos a horas en tener listo el paquete, por eso el margen de 5 días y el revisar-antes-de-pedir.
+- **PDF on-demand**: función serverless de Vercel (`api/pdf.py` + `api/pdf_generator.py`, mismo repo) — genera el PDF al momento desde el XML en Supabase Storage, nada se pre-renderiza ni se guarda. **Gotcha de Vercel Python**: el runtime carga el entrypoint con un loader que NO agrega su propio directorio a `sys.path`, así que un import de un archivo hermano (`from pdf_generator import ...`) truena con `ModuleNotFoundError` en producción aunque funcione en local — se resuelve con `sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))` antes del import. Revisar si se agrega OTRA función Python a `api/` con imports propios.
+- **Supabase**: schema `crm`, tablas `cont_facturas` (header CFDI) / `cont_conceptos` + `cont_concepto_impuestos` (líneas + impuestos) / `cont_relaciones` (CfdiRelacionados — liga NC↔factura original) / `cont_pagos` + `cont_pagos_documentos` (Complemento de Pago — qué se pagó, cuánto, saldo) / `cont_solicitudes` (tracking de las solicitudes al SAT, una fila por request). **Gotcha de PostgREST**: un embed (`select=*,cont_pagos(...)`) anida bajo el **nombre real de la tabla**, no bajo un alias inventado — asumir un campo renombrado ahí (ej. `pago` en vez de `cont_pagos`) da `undefined` en silencio, no un error, y se ve como un loading que nunca termina.
+
+**Frontend** (`src/pages/contabilidad/ContabilidadFacturasPage.tsx` + `src/features/contabilidad/`):
+- Lista con filtros (razón social/RFC del emisor, rango de fechas, chips de tipo de comprobante I/E/T/P, chips PUE/PPD), tabla densa, paginada de 50 en 50, timestamp de "última actualización" (lee `cont_solicitudes`).
+- `FacturaDetalleModal.tsx`: ficha completa (emisor/receptor, metadata fiscal, conceptos con impuestos desglosados, totales) + botón **Generar PDF** (llama `/api/pdf`) + **Descargar XML** (URL firmada del bucket privado `cont-facturas`) + secciones condicionales: **"Comprobantes relacionados"** (si hay CfdiRelacionados) y **"Pagos"** — si la factura ES un comprobante de Pago (tipo P) muestra qué liquida; si es una factura normal PPD muestra los pagos que la liquidaron (dirección inversa vía `cont_pagos_documentos.id_documento`) + **saldo pendiente** real.
+- `facturas-export.ts`: botón "Descargar Excel" — exporta TODO lo que matchea los filtros activos (no solo la página visible, pagina internamente en bloques de 1000), una fila por concepto/línea con IVA/IEPS/ISR/retenciones desglosados + saldo pendiente por factura. Generador de xlsx sin dependencias ya existente (`src/lib/excel.ts`), reusado tal cual.
+- `catalogos-sat.ts`: mapeos de catálogos SAT usados (tipo de comprobante, forma de pago) — no es el catálogo completo del SAT, solo las claves observadas en datos reales.
+
+**Gotcha operativo del SAT (2026-07-13, ver caso real):** el SAT a veces "pierde" una solicitud y responde `CodEstatus 5004 "No se encontró la información"` + `EstadoSolicitud=0` (fuera de su propio catálogo 1-6) al consultar su estado. Como `revisar_pendientes()` corre **antes** de pedir facturas nuevas en cada corrida, si el código no maneja ese caso la sincronización completa se queda muerta (nunca llega a pedir nada nuevo) hasta que alguien lo note manualmente — pasó real: ~24h sin sincronizar nada. Ya está manejado (`sync.py`: si `EstadoSolicitud(...)` truena con `ValueError`, se marca esa solicitud como `ERROR` y se sigue con el resto) — **si la automatización vuelve a fallar, revisar primero `gh run list --repo pmlconect94/crm-pml --workflow sat-sync.yml` y el log del run fallido antes de asumir que es este mismo bug** (podría ser otra causa).
+
+**Pendiente / propuesto para otra sesión** (pedido explícito del usuario: "proponme cosas de contabilidad, como si fueras un contador experimentado"):
+1. **Antigüedad de saldos (AP aging)** — ya existe el saldo pendiente por factura (calculado de `cont_pagos_documentos`); falta el dashboard agrupado por proveedor y rangos (0-30/31-60/61-90/90+ días). Es lo más directo de construir con lo que ya está.
+2. **Alerta de PPD sin complemento de pago** — facturas PPD sin ningún `cont_pagos_documentos` 30+ días después de emitidas arriesgan no ser deducibles ante el SAT por falta de REP. Query directo sobre lo que ya se sincroniza.
+3. **DIOT automática** — ya se tiene RFC/monto/IVA por factura; generar el archivo mensual que hoy se arma a mano.
+4. **Facturas canceladas después de usadas** — `estatus_sat` ya se guarda pero solo se ve al abrir la factura; falta una alerta si una factura vigente pasa a cancelada después de haberse usado/pagado.
+5. **Folios con hueco** — por proveedor, detectar folios faltantes en la secuencia (factura no sincronizada o proveedor que no la mandó).
+6. **Conciliación NC↔factura visible en la lista** (no solo en el detalle) — ya se liga vía `cont_relaciones`, falta mostrar el saldo neto (factura − NC) sin que alguien reste a mano.
+7. **Retenciones acumuladas por proveedor/periodo** — para constancias de retención.
+8. **Gasto por categoría** (agrupado por `clave_prod_serv` del concepto) — cuánto se va en fletes vs. materia prima vs. servicios, sin clasificar nada a mano.
+9. **Facturas emitidas (ventas de PML)** — hoy solo se sincroniza `recibidas`. Emitidas necesitaría o bien Descarga Masiva también (mismo mecanismo, más lento) o un webhook del PAC que PML use para timbrar (más rápido, pero requiere saber cuál PAC usan — no identificado aún).
+
+---
+
 ### Resto de módulos
 
-Logística, Ventas, Cobranza, Administración, Contabilidad, RH, Marlin — sidebar los muestra con badge SOON. Schema sin crear, frontend sin crear.
+Logística, Ventas, Cobranza, Administración, RH, Marlin — sidebar los muestra con badge SOON. Schema sin crear, frontend sin crear. **Contabilidad ya no está en este bucket — ver la subsección `### Contabilidad` arriba y §16.**
 
 ### Pendientes de infraestructura
 
