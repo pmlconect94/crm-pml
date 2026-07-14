@@ -138,12 +138,13 @@ export function BlufinContratosListPage() {
 
   // Encabezado clicable: ordena por su columna; muestra ▲/▼ en la activa y ↕ tenue
   // en las demás para indicar que se puede ordenar.
-  const th = (col: SortCol, label: string, align?: 'right') => {
+  const th = (col: SortCol, label: string, align?: 'right', className?: string) => {
     const active = sort.by === col;
     return (
       <th
         onClick={() => toggleSort(col)}
         title="Ordenar por esta columna"
+        className={className}
         style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', textAlign: align }}
       >
         {label}
@@ -367,7 +368,7 @@ export function BlufinContratosListPage() {
             <thead>
               <tr>
                 {th('folio', 'Contrato')}
-                {th('producto', 'Producto principal')}
+                {th('producto', 'Producto principal', undefined, 'hide-on-mobile')}
                 {th('eta', 'ETA puerto')}
                 {th('status', 'Status')}
                 {th('contenedor', 'Contenedor')}
@@ -410,7 +411,7 @@ export function BlufinContratosListPage() {
                         {fmtFechaCorta(c.fecha)} {c.lote ? `· ${c.lote}` : ''}
                       </div>
                     </td>
-                    <td>
+                    <td className="hide-on-mobile">
                       {principal ? (
                         <>
                           <div className="fw-600" style={{ fontSize: 13 }}>
