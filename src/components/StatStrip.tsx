@@ -19,7 +19,7 @@ export type StatItem = {
 export function StatStrip({ stats, style }: { stats: StatItem[]; style?: CSSProperties }) {
   return (
     <div
-      className="hstack"
+      className="hstack hide-on-mobile"
       style={{
         gap: 14,
         marginBottom: 10,

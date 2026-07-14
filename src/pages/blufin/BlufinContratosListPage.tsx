@@ -138,13 +138,12 @@ export function BlufinContratosListPage() {
 
   // Encabezado clicable: ordena por su columna; muestra ▲/▼ en la activa y ↕ tenue
   // en las demás para indicar que se puede ordenar.
-  const th = (col: SortCol, label: string, align?: 'right', className?: string) => {
+  const th = (col: SortCol, label: string, align?: 'right') => {
     const active = sort.by === col;
     return (
       <th
         onClick={() => toggleSort(col)}
         title="Ordenar por esta columna"
-        className={className}
         style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', textAlign: align }}
       >
         {label}
@@ -190,9 +189,10 @@ export function BlufinContratosListPage() {
         </div>
       </div>
 
-      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla */}
+      {/* Stat strip compacto — una sola línea para dar más espacio a la tabla.
+          En móvil se oculta (son datos orientativos) para dar aún más espacio. */}
       <div
-        className="hstack"
+        className="hstack hide-on-mobile"
         style={{ gap: 14, marginBottom: 10, flexWrap: 'wrap', fontSize: 12, color: 'var(--ink-500)' }}
       >
         <span>
@@ -368,7 +368,7 @@ export function BlufinContratosListPage() {
             <thead>
               <tr>
                 {th('folio', 'Contrato')}
-                {th('producto', 'Producto principal', undefined, 'hide-on-mobile')}
+                {th('producto', 'Producto principal')}
                 {th('eta', 'ETA puerto')}
                 {th('status', 'Status')}
                 {th('contenedor', 'Contenedor')}
@@ -411,7 +411,7 @@ export function BlufinContratosListPage() {
                         {fmtFechaCorta(c.fecha)} {c.lote ? `· ${c.lote}` : ''}
                       </div>
                     </td>
-                    <td className="hide-on-mobile">
+                    <td>
                       {principal ? (
                         <>
                           <div className="fw-600" style={{ fontSize: 13 }}>
