@@ -22,12 +22,14 @@ export function Topbar({ onToggleMenu }: { onToggleMenu?: () => void }) {
         >
           <Icon name="menu" size={18} />
         </button>
-        <span
-          className="dot"
-          style={{ background: empresaId === 'pml' ? 'var(--blue-500)' : 'var(--cyan-500)' }}
-        />
-        <span className="fw-600" style={{ color: 'var(--ink-700)' }}>
-          {empresaId === 'pml' ? 'Productos Marinos Lizárraga' : 'Marlin Lizárraga'}
+        <span className="topbar-empresa hstack" style={{ gap: 8 }}>
+          <span
+            className="dot"
+            style={{ background: empresaId === 'pml' ? 'var(--blue-500)' : 'var(--cyan-500)' }}
+          />
+          <span className="fw-600" style={{ color: 'var(--ink-700)' }}>
+            {empresaId === 'pml' ? 'Productos Marinos Lizárraga' : 'Marlin Lizárraga'}
+          </span>
         </span>
       </div>
 

@@ -31,7 +31,7 @@ export function TopbarClock() {
 
   return (
     <div
-      className="hstack"
+      className="hstack topbar-clock"
       style={{
         gap: 8,
         padding: '6px 10px',
