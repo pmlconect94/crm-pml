@@ -10,16 +10,28 @@ const PROVEEDORES = [
   { id: 'neptuno',    label: 'Neptuno Seafood',      href: '/app/importaciones/neptuno',    enabled: true },
 ];
 
-// `enabled` = el módulo ya existe. Los que están en false siguen saliendo como "PRÓX".
+type Dept = { id: string; label: string; icon: IconName; href: string; enabled: boolean };
+
+// El menú depende de la EMPRESA ACTIVA: PML es distribuidora (importa y vende) y
+// Marlin es productora (maquila para PML), así que no comparten operación ni menú.
+// `enabled` = el módulo ya existe; los que están en false salen como "PRÓX".
 // Además del flag, el acceso lo decide el rol del usuario (hasDept).
-// RH no va aquí: se despliega aparte (igual que Importaciones) por tener sub-secciones.
-const DEPTS: { id: string; label: string; icon: IconName; href: string; enabled: boolean }[] = [
-  { id: 'logistica',      label: 'Logística',         icon: 'truck',      href: '/app/logistica',      enabled: false },
-  { id: 'administracion', label: 'Administración',    icon: 'building',   href: '/app/administracion', enabled: false },
-  { id: 'ventas',         label: 'Comercial',         icon: 'cart',       href: '/app/ventas',         enabled: false },
-  { id: 'cobranza',       label: 'Cobranza',          icon: 'coins',      href: '/app/cobranza',       enabled: false },
-  { id: 'contabilidad',   label: 'Contabilidad',      icon: 'calculator', href: '/app/contabilidad',   enabled: true  },
-];
+// Importaciones no va aquí (es solo de PML y se despliega aparte, igual que RH).
+const DEPTS_POR_EMPRESA: Record<'pml' | 'marlin', Dept[]> = {
+  pml: [
+    { id: 'logistica',      label: 'Logística',      icon: 'truck',      href: '/app/logistica',      enabled: false },
+    { id: 'administracion', label: 'Administración', icon: 'building',   href: '/app/administracion', enabled: false },
+    { id: 'ventas',         label: 'Comercial',      icon: 'cart',       href: '/app/ventas',         enabled: false },
+    { id: 'cobranza',       label: 'Cobranza',       icon: 'coins',      href: '/app/cobranza',       enabled: false },
+    { id: 'contabilidad',   label: 'Contabilidad',   icon: 'calculator', href: '/app/contabilidad',   enabled: true  },
+  ],
+  marlin: [
+    { id: 'produccion',     label: 'Producción',     icon: 'package',    href: '/app/produccion',     enabled: false },
+    { id: 'administracion', label: 'Administración', icon: 'building',   href: '/app/administracion', enabled: false },
+    { id: 'ventas',         label: 'Comercial',      icon: 'cart',       href: '/app/ventas',         enabled: false },
+    { id: 'contabilidad',   label: 'Contabilidad',   icon: 'calculator', href: '/app/contabilidad',   enabled: true  },
+  ],
+};
 
 // Sub-secciones de Recursos Humanos (se despliegan bajo el depto, como los proveedores
 // bajo Importaciones). `end` = solo activo en la ruta exacta (para el índice /app/rh).
@@ -48,9 +60,12 @@ export function Sidebar({ open = false }: { open?: boolean }) {
   const empresaLogo = empresaId === 'pml' ? '/assets/pml-logo-transparent.png' : '/assets/marlin-logo.png';
   const importActiva = location.pathname.startsWith('/app/importaciones');
   const rhActiva = location.pathname.startsWith('/app/rh');
+  // El menú se arma según la empresa activa (Importaciones solo existe en PML).
+  const depts = DEPTS_POR_EMPRESA[empresaId];
+  const esMarlin = empresaId === 'marlin';
 
   return (
-    <aside className={`sidebar${open ? ' open' : ''}`}>
+    <aside className={`sidebar${open ? ' open' : ''}${esMarlin ? ' sidebar-marlin' : ''}`}>
       {/* ── Switcher de empresa ── */}
       <div style={{ position: 'relative', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <button
@@ -89,7 +104,8 @@ export function Sidebar({ open = false }: { open?: boolean }) {
                 transition={{ duration: 0.14 }}
                 style={{
                   position: 'absolute', top: 'calc(100% - 4px)', left: 8, right: 8, zIndex: 41,
-                  background: 'var(--navy-800)', border: '1px solid rgba(255,255,255,0.12)',
+                  background: esMarlin ? 'var(--marlin-800)' : 'var(--navy-800)',
+                  border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 'var(--r-md)', overflow: 'hidden', boxShadow: 'var(--shadow-lg)',
                 }}
               >
@@ -124,7 +140,8 @@ export function Sidebar({ open = false }: { open?: boolean }) {
       {/* ── Departamentos ── */}
       <div className="sidebar-section-label">Departamentos</div>
 
-      {hasDept('importaciones') && (
+      {/* Importaciones es exclusivo de PML: Marlin no importa, produce. */}
+      {!esMarlin && hasDept('importaciones') && (
         <>
           <button
             className={`nav-item ${importActiva ? 'active' : ''}`}
@@ -164,7 +181,7 @@ export function Sidebar({ open = false }: { open?: boolean }) {
         </>
       )}
 
-      {DEPTS.map((d) =>
+      {depts.map((d) =>
         d.enabled && hasDept(d.id) ? (
           <NavLink key={d.id} to={d.href} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Icon name={d.icon} size={15} />

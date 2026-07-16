@@ -65,6 +65,14 @@
   --sidebar-w: 212px;
   --topbar-h: 46px;
 
+  /* Marlin Lizárraga — el menú cambia de color con el switcher de empresa para
+     que se note al instante en qué empresa estás (PML = navy, Marlin = grafito
+     con acento dorado, como el badge negro/dorado de su logo). */
+  --marlin-900: #17161A;
+  --marlin-800: #201E24;
+  --marlin-gold: #C9A227;
+  --marlin-gold-400: #E3C458;
+
   /* Custom easings — built-ins lack the punch UI needs */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -265,6 +273,17 @@ textarea.field-input { resize: vertical; min-height: 80px; }
 .nav-sub-item.disabled { opacity: 0.5; cursor: not-allowed; }
 .nav-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
 .nav-prox { margin-left: auto; font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; color: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.16); padding: 0 5px; border-radius: 999px; }
+
+/* ── Menú de Marlin Lizárraga ────────────────────────────────────────
+   Mismo layout que PML, otro color: grafito con acento dorado (su logo es un
+   badge negro/dorado). Es la señal visual de que el switcher cambió de empresa. */
+.sidebar-marlin { background: var(--marlin-900); }
+.sidebar-marlin .nav-item.active,
+.sidebar-marlin .nav-sub-item.active {
+  background: color-mix(in srgb, var(--marlin-gold) 12%, transparent);
+  border-left-color: var(--marlin-gold);
+}
+.sidebar-marlin .nav-item.active svg { color: var(--marlin-gold-400); }
 
 .topbar {
   height: var(--topbar-h);
