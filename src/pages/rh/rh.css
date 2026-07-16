@@ -1,0 +1,111 @@
+/* ============================================================
+   RH / Nómina — design system del módulo
+   ------------------------------------------------------------
+   La app de Nómina se diseñó MÁS DENSA y a ANCHO COMPLETO que el CRM
+   (tablas de 15+ columnas, rejillas de captura con un input por día).
+   El CSS del CRM es más espacioso, así que aquí se replica el de la
+   nómina TAL CUAL, scopeado a `.rh-module` para no afectar al resto
+   del CRM (Blufin, Contabilidad…), que conserva su look.
+
+   Contiene:
+   1) Densidad: reglas que existen en ambos pero con valores distintos.
+   2) Clases que el CRM NO tiene y la nómina sí (.segmented, .switch,
+      .tbl-freeze, .form-grid, .pos/.neg, etc.).
+   Fuente: nomina-empresa/src/index.css
+   ============================================================ */
+
+/* ── 1. Densidad base ───────────────────────────────────────── */
+/* La nómina usa 13px de base; el CRM 14px. */
+.rh-module { font-size: 13px; line-height: 1.45; }
+
+/* Tablas: el CRM usa filas ~2x más altas (14px 16px) */
+.rh-module .tbl { font-size: 12.5px; }
+.rh-module .tbl th { font-size: 10.5px; padding: 7px 12px; }
+.rh-module .tbl td { padding: 8px 12px; }
+
+/* Inputs: el CRM usa 10px 12px; la captura de nómina necesita compacto */
+.rh-module .field-input { padding: 7px 10px; font-size: 13px; }
+.rh-module .field-label { font-size: 12px; margin-bottom: 6px; }
+
+.rh-module .page-title { font-size: 16px; }
+.rh-module .card-title { font-size: 14px; }
+.rh-module .card-body { padding: 14px; }
+.rh-module .kpi { padding: 10px 12px; }
+.rh-module .kpi-value { font-size: 18px; }
+.rh-module .tabs { margin-bottom: 16px; overflow-x: auto; }
+
+/* Modales (el recibo de nómina) */
+.rh-module .modal-header { padding: 13px 18px; }
+.rh-module .modal-body { padding: 16px 18px; }
+.rh-module .modal-footer { padding: 12px 18px; }
+.rh-module .modal-title { font-size: 15px; }
+
+/* ── 2. Clases que faltan en el CRM ─────────────────────────── */
+
+/* Utilidades de números (alineación y color) */
+.rh-module .right { text-align: right; }
+.rh-module .center { text-align: center; }
+.rh-module .pos { color: var(--green-500); font-weight: 600; }
+.rh-module .neg { color: var(--red-500); font-weight: 600; }
+.rh-module .zero { color: var(--ink-400); }
+.rh-module .orange { color: var(--amber-500); font-weight: 600; }
+.rh-module .blue { color: var(--blue-500); font-weight: 600; }
+
+/* Contenedor de tabla con scroll horizontal */
+.rh-module .tbl-wrap { overflow-x: auto; }
+
+/* Tabla con encabezado y primera columna congelados (tablas anchas/largas:
+   Asistencias, Comedor, Resumen). Sin esto no se puede navegar la captura. */
+.rh-module .tbl-freeze { overflow: auto; max-height: calc(100vh - 210px); }
+.rh-module .tbl-freeze table { border-collapse: separate; border-spacing: 0; }
+.rh-module .tbl-freeze thead th { position: sticky; top: 0; z-index: 3; }
+.rh-module .tbl-freeze tbody td:first-child,
+.rh-module .tbl-freeze tfoot td:first-child {
+  position: sticky; left: 0; z-index: 2; background: white;
+  box-shadow: 1px 0 0 var(--ink-200);
+}
+.rh-module .tbl-freeze thead th:first-child { position: sticky; left: 0; z-index: 5; box-shadow: 1px 0 0 var(--ink-200); }
+.rh-module .tbl-freeze tbody tr.row-inactive td:first-child { background: var(--ink-50); }
+
+/* Fila inactiva (empleado dado de baja) */
+.rh-module .row-inactive td { opacity: 0.5; background: var(--ink-50); }
+
+/* Formularios en rejilla (ficha del empleado) */
+.rh-module .form-grid { display: grid; gap: 10px; }
+.rh-module .form-grid-2 { grid-template-columns: 1fr 1fr; }
+.rh-module .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.rh-module .form-section-title { font-size: 11px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.06em; margin: 14px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--ink-200); }
+.rh-module .form-section-title:first-child { margin-top: 0; }
+
+/* Quitar las flechas (spinners) de los inputs numéricos: solo captura. */
+.rh-module input[type=number]::-webkit-inner-spin-button,
+.rh-module input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.rh-module input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+/* Toggle switch (Alta IMSS, Real/Fiscal, omitir préstamo) */
+.rh-module .switch { position: relative; display: inline-flex; align-items: center; width: 40px; height: 22px; border-radius: 999px; background: var(--ink-300); transition: background-color 180ms var(--ease-soft); flex-shrink: 0; }
+.rh-module .switch.on { background: var(--green-500); }
+.rh-module .switch::after { content: ''; position: absolute; left: 2px; width: 18px; height: 18px; border-radius: 999px; background: white; box-shadow: var(--shadow-sm); transition: transform 200ms var(--ease-out); }
+.rh-module .switch.on::after { transform: translateX(18px); }
+.rh-module .switch:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Filtro segmentado (Activos / Bajas / Todos, filtros por área) */
+.rh-module .segmented { display: inline-flex; background: var(--ink-100); border-radius: var(--r-md); padding: 3px; gap: 2px; }
+.rh-module .segmented button { padding: 6px 14px; font-size: 12px; font-weight: 600; color: var(--ink-500); border-radius: 7px; transition: background-color 160ms var(--ease-soft), color 160ms var(--ease-soft); }
+.rh-module .segmented button.active { background: white; color: var(--ink-900); box-shadow: var(--shadow-sm); }
+
+/* Modal ancho (SueldoModal, ficha del empleado) */
+.rh-module .modal-lg { max-width: 1100px; }
+
+/* Rejillas responsivas como en la nómina */
+@media (max-width: 900px) {
+  .rh-module .form-grid-2,
+  .rh-module .form-grid-3 { grid-template-columns: 1fr; }
+}
+
+/* ── 3. Ancho completo ──────────────────────────────────────── */
+/* `.content` es ancestro de .rh-module (vive en AppLayout), por eso no se puede
+   scopear desde aquí: AppLayout le pone `.content-wide` en las rutas de RH.
+   La nómina quitó el max-width a propósito para que las tablas anchas
+   (Resumen: 15 columnas) usen todo el ancho disponible. */
+.content.content-wide { max-width: none; margin: 0; padding: 14px 18px; }

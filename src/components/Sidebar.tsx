@@ -10,13 +10,25 @@ const PROVEEDORES = [
   { id: 'neptuno',    label: 'Neptuno Seafood',      href: '/app/importaciones/neptuno',    enabled: true },
 ];
 
-const DEPTS: { id: string; label: string; icon: IconName; href: string }[] = [
-  { id: 'logistica',      label: 'Logística',         icon: 'truck',      href: '/app/logistica' },
-  { id: 'administracion', label: 'Administración',    icon: 'building',   href: '/app/administracion' },
-  { id: 'ventas',         label: 'Comercial',         icon: 'cart',       href: '/app/ventas' },
-  { id: 'cobranza',       label: 'Cobranza',          icon: 'coins',      href: '/app/cobranza' },
-  { id: 'contabilidad',   label: 'Contabilidad',      icon: 'calculator', href: '/app/contabilidad' },
-  { id: 'rh',             label: 'Recursos Humanos',  icon: 'users',      href: '/app/rh' },
+// `enabled` = el módulo ya existe. Los que están en false siguen saliendo como "PRÓX".
+// Además del flag, el acceso lo decide el rol del usuario (hasDept).
+// RH no va aquí: se despliega aparte (igual que Importaciones) por tener sub-secciones.
+const DEPTS: { id: string; label: string; icon: IconName; href: string; enabled: boolean }[] = [
+  { id: 'logistica',      label: 'Logística',         icon: 'truck',      href: '/app/logistica',      enabled: false },
+  { id: 'administracion', label: 'Administración',    icon: 'building',   href: '/app/administracion', enabled: false },
+  { id: 'ventas',         label: 'Comercial',         icon: 'cart',       href: '/app/ventas',         enabled: false },
+  { id: 'cobranza',       label: 'Cobranza',          icon: 'coins',      href: '/app/cobranza',       enabled: false },
+  { id: 'contabilidad',   label: 'Contabilidad',      icon: 'calculator', href: '/app/contabilidad',   enabled: true  },
+];
+
+// Sub-secciones de Recursos Humanos (se despliegan bajo el depto, como los proveedores
+// bajo Importaciones). `end` = solo activo en la ruta exacta (para el índice /app/rh).
+const RH_SECCIONES = [
+  { id: 'resumen',    label: 'Resumen',    href: '/app/rh',            enabled: true,  end: true  },
+  { id: 'nominas',    label: 'Nóminas',    href: '/app/rh/nominas',    enabled: true,  end: false },
+  { id: 'empleados',  label: 'Empleados',  href: '/app/rh/empleados',  enabled: true,  end: false },
+  { id: 'prestamos',  label: 'Préstamos',  href: '/app/rh/prestamos',  enabled: true,  end: false },
+  { id: 'vacaciones', label: 'Vacaciones', href: '/app/rh/vacaciones', enabled: false, end: false },
 ];
 
 const EMPRESAS = [
@@ -29,11 +41,13 @@ export function Sidebar({ open = false }: { open?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [impOpen, setImpOpen] = useState(() => location.pathname.startsWith('/app/importaciones'));
+  const [rhOpen, setRhOpen] = useState(() => location.pathname.startsWith('/app/rh'));
   const [empOpen, setEmpOpen] = useState(false);
 
   const empresaName = empresaId === 'pml' ? 'Productos Marinos' : 'Marlin Lizárraga';
   const empresaLogo = empresaId === 'pml' ? '/assets/pml-logo-transparent.png' : '/assets/marlin-logo.png';
   const importActiva = location.pathname.startsWith('/app/importaciones');
+  const rhActiva = location.pathname.startsWith('/app/rh');
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
@@ -151,7 +165,7 @@ export function Sidebar({ open = false }: { open?: boolean }) {
       )}
 
       {DEPTS.map((d) =>
-        d.id === 'contabilidad' && hasDept('contabilidad') ? (
+        d.enabled && hasDept(d.id) ? (
           <NavLink key={d.id} to={d.href} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Icon name={d.icon} size={15} />
             <span>{d.label}</span>
@@ -163,6 +177,52 @@ export function Sidebar({ open = false }: { open?: boolean }) {
             <span className="nav-prox">PRÓX</span>
           </button>
         ),
+      )}
+
+      {/* ── Recursos Humanos (desplegable, como Importaciones) ── */}
+      {hasDept('rh') && (
+        <>
+          <button
+            className={`nav-item ${rhActiva ? 'active' : ''}`}
+            onClick={() => setRhOpen((o) => !o)}
+            aria-expanded={rhOpen}
+          >
+            <Icon name="users" size={15} />
+            Recursos Humanos
+            <Icon name="chevron-right" size={13} className={`nav-chevron ${rhOpen ? 'open' : ''}`} />
+          </button>
+          <AnimatePresence initial={false}>
+            {rhOpen && (
+              <motion.div
+                className="nav-sub"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              >
+                {RH_SECCIONES.map((s) =>
+                  s.enabled ? (
+                    <NavLink
+                      key={s.id}
+                      to={s.href}
+                      end={s.end}
+                      className={({ isActive }) => `nav-sub-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span className="nav-dot" style={{ background: 'var(--green-500)' }} />
+                      {s.label}
+                    </NavLink>
+                  ) : (
+                    <button key={s.id} className="nav-sub-item disabled" disabled title="Próximamente">
+                      <span className="nav-dot" style={{ background: 'rgba(255,255,255,0.3)' }} />
+                      {s.label}
+                      <span className="nav-prox">PRÓX</span>
+                    </button>
+                  ),
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
       )}
 
       <div className="spacer" />

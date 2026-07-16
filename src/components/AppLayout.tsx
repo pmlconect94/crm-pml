@@ -43,7 +43,9 @@ export function AppLayout() {
       )}
       <div className="main-area">
         <Topbar onToggleMenu={() => setMenuOpen((o) => !o)} />
-        <div className="content">
+        {/* RH / Nómina usa TODO el ancho (tablas de 15+ columnas); el resto del CRM
+            conserva el max-width de 1400px centrado. Ver pages/rh/rh.css */}
+        <div className={`content${location.pathname.startsWith('/app/rh') ? ' content-wide' : ''}`}>
           <Outlet />
         </div>
       </div>
