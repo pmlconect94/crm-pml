@@ -50,6 +50,7 @@ import { NeptunoProductosPage } from '@/pages/neptuno/NeptunoProductosPage';
 import { ContabilidadFacturasPage } from '@/pages/contabilidad/ContabilidadFacturasPage';
 // RH / Nómina
 import { RhLayout } from '@/pages/rh/RhLayout';
+import { RequireDept } from '@/components/RequireDept';
 import { DashboardPage as RhDashboardPage } from '@/pages/rh/DashboardPage';
 import { EmpleadosPage } from '@/pages/rh/EmpleadosPage';
 import { NominasPage } from '@/pages/rh/NominasPage';
@@ -67,7 +68,7 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
 
         {/* Importaciones */}
-        <Route path="importaciones">
+        <Route path="importaciones" element={<RequireDept dept="importaciones" />}>
           <Route index element={<ImportacionesPickerPage />} />
 
           {/* Blufin */}
@@ -135,16 +136,20 @@ export default function App() {
         <Route path="administracion" element={<PlaceholderPage title="Administración" subtitle="Próximamente" />} />
         <Route path="ventas" element={<PlaceholderPage title="Ventas" subtitle="Próximamente" />} />
         <Route path="cobranza" element={<PlaceholderPage title="Cobranza" subtitle="Próximamente" />} />
-        <Route path="contabilidad" element={<ContabilidadFacturasPage />} />
+        <Route path="contabilidad" element={<RequireDept dept="contabilidad" />}>
+          <Route index element={<ContabilidadFacturasPage />} />
+        </Route>
 
         {/* RH / Nómina (PML + Marlin; la empresa activa viene del switcher del Sidebar) */}
-        <Route path="rh" element={<RhLayout />}>
-          <Route index element={<RhDashboardPage />} />
-          <Route path="nominas" element={<NominasPage />} />
-          <Route path="nominas/:semanaId" element={<NominaDetallePage />} />
-          <Route path="empleados" element={<EmpleadosPage />} />
-          <Route path="prestamos" element={<PrestamosPage />} />
-          <Route path="vacaciones" element={<PlaceholderPage title="Vacaciones" subtitle="Próximamente (fase F4)" />} />
+        <Route path="rh" element={<RequireDept dept="rh" />}>
+          <Route element={<RhLayout />}>
+            <Route index element={<RhDashboardPage />} />
+            <Route path="nominas" element={<NominasPage />} />
+            <Route path="nominas/:semanaId" element={<NominaDetallePage />} />
+            <Route path="empleados" element={<EmpleadosPage />} />
+            <Route path="prestamos" element={<PrestamosPage />} />
+            <Route path="vacaciones" element={<PlaceholderPage title="Vacaciones" subtitle="Próximamente (fase F4)" />} />
+          </Route>
         </Route>
       </Route>
 

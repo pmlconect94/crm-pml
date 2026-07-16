@@ -16,7 +16,11 @@ export type Rol =
   | 'gerente_rh'
   | 'contador'
   | 'vendedor'
-  | 'operativo';
+  | 'operativo'
+  /** Sin permisos. Es el default de un usuario sin `rol` en su metadata: la base
+   *  de Supabase es COMPARTIDA con otros sistemas, así que una cuenta ajena que
+   *  se loguee aquí no debe ver nada hasta que un admin le asigne rol. */
+  | 'sin_acceso';
 
 export type Usuario = {
   id: string;
@@ -34,10 +38,13 @@ export const PERMISOS: Record<Rol, { depts: string[] }> = {
   admin_total:     { depts: ['importaciones','logistica','administracion','ventas','cobranza','contabilidad','rh'] },
   director_ops:    { depts: ['importaciones','logistica','administracion','rh'] },
   coord_logistica: { depts: ['importaciones','logistica'] },
-  gerente_rh:      { depts: ['rh','administracion'] },
+  // Decisión del usuario 2026-07-16: el gerente de RH ve SOLO Recursos Humanos
+  // por ahora (antes traía también 'administracion').
+  gerente_rh:      { depts: ['rh'] },
   contador:        { depts: ['contabilidad','cobranza','administracion'] },
   vendedor:        { depts: ['ventas'] },
   operativo:       { depts: ['importaciones'] },
+  sin_acceso:      { depts: [] },
 };
 
 // nombre/rol/permisos viven en el user_metadata del usuario de Supabase Auth.
@@ -45,7 +52,11 @@ function usuarioDeSesion(session: Session | null): Usuario | null {
   const u = session?.user;
   if (!u) return null;
   const m = (u.user_metadata ?? {}) as Record<string, unknown>;
-  const rol = ((m.rol as Rol) ?? 'admin_total');
+  // Sin `rol` en la metadata => SIN ACCESO. Antes el default era 'admin_total',
+  // así que cualquier cuenta de Auth sin metadata del CRM (la base es compartida
+  // con otros sistemas) entraba como administrador total y veía todo, incluida
+  // la nómina. El acceso ahora es explícito: lo da un admin asignando el rol.
+  const rol: Rol = (m.rol as Rol) ?? 'sin_acceso';
   const esAdmin = rol === 'admin_total';
   return {
     id: u.id,
@@ -112,7 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         setUser(null);
       },
-      hasDept: (dept) => (user ? PERMISOS[user.rol].depts.includes(dept) : false),
+      // `?.` a propósito: si la metadata trae un rol desconocido (typo), PERMISOS
+      // no lo tiene y sin el opcional reventaría la app. Rol raro => sin acceso.
+      hasDept: (dept) => (user ? (PERMISOS[user.rol]?.depts.includes(dept) ?? false) : false),
       puedeTab: (tabId) => (user ? user.tabs === null || user.tabs.includes(tabId) : false),
     }),
     [user, loading, empresaId],
