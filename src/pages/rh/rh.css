@@ -108,4 +108,6 @@
    scopear desde aquí: AppLayout le pone `.content-wide` en las rutas de RH.
    La nómina quitó el max-width a propósito para que las tablas anchas
    (Resumen: 15 columnas) usen todo el ancho disponible. */
-.content.content-wide { max-width: none; margin: 0; padding: 14px 18px; }
+/* padding-top chico a propósito: el módulo ya no lleva encabezado propio, así que
+   la franja blanca de arriba solo estorbaba (decisión del usuario). */
+.content.content-wide { max-width: none; margin: 0; padding: 6px 18px 14px; }

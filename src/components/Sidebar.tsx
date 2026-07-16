@@ -37,7 +37,9 @@ export function Sidebar({ open = false }: { open?: boolean }) {
   const [rhOpen, setRhOpen] = useState(() => location.pathname.startsWith('/app/rh'));
   const [empOpen, setEmpOpen] = useState(false);
 
-  const empresaName = empresaId === 'pml' ? 'Productos Marinos' : 'Marlin Lizárraga';
+  // Nombre COMPLETO: antes decía solo "Productos Marinos" (truncado en el código,
+  // no por CSS) y encima se recortaba con ellipsis.
+  const empresaName = empresaId === 'pml' ? 'Productos Marinos Lizárraga' : 'Marlin Lizárraga';
   const empresaLogo = empresaId === 'pml' ? '/assets/pml-logo-transparent.png' : '/assets/marlin-logo.png';
   const importActiva = location.pathname.startsWith('/app/importaciones');
   const rhActiva = location.pathname.startsWith('/app/rh');
@@ -60,9 +62,9 @@ export function Sidebar({ open = false }: { open?: boolean }) {
         >
           <div
             style={{
-              width: 30, height: 30, borderRadius: 'var(--r-sm)',
+              width: 42, height: 42, borderRadius: 'var(--r-sm)',
               background: empresaId === 'pml' ? 'rgba(255,255,255,0.06)' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5, flexShrink: 0,
             }}
           >
             <img src={empresaLogo} alt={empresaName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
@@ -71,7 +73,9 @@ export function Sidebar({ open = false }: { open?: boolean }) {
             <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase' }}>
               Empresa activa
             </div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {/* Sin nowrap/ellipsis: que el nombre largo se acomode en dos renglones
+                en vez de cortarse. */}
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.25 }}>
               {empresaName}
             </div>
           </div>

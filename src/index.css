@@ -62,7 +62,9 @@
   /* Diffusion shadow — wide, light spread for premium "Bento" feel */
   --shadow-diffusion: 0 20px 40px -15px rgba(10, 37, 64, 0.08);
 
-  --sidebar-w: 212px;
+  /* 232px (antes 212): el switcher muestra el nombre COMPLETO de la empresa
+     ("Productos Marinos Lizárraga") con el logo más grande. */
+  --sidebar-w: 232px;
   --topbar-h: 46px;
 
   /* Marlin Lizárraga — el menú cambia de color con el switcher de empresa para
