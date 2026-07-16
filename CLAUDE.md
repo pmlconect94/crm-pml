@@ -124,8 +124,14 @@ assets/neptuno-logo.png          ← Logo Neptuno Alimentos del Mar
         ├── /administracion     ← PRÓXIMAMENTE
         ├── /ventas             ← PRÓXIMAMENTE
         ├── /cobranza           ← PRÓXIMAMENTE
-        ├── /contabilidad       ← PRÓXIMAMENTE
-        └── /rh                 ← PRÓXIMAMENTE
+        ├── /contabilidad       ✅ (ContabilidadFacturasPage)
+        └── /rh                 ✅ NÓMINA — ver §18
+              ├── (índice)      Resumen / dashboard RH
+              ├── nominas
+              ├── nominas/:semanaId   (detalle con pestañas internas)
+              ├── empleados
+              ├── prestamos
+              └── vacaciones    ← PRÓXIMAMENTE
 ```
 
 ### Protección de rutas
@@ -462,16 +468,17 @@ Todos estos módulos se activarán uno por uno. Se diseñan primero en el protot
 - Conciliaciones bancarias
 - Polizas contables
 
-### Recursos Humanos
-- Expedientes de empleados
-- Nómina
-- Vacaciones y permisos
-- Evaluaciones de desempeño
+### ~~Recursos Humanos~~ → ✅ YA CONSTRUIDO — ver **§18**
+- Expedientes de empleados ✅ · Nómina ✅ · Préstamos ✅
+- Vacaciones y permisos → PRÓXIMAMENTE (única parte pendiente)
+- Evaluaciones de desempeño → PRÓXIMAMENTE
 
 ### Marlin Lizárraga
 - Misma plataforma pero con datos de Marlin
 - Producción: órdenes de maquila, materia prima, almacenes
-- Habilitado cuando el módulo esté completo
+- ✅ **Ya habilitado en el switcher de empresa** (lo usa el módulo de RH/Nómina, que
+  opera PML y Marlin con modelos de cálculo distintos — ver §18). Los demás módulos
+  todavía no leen `empresaId`.
 
 ---
 
@@ -1278,7 +1285,35 @@ Aplicar trigger similar para: `nep_pagos`, `cam_nc_mx`, `nep_notas_credito`.
 
 ### SIGUIENTE PASO (handoff de sesión)
 
-**ÚLTIMA SESIÓN (2026-06-26 → 07-02):** la app se renombró a **ERP** (solo el nombre VISIBLE — título de pestaña "ERP Grupo Lizárraga" + login "ERP Corporativo"; schema `crm`, repo y metadata `app:'crm-pml'` intactos). **La URL de producción cambió a https://pml-connect.vercel.app** (antes `crm-pml.vercel.app`; mismo proyecto Vercel `crm-pml`, auto-deploy en cada push a `main`). Cerrado:
+**ÚLTIMA SESIÓN (2026-07-16) — Nómina portada al CRM como módulo RH `/app/rh`. LEER §18.**
+
+Se unieron los dos proyectos: la app de **Nómina** (que corría aparte en `nomina-empresa.vercel.app`)
+ahora vive dentro del CRM como el módulo de **Recursos Humanos**. Fue viable porque **ya compartían
+el mismo proyecto Supabase** (`xjbhfeqcjjqyjkvdbyxy`, solo cambia el schema: `crm` vs `nomina`) y el
+**mismo design system**.
+
+- ✅ Portado: `src/pages/rh/*` (10 pantallas + 8 pestañas) y `src/lib/nomina/*` (calc, format,
+  empresas, db, auth). Se descartó el shell propio de la nómina (usa el del CRM).
+- ✅ **3 piezas clave** (detalle en §18): `db.ts` (`dbNomina` = schema `nomina`, **sin tipar**),
+  `auth.tsx` (adaptador CRM→nómina, mapea roles), `empresas.tsx` (lee el switcher pml/marlin del CRM).
+- ✅ **`rh.css`** — el port trajo los componentes pero NO los estilos y el módulo salía amontonado,
+  sin filtros y con las tablas rotas: la nómina usa un design system **más denso** y **15 clases que
+  el CRM no tiene** (`.segmented`, `.switch`, `.tbl-freeze`…). Se replicó scopeado a `.rh-module`.
+  **Verificado con estilos computados; el usuario lo aprobó ("quedó perfecto").**
+- ✅ Sidebar: RH desplegable (como Importaciones) + fix del gate hardcodeado a `contabilidad` +
+  **Marlin habilitado** en el switcher. Icon: `lock`, `user-plus`. Dep nueva: `xlsx`.
+
+**ESTADO:** rama **`feat/rh-nomina`** (`a1c4b0a` = port, `b6ad5ba` = estilos). **NO mergeada a `main`.**
+La nómina vieja **sigue siendo la de producción** y es la que usa RH a diario.
+
+**SIGUIENTE PASO (F5):** el usuario debe **validar los cálculos** del módulo contra la nómina viva
+(comparar una nómina real, sin guardar). Cuando cuadre → merge a `main` → activar RH para los
+usuarios → retirar el repo/deploy separado de la nómina (`pmlconect94/nomina-empresa`).
+⚠️ **Ambas apps escriben en la MISMA BD**: guardar/timbrar desde el CRM afecta nóminas reales.
+
+---
+
+**SESIÓN PREVIA (2026-06-26 → 07-02):** la app se renombró a **ERP** (solo el nombre VISIBLE — título de pestaña "ERP Grupo Lizárraga" + login "ERP Corporativo"; schema `crm`, repo y metadata `app:'crm-pml'` intactos). **La URL de producción cambió a https://pml-connect.vercel.app** (antes `crm-pml.vercel.app`; mismo proyecto Vercel `crm-pml`, auto-deploy en cada push a `main`). Cerrado:
 - ✅ **Facturas de correo migradas a Storage** (41): las que solo vivían en Google Drive (`drive_pdf_id`) se copiaron al bucket `documentos-importacion` (`facturas-correo/<C####>.pdf`) y se ligaron (`blufin_facturas.storage_path` + `blufin_contratos.factura_pdf_path`). Antes la app las abría con link de Drive → Google pedía "Solicitar acceso" a quien no era dueño del Drive. Script `scripts/ligar_facturas_correo.py` (modos local y `--drive`; requiere `SUPABASE_SERVICE_ROLE_KEY`). Verificado: abren por URL firmada para cualquier autenticado.
 - ✅ **Visor de PDF embebido** (`src/features/blufin/PdfViewerModal.tsx`): Contrato/Factura/Ver PDF abren DENTRO de la app (iframe); el botón "Imprimir" abre pestaña nueva. Los PDFs de Storage se embeben (sin `X-Frame-Options`); los de Drive usan `/preview` (embed) + `/view` (abrir). `resolveFacturaPdf` + `signedUrlAnyBucket` (prueba `documentos-importacion` y luego `facturas-pdf`) en `import-queries.ts`. Usado en ContratoDetalleModal, BlufinRecepcionRegistrarPage, FacturaDetalleModal y Pagos→Pendientes.
 - ✅ **4 mejoras Blufin**: (a) ficha con **precios en MXN** (TC real ponderado si liquidado; TC del día estimado, en ámbar, si no). (b) Llegadas→Por producto: folio del contenedor clicable → `SkusContratoModal` (sin precios). (c) Recepción→Por recibir: **fix del "mismo día"** con columna real `blufin_contratos.eta_bodega_confirmada` (migración `20260626120000` + backfill; `updateLlegadaContrato` la pone `true` — ya NO se infiere comparando fechas). (d) Recepción→Historial: buscador + folio clicable → `RecepcionDetalleModal`.
@@ -1386,9 +1421,27 @@ Pendientes que NO bloquean operación (en orden de valor):
 
 ---
 
+### Recursos Humanos / Nómina ✅ (2026-07-16) — en rama, NO en producción
+
+Se **portó la app de Nómina** (que vivía aparte) dentro del CRM como el módulo **`/app/rh`**.
+**Documentación completa: §18.** Resumen:
+
+- Código en `src/pages/rh/*` + `src/lib/nomina/*`. `tsc` 0 errores, build OK.
+- **Schema `nomina`** (no `crm`) del MISMO Supabase → se consulta con **`dbNomina.from(...)`**
+  (`lib/nomina/db.ts` = `supabase.schema('nomina')` sin tipar). Nunca `supabase.from`.
+- Auth y empresa por **adaptadores** (`lib/nomina/auth.tsx`, `empresas.tsx`) → usan el `useAuth` y el
+  switcher pml/marlin del CRM. **Marlin quedó habilitado** en el switcher.
+- **`pages/rh/rh.css`** replica el design system (más denso) de la nómina, scopeado a `.rh-module`
+  + `.content-wide` en AppLayout. **Sin esto el módulo se ve roto** (ver §18.4).
+- Sidebar: RH es desplegable como Importaciones; `DEPTS` ahora usa flag `enabled` (antes solo
+  `contabilidad` podía activarse).
+- 🌿 Rama **`feat/rh-nomina`** (`a1c4b0a` + `b6ad5ba`), **sin mergear a `main`**.
+- 🔴 Producción de nómina sigue siendo la app vieja: **nomina-empresa.vercel.app**.
+- ⚠️ **Misma BD que la nómina viva** → guardar desde aquí afecta nóminas reales.
+
 ### Resto de módulos
 
-Logística, Ventas, Cobranza, Administración, RH, Marlin — sidebar los muestra con badge SOON. Schema sin crear, frontend sin crear. **Contabilidad ya no está en este bucket — ver la subsección `### Contabilidad` arriba y §16.**
+Logística, Ventas, Cobranza, Administración, Marlin — sidebar los muestra con badge PRÓX. Schema sin crear, frontend sin crear. **Contabilidad y RH ya no están en este bucket — ver sus subsecciones arriba (y §18 para RH).**
 
 ### Pendientes de infraestructura
 
@@ -1535,3 +1588,142 @@ Subir con `supabase.storage.from('<bucket>').upload(path, file)` y leer con **UR
 - Glow/neon outer shadow → use plain shadow tinted to surface
 - Emojis en cualquier lado → Icon component o badge
 - `onClick={onClose}` directo en el overlay/backdrop de un modal → usar `{...useBackdropDismiss(onClose)}` (si no, seleccionar texto de un input y soltar sobre el fondo cierra el modal)
+
+---
+
+## 18. Módulo de Recursos Humanos / Nómina (RH) ✅
+
+> **Origen:** era una **app aparte** (proyecto `Sistema de nomina WEB/Nomina PML_v2`, repo
+> `pmlconect94/nomina-empresa`, prod `nomina-empresa.vercel.app`). En **2026-07-16** se **portó
+> dentro del CRM** como el módulo `/app/rh`. Ambas apps ya usaban el mismo proyecto Supabase y el
+> mismo design system, así que el port fue directo.
+>
+> ⚠️ **La app vieja SIGUE VIVA en producción y es la que usa RH hoy.** El módulo del CRM está en la
+> rama **`feat/rh-nomina`** (commits `a1c4b0a` + `b6ad5ba`), **sin mergear a `main`**. Ver "Estado y
+> pendientes" al final.
+
+### 18.1 Dónde vive el código
+
+```
+src/pages/rh/
+  RhLayout.tsx          layout del módulo (wrapper .rh-module + encabezado con empresa activa)
+  rh.css                design system de la nómina, scopeado a .rh-module  ← LEER 18.4
+  DashboardPage.tsx     resumen/KPIs de RH        (índice /app/rh)
+  NominasPage.tsx       lista/crear nóminas
+  NominaDetallePage.tsx detalle: orquesta las pestañas internas + guardar/desbloquear (PIN)
+  EmpleadosPage.tsx     catálogo + ficha + Alta IMSS + switch Real/Fiscal + ficha del banco
+  PrestamosPage.tsx     préstamos, abonos, avance
+  SueldoModal.tsx       sueldos por movimientos (candado con contraseña)
+  ViajesPage.tsx        exporta `ViajesPanel` — NO es una ruta: es una PESTAÑA del detalle
+  tabs/                 TabResumen, TabAsistencias, TabComedor, TabFiscal, TabRetroactivos,
+                        TabDescuentoProducto, TabBonos, TabPrestamosResumen, printNomina.ts
+
+src/lib/nomina/
+  db.ts                 cliente Supabase del schema `nomina`   ← LEER 18.2
+  auth.tsx              adaptador de auth CRM → nómina         ← LEER 18.3
+  empresas.tsx          config por empresa + useEmpresa (lee el switcher del CRM)
+  calc.ts               TODA la lógica de cálculo (calcularNomina) — el corazón del módulo
+  format.ts             fmt, fmtFecha, nomexLabel… (namespaceado: el CRM tiene su propio format.ts)
+```
+
+**NO se portaron** (el CRM ya los provee): el shell propio de la nómina (`AppLayout`, `Sidebar`,
+`Topbar`), su `LoginPage` y su `UsuariosPage`.
+
+### 18.2 Base de datos — schema `nomina` (⚠️ CRÍTICO)
+
+Las tablas de nómina **NO están en el schema `crm`**, viven en el schema **`nomina`** del **mismo**
+proyecto Supabase (`xjbhfeqcjjqyjkvdbyxy`). El cliente `supabase` del CRM apunta a `crm` por default.
+
+```ts
+// src/lib/nomina/db.ts
+export const dbNomina = (supabase as unknown as SupabaseClient).schema('nomina');
+```
+
+- **En las pantallas de RH se usa `dbNomina.from('empleados')`, NUNCA `supabase.from(...)`.**
+  (`supabase.from` resolvería al schema `crm` y la tabla no existe.)
+- Va **sin tipar** a propósito: el `supabase` del CRM está tipado con `Database`, que solo declara
+  el schema `crm`, así que `.schema('nomina')` no pasa el tipado. Las pantallas de nómina nunca
+  usaron tipos generados (trabajan con `any`). **Si algún día se generan los tipos del schema
+  `nomina`, `db.ts` es el único punto a cambiar.**
+- Es el **mismo cliente** del CRM → un solo GoTrue y **una sola sesión** (no hay doble login).
+- Para auth (login / `reauth` del candado de sueldos) se usa el `supabase` del CRM directamente.
+
+Tablas del schema `nomina`: `empleados`, `semanas`, `nominas`, `asistencias`, `viajes`, `prestamos`,
+`prestamo_descuentos`, `prestamo_omitir`, `empleado_sueldo_movimientos`, `empleado_descuentos`,
+`comedor_registro`, `nomina_descuento_producto`, `nomina_bono`, `nomina_retroactivo`,
+`bono_permanente` (+ `_excluido`), `usuarios_roles` (legado, ya no se usa), vista `v_incidencias`.
+
+### 18.3 Auth y empresa — adaptadores
+
+Las pantallas de nómina esperaban su propio `useAuth`. En vez de reescribirlas, hay **adaptadores**:
+
+- **`lib/nomina/auth.tsx`** envuelve el `useAuth` del CRM y expone la forma vieja
+  (`{ user{id,email,nombre,rol}, rolPendiente, loading, signOut, reauth }`).
+  **Mapa de roles:** `admin_total`/`gerente_rh` → `admin` · `capturar: true` → `editor` · resto → `viewer`.
+  Las pantallas checan `rol !== 'viewer'` (capturar) y `rol === 'admin'|'editor'` (sueldos).
+  `reauth(password)` re-verifica la contraseña del usuario logueado (candado de Sueldos / Ficha del banco).
+- **`lib/nomina/empresas.tsx`** — `useEmpresa()` lee la **empresa activa del switcher global del CRM**
+  (`empresaId` pml/marlin de `useAuth`), no un provider propio. Devuelve `{ empresa, code, setCode }`
+  con `code` = `'PML' | 'MARLIN'`. Aquí vive también la config por empresa (razón social, cuenta de
+  vales Toka, emisora/cuenta de cargo Banorte).
+
+Acceso al módulo: `hasDept('rh')` → roles `admin_total`, `director_ops`, `gerente_rh`.
+
+### 18.4 Estilos — `.rh-module` (⚠️ NO BORRAR)
+
+La app de nómina se diseñó **más densa y a ancho completo** que el CRM (tablas de 15+ columnas,
+captura con un input por día). Su `index.css` difiere del CRM y **al portarla sin estilos todo salía
+amontonado, sin filtros y con las tablas rotas**. Por eso existe `pages/rh/rh.css`, scopeado a
+`.rh-module` (el `RhLayout` envuelve todo en ese div):
+
+1. **Densidad:** fuente base **13px** (CRM 14px), `.tbl td` **8px 12px** (CRM 14px 16px),
+   `.field-input` **7px 10px** (CRM 10px 12px), + `card-body`/`kpi`/`modal-*`/`page-title`.
+2. **15 clases que el CRM NO tiene:** `.segmented` (filtros Activos/Bajas/Todos y por área),
+   `.switch` (Alta IMSS, Real/Fiscal, omitir préstamo), `.tbl-freeze` + `.tbl-wrap` (encabezado y 1ª
+   columna congelados — sin esto no se puede navegar la captura), `.form-grid(-2/-3)`,
+   `.form-section-title`, `.pos/.neg/.zero/.blue/.orange/.right/.center`, `.row-inactive`,
+   `.modal-lg`, y el quitado de spinners de los `input[type=number]`.
+3. **Ancho completo:** `.content` es ancestro (vive en `AppLayout`), no se puede scopear desde el
+   módulo → **`AppLayout` le añade `.content-wide` en las rutas `/app/rh`** (quita el `max-width:
+   1400px`). El resto del CRM conserva su ancho.
+
+> Si algo del módulo RH se ve "inflado" o sin estilo, **el problema casi siempre es `.rh-module`**:
+> o falta el wrapper, o la clase no está en `rh.css`.
+
+### 18.5 Otros cambios que tocó el port (en archivos del CRM)
+
+- **`components/Sidebar.tsx`** — RH es un **desplegable** (como Importaciones): botón + `nav-sub`
+  con Resumen/Nóminas/Empleados/Préstamos/Vacaciones. Se abre solo si estás en `/app/rh`.
+  Además `DEPTS` ahora usa un flag **`enabled`**: antes el render tenía hardcodeado
+  `d.id === 'contabilidad'`, así que **cualquier otro depto salía "PRÓX" aunque el rol lo permitiera**.
+  Marlin quedó **habilitado** en el switcher de empresa.
+- **`components/Icon.tsx`** — se agregaron `lock` y `user-plus` (los únicos 2 que faltaban).
+- **`package.json`** — se agregó **`xlsx`** (SheetJS, tarball del CDN 0.20.3) que usa `printNomina.ts`
+  para los exports de Vales y Depósito a banco.
+
+### 18.6 Reglas de negocio de la nómina
+
+**NO viven aquí.** Están en el `CLAUDE.md` del proyecto de nómina:
+`C:\Users\ddlpm\Proyectos\GrupoLizarraga\Sistema de nomina WEB\Nomina PML_v2\nomina-empresa\CLAUDE.md`
+(cálculo, séptimo día, incidencias, vales/previsión, comedor, préstamos, modelo Real/Fiscal de Marlin,
+dispersión Banorte…). **Leerlo antes de tocar `lib/nomina/calc.ts`.** Lo más importante:
+
+- El **switch Real/Fiscal** (solo Marlin, `empleados.usar_sueldo_real`) **manda TODO el modelo**;
+  el **Alta IMSS** solo decide la distribución del pago. No confundirlos (ya se rompió una vez).
+- El **depósito al banco SIEMPRE va sobre el sueldo fiscal**; la diferencia real−fiscal cae al efectivo.
+
+### 18.7 Estado y pendientes (2026-07-16)
+
+- ✅ Portado, compila (`tsc` 0 errores) y build OK. Estilos verificados contra la nómina.
+- 🌿 Vive en la rama **`feat/rh-nomina`** — **NO mergeado a `main`**.
+- 🔴 **La nómina vieja (`nomina-empresa.vercel.app`) sigue siendo la de producción.**
+- ⚠️ **Ambas apps escriben en la MISMA BD.** Es lo que hace segura la transición (no hay nada que
+  migrar), pero **guardar/timbrar desde el módulo del CRM afecta nóminas reales**.
+- 🔜 **Pendiente (F5):** validar cálculos contra la nómina viva → merge a `main` → activar RH para
+  los usuarios → retirar el repo/deploy separado de la nómina.
+- 🔜 Pendiente del módulo: **Vacaciones** (helpers `diasVacacionesLFT`/`antiguedadAnios` ya existen
+  en `calc.ts`).
+
+**Tip de entorno:** el dev server del CRM no arranca vía `npm --prefix` por el **espacio** en la ruta
+`CRM PML`; usar el nombre corto 8.3 (`C:/Users/ddlpm/PROYEC~1/GRUPOL~1/CRMPML~1`) o correr `npm run
+dev` dentro de la carpeta.
