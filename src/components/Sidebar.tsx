@@ -40,7 +40,12 @@ export function Sidebar({ open = false }: { open?: boolean }) {
   // Nombre COMPLETO: antes decía solo "Productos Marinos" (truncado en el código,
   // no por CSS) y encima se recortaba con ellipsis.
   const empresaName = empresaId === 'pml' ? 'Productos Marinos Lizárraga' : 'Marlin Lizárraga';
-  const empresaLogo = empresaId === 'pml' ? '/assets/pml-logo-transparent.png' : '/assets/marlin-logo.png';
+  // PML va con el logo de fondo blanco (no el transparente) porque abajo se pinta
+  // un recuadro blanco: sobre el navy el transparente casi no se veía. Patrón §9
+  // del CLAUDE.md: logo de fondo blanco sobre fondo oscuro => envolver en un div
+  // blanco con border-radius. Marlin no lo necesita: su badge negro/dorado se ve
+  // solo sobre el menú oscuro.
+  const empresaLogo = empresaId === 'pml' ? '/assets/pml-logo.png' : '/assets/marlin-logo.png';
   const importActiva = location.pathname.startsWith('/app/importaciones');
   const rhActiva = location.pathname.startsWith('/app/rh');
   const esMarlin = empresaId === 'marlin';
@@ -62,9 +67,12 @@ export function Sidebar({ open = false }: { open?: boolean }) {
         >
           <div
             style={{
-              width: 42, height: 42, borderRadius: 'var(--r-sm)',
-              background: empresaId === 'pml' ? 'rgba(255,255,255,0.06)' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 5, flexShrink: 0,
+              width: 58, height: 58, borderRadius: 'var(--r-sm)',
+              // PML: recuadro BLANCO real (antes era un velo al 6% y el logo se perdía
+              // contra el navy). Marlin: sin recuadro y a todo lo ancho de la caja.
+              background: empresaId === 'pml' ? 'white' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: empresaId === 'pml' ? 5 : 0, flexShrink: 0,
             }}
           >
             <img src={empresaLogo} alt={empresaName} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
