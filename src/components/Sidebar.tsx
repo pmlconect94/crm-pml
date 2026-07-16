@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Icon, type IconName } from './Icon';
+import { Icon } from './Icon';
 import { useAuth } from '@/lib/auth';
+import { MODULOS_POR_EMPRESA } from '@/lib/modulos';
 
 const PROVEEDORES = [
   { id: 'blufin',     label: 'Blufin Seafood',       href: '/app/importaciones/blufin',     enabled: true },
@@ -10,28 +11,8 @@ const PROVEEDORES = [
   { id: 'neptuno',    label: 'Neptuno Seafood',      href: '/app/importaciones/neptuno',    enabled: true },
 ];
 
-type Dept = { id: string; label: string; icon: IconName; href: string; enabled: boolean };
-
-// El menú depende de la EMPRESA ACTIVA: PML es distribuidora (importa y vende) y
-// Marlin es productora (maquila para PML), así que no comparten operación ni menú.
-// `enabled` = el módulo ya existe; los que están en false salen como "PRÓX".
-// Además del flag, el acceso lo decide el rol del usuario (hasDept).
-// Importaciones no va aquí (es solo de PML y se despliega aparte, igual que RH).
-const DEPTS_POR_EMPRESA: Record<'pml' | 'marlin', Dept[]> = {
-  pml: [
-    { id: 'logistica',      label: 'Logística',      icon: 'truck',      href: '/app/logistica',      enabled: false },
-    { id: 'administracion', label: 'Administración', icon: 'building',   href: '/app/administracion', enabled: false },
-    { id: 'ventas',         label: 'Comercial',      icon: 'cart',       href: '/app/ventas',         enabled: false },
-    { id: 'cobranza',       label: 'Cobranza',       icon: 'coins',      href: '/app/cobranza',       enabled: false },
-    { id: 'contabilidad',   label: 'Contabilidad',   icon: 'calculator', href: '/app/contabilidad',   enabled: true  },
-  ],
-  marlin: [
-    { id: 'produccion',     label: 'Producción',     icon: 'package',    href: '/app/produccion',     enabled: false },
-    { id: 'administracion', label: 'Administración', icon: 'building',   href: '/app/administracion', enabled: false },
-    { id: 'ventas',         label: 'Comercial',      icon: 'cart',       href: '/app/ventas',         enabled: false },
-    { id: 'contabilidad',   label: 'Contabilidad',   icon: 'calculator', href: '/app/contabilidad',   enabled: true  },
-  ],
-};
+// Los módulos por empresa viven en lib/modulos (fuente de verdad compartida con
+// el Dashboard). Importaciones y RH se renderizan aparte porque son desplegables.
 
 // Sub-secciones de Recursos Humanos (se despliegan bajo el depto, como los proveedores
 // bajo Importaciones). `end` = solo activo en la ruta exacta (para el índice /app/rh).
@@ -60,9 +41,13 @@ export function Sidebar({ open = false }: { open?: boolean }) {
   const empresaLogo = empresaId === 'pml' ? '/assets/pml-logo-transparent.png' : '/assets/marlin-logo.png';
   const importActiva = location.pathname.startsWith('/app/importaciones');
   const rhActiva = location.pathname.startsWith('/app/rh');
-  // El menú se arma según la empresa activa (Importaciones solo existe en PML).
-  const depts = DEPTS_POR_EMPRESA[empresaId];
   const esMarlin = empresaId === 'marlin';
+  // El menú se arma según la EMPRESA activa y el ROL: solo los departamentos que
+  // el usuario puede ver (antes los "PRÓX" salían para todos, aunque su rol no
+  // los tuviera). Importaciones y RH se rendean aparte por ser desplegables.
+  const depts = MODULOS_POR_EMPRESA[empresaId].filter(
+    (m) => !m.expandible && hasDept(m.id),
+  );
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}${esMarlin ? ' sidebar-marlin' : ''}`}>
@@ -182,7 +167,7 @@ export function Sidebar({ open = false }: { open?: boolean }) {
       )}
 
       {depts.map((d) =>
-        d.enabled && hasDept(d.id) ? (
+        d.enabled ? (
           <NavLink key={d.id} to={d.href} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Icon name={d.icon} size={15} />
             <span>{d.label}</span>

@@ -15,8 +15,17 @@ import { useAuth } from '@/lib/auth';
  * está en la bitácora `crm.audit_log`. Endurecer el RLS por rol es el paso
  * siguiente si se quiere un candado a prueba de API directa.
  */
-export function RequireDept({ dept }: { dept: string }) {
-  const { hasDept } = useAuth();
+export function RequireDept({
+  dept,
+  soloEmpresa,
+}: {
+  dept: string;
+  /** El módulo solo existe en esta empresa (ej. Importaciones es solo de PML).
+   *  Sin esto, con el switcher en Marlin se podía entrar igual por URL. */
+  soloEmpresa?: 'pml' | 'marlin';
+}) {
+  const { hasDept, empresaId } = useAuth();
   if (!hasDept(dept)) return <Navigate to="/app/dashboard" replace />;
+  if (soloEmpresa && empresaId !== soloEmpresa) return <Navigate to="/app/dashboard" replace />;
   return <Outlet />;
 }

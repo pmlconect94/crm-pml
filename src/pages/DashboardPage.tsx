@@ -1,19 +1,28 @@
 import { Link } from 'react-router-dom';
-import { Icon, type IconName } from '@/components/Icon';
+import { Icon } from '@/components/Icon';
 import { PageEnter, Stagger, StaggerItem, SPRING } from '@/components/motion';
 import { useAuth } from '@/lib/auth';
+import { MODULOS_POR_EMPRESA, type Modulo } from '@/lib/modulos';
 
-const MODULOS_PROXIMOS: { icon: IconName; label: string; descripcion: string }[] = [
-  { icon: 'truck',      label: 'Logística',        descripcion: 'Rutas, flota propia y entregas' },
-  { icon: 'cart',       label: 'Ventas',           descripcion: 'Pipeline retail, HORECA, exportación' },
-  { icon: 'coins',      label: 'Cobranza',         descripcion: 'CxC, antigüedad, recordatorios' },
-  { icon: 'calculator', label: 'Contabilidad',     descripcion: 'CxP, CFDI, conciliaciones' },
-  { icon: 'building',   label: 'Administración',   descripcion: 'KPIs, bancos, flujo de caja' },
-  { icon: 'users',      label: 'Recursos Humanos', descripcion: 'Expedientes, nómina, vacaciones' },
-];
-
+/**
+ * Dashboard = punto de entrada personalizado.
+ *
+ * Antes era estático: mostraba lo mismo a todo el mundo (KPIs en "—", una
+ * tarjeta que siempre llevaba a Importaciones aunque estuvieras en Marlin o no
+ * tuvieras el permiso, y anunciaba Contabilidad/RH como "próximos" cuando ya
+ * existían). Ahora se arma de MODULOS_POR_EMPRESA cruzado con el rol (hasDept),
+ * así cada quien ve solo lo suyo en la empresa activa.
+ */
 export function DashboardPage() {
-  const { user } = useAuth();
+  const { user, empresaId, hasDept } = useAuth();
+
+  const empresaNombre =
+    empresaId === 'pml' ? 'Productos Marinos Lizárraga' : 'Marlin Lizárraga';
+
+  // Solo los módulos que existen en esta empresa Y que el rol puede ver.
+  const visibles = MODULOS_POR_EMPRESA[empresaId].filter((m) => hasDept(m.id));
+  const activos = visibles.filter((m) => m.enabled);
+  const proximos = visibles.filter((m) => !m.enabled);
 
   return (
     <>
@@ -21,7 +30,7 @@ export function DashboardPage() {
         <div>
           <h1 className="page-title">Bienvenido, {user?.nombre.split(' ')[0]}</h1>
           <p className="page-subtitle">
-            Resumen ejecutivo de operaciones ·{' '}
+            {empresaNombre} ·{' '}
             {new Date().toLocaleDateString('es-MX', {
               weekday: 'long',
               day: '2-digit',
@@ -32,170 +41,50 @@ export function DashboardPage() {
         </div>
       </PageEnter>
 
-      {/* KPIs — mount instantáneo, son data */}
-      <div className="grid grid-4" style={{ marginBottom: 24 }}>
-        <div className="kpi">
-          <div className="kpi-label">Contenedores en tránsito</div>
-          <div className="kpi-value">—</div>
-          <div className="kpi-delta">Conecta datos para ver KPIs</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">CxP USD próximos 30d</div>
-          <div className="kpi-value">—</div>
-          <div className="kpi-delta">Por venir</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Inventario kg</div>
-          <div className="kpi-value">—</div>
-          <div className="kpi-delta">Por venir</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">TC del día</div>
-          <div className="kpi-value">—</div>
-          <div className="kpi-delta">Integrar Banxico</div>
-        </div>
-      </div>
-
-      {/* Asymmetric layout: CTA principal + lista compacta */}
-      <Stagger
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
-          gap: 16,
-        }}
-        className="dashboard-split"
-      >
-
-        {/* CTA principal — Importaciones */}
-        <StaggerItem whileHover={{ y: -2 }} transition={SPRING.snappy} style={{ minHeight: 240 }}>
-        <Link
-          to="/app/importaciones"
-          className="card card-elevated card-lift"
-          style={{
-            padding: 28,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 18,
-            textDecoration: 'none',
-            color: 'inherit',
-            position: 'relative',
-            overflow: 'hidden',
-            height: '100%',
-          }}
-        >
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              top: -40,
-              right: -40,
-              width: 280,
-              height: 280,
-              background:
-                'radial-gradient(circle at center, rgba(0,115,230,0.08), transparent 65%)',
-              pointerEvents: 'none',
-            }}
-          />
-          <div
-            className="hstack"
-            style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 12,
-                background: 'var(--blue-100)',
-                color: 'var(--blue-500)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon name="ship" size={22} />
-            </div>
-            <span className="badge badge-blue">
-              <span className="dot" /> Activo
-            </span>
-          </div>
-
-          <div style={{ position: 'relative' }}>
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 600,
-                letterSpacing: '-0.02em',
-                marginBottom: 6,
-              }}
-            >
-              Importaciones
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                lineHeight: 1.5,
-                color: 'var(--ink-600)',
-                maxWidth: 440,
-              }}
-            >
-              Contratos, recepciones, pagos al proveedor, notas de crédito y central de costos.
-              3 proveedores · Blufin activo.
+      {activos.length === 0 ? (
+        <div className="card">
+          <div className="empty">
+            <Icon name="lock" size={36} />
+            <div className="empty-title">Sin módulos asignados</div>
+            <p className="muted">
+              Tu usuario todavía no tiene acceso a ningún módulo de {empresaNombre}. Pide a un
+              administrador que te asigne permisos.
             </p>
           </div>
+        </div>
+      ) : (
+        <Stagger
+          className="grid grid-3"
+          style={{ gap: 16, marginBottom: proximos.length > 0 ? 24 : 0 }}
+        >
+          {activos.map((m) => (
+            <StaggerItem key={m.id} whileHover={{ y: -2 }} transition={SPRING.snappy}>
+              <ModuloCard modulo={m} />
+            </StaggerItem>
+          ))}
+        </Stagger>
+      )}
 
+      {proximos.length > 0 && (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div
             style={{
-              marginTop: 'auto',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-end',
-              position: 'relative',
-            }}
-          >
-            <div className="hstack" style={{ gap: 6 }}>
-              <span className="badge badge-gray">Blufin</span>
-              <span className="badge badge-gray">Camanchaca</span>
-              <span className="badge badge-gray">Neptuno</span>
-            </div>
-            <div
-              className="hstack"
-              style={{ gap: 6, color: 'var(--blue-500)', fontSize: 13, fontWeight: 600 }}
-            >
-              Abrir módulo <Icon name="arrow-right" size={14} />
-            </div>
-          </div>
-        </Link>
-        </StaggerItem>
-
-        {/* Lista compacta de próximos módulos */}
-        <StaggerItem className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div
-            style={{
-              padding: '16px 20px',
+              padding: '14px 20px',
               borderBottom: '1px solid var(--ink-100)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
             }}
           >
-            <div>
-              <h3 className="card-title">Próximos módulos</h3>
-              <p className="card-subtitle">Se activan uno a uno</p>
-            </div>
+            <h3 className="card-title">Próximos módulos</h3>
+            <p className="card-subtitle">Se activan uno a uno</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {MODULOS_PROXIMOS.map((m, i) => (
+            {proximos.map((m, i) => (
               <div
-                key={m.label}
+                key={m.id}
+                className="hstack"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
                   gap: 12,
                   padding: '12px 20px',
-                  borderBottom:
-                    i < MODULOS_PROXIMOS.length - 1 ? '1px solid var(--ink-100)' : 'none',
+                  borderBottom: i < proximos.length - 1 ? '1px solid var(--ink-100)' : 'none',
                   opacity: 0.62,
                 }}
               >
@@ -215,38 +104,90 @@ export function DashboardPage() {
                   <Icon name={m.icon} size={15} />
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--ink-800)',
-                      lineHeight: 1.3,
-                    }}
-                  >
+                  <div className="fw-600" style={{ fontSize: 13, color: 'var(--ink-800)' }}>
                     {m.label}
                   </div>
                   <div className="text-xs muted" style={{ marginTop: 1 }}>
                     {m.descripcion}
                   </div>
                 </div>
-                <span
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: 'var(--ink-500)',
-                    letterSpacing: '0.08em',
-                    background: 'var(--ink-100)',
-                    padding: '3px 7px',
-                    borderRadius: 4,
-                  }}
-                >
-                  SOON
+                <span className="nav-prox" style={{ color: 'var(--ink-500)', borderColor: 'var(--ink-200)' }}>
+                  PRÓX
                 </span>
               </div>
             ))}
           </div>
-        </StaggerItem>
-      </Stagger>
+        </div>
+      )}
     </>
+  );
+}
+
+/** Tarjeta de un módulo activo (clicable). */
+function ModuloCard({ modulo }: { modulo: Modulo }) {
+  return (
+    <Link
+      to={modulo.href}
+      className="card card-elevated card-lift"
+      style={{
+        padding: 22,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+        textDecoration: 'none',
+        color: 'inherit',
+        height: '100%',
+        minHeight: 168,
+      }}
+    >
+      <div className="hstack" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 10,
+            background: 'var(--blue-100)',
+            color: 'var(--blue-500)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Icon name={modulo.icon} size={20} />
+        </div>
+        <span className="badge badge-blue">
+          <span className="dot" /> Activo
+        </span>
+      </div>
+
+      <div>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em' }}>
+          {modulo.label}
+        </h2>
+        <p
+          style={{
+            margin: '4px 0 0',
+            fontSize: 12.5,
+            lineHeight: 1.5,
+            color: 'var(--ink-600)',
+          }}
+        >
+          {modulo.descripcion}
+        </p>
+      </div>
+
+      <div
+        className="hstack"
+        style={{
+          marginTop: 'auto',
+          gap: 6,
+          color: 'var(--blue-500)',
+          fontSize: 13,
+          fontWeight: 600,
+        }}
+      >
+        Abrir módulo <Icon name="arrow-right" size={14} />
+      </div>
+    </Link>
   );
 }

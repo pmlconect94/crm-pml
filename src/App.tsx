@@ -68,7 +68,7 @@ export default function App() {
         <Route path="dashboard" element={<DashboardPage />} />
 
         {/* Importaciones */}
-        <Route path="importaciones" element={<RequireDept dept="importaciones" />}>
+        <Route path="importaciones" element={<RequireDept dept="importaciones" soloEmpresa="pml" />}>
           <Route index element={<ImportacionesPickerPage />} />
 
           {/* Blufin */}

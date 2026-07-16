@@ -34,9 +34,11 @@ export type Usuario = {
   capturar: boolean;
 };
 
+// Los ids deben coincidir con los de MODULOS_POR_EMPRESA (lib/modulos).
+// 'produccion' es de Marlin (maquila); los demás son de PML o compartidos.
 export const PERMISOS: Record<Rol, { depts: string[] }> = {
-  admin_total:     { depts: ['importaciones','logistica','administracion','ventas','cobranza','contabilidad','rh'] },
-  director_ops:    { depts: ['importaciones','logistica','administracion','rh'] },
+  admin_total:     { depts: ['importaciones','produccion','logistica','administracion','ventas','cobranza','contabilidad','rh'] },
+  director_ops:    { depts: ['importaciones','produccion','logistica','administracion','rh'] },
   coord_logistica: { depts: ['importaciones','logistica'] },
   // Decisión del usuario 2026-07-16: el gerente de RH ve SOLO Recursos Humanos
   // por ahora (antes traía también 'administracion').
