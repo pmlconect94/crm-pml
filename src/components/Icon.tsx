@@ -45,6 +45,8 @@ import {
   Printer,
   ExternalLink,
   Menu,
+  Lock,
+  UserPlus,
   type LucideProps,
 } from 'lucide-react';
 
@@ -57,6 +59,8 @@ const ICONS = {
   coins: HandCoins,
   calculator: Calculator,
   users: Users,
+  'user-plus': UserPlus,
+  lock: Lock,
   building: Building2,
   'chevron-down': ChevronDown,
   'chevron-right': ChevronRight,

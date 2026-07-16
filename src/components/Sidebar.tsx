@@ -20,8 +20,8 @@ const DEPTS: { id: string; label: string; icon: IconName; href: string }[] = [
 ];
 
 const EMPRESAS = [
-  { id: 'pml' as const,    name: 'Productos Marinos Lizárraga', sub: 'PML — Distribuidora',        disabled: false },
-  { id: 'marlin' as const, name: 'Marlin Lizárraga',            sub: 'Productora · Próximamente',  disabled: true  },
+  { id: 'pml' as const,    name: 'Productos Marinos Lizárraga', sub: 'PML — Distribuidora', disabled: false },
+  { id: 'marlin' as const, name: 'Marlin Lizárraga',            sub: 'Productora',          disabled: false },
 ];
 
 export function Sidebar({ open = false }: { open?: boolean }) {

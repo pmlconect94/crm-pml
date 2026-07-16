@@ -48,6 +48,13 @@ import { NeptunoCalendarioPage } from '@/pages/neptuno/NeptunoCalendarioPage';
 import { NeptunoProductosPage } from '@/pages/neptuno/NeptunoProductosPage';
 // Contabilidad
 import { ContabilidadFacturasPage } from '@/pages/contabilidad/ContabilidadFacturasPage';
+// RH / Nómina
+import { RhLayout } from '@/pages/rh/RhLayout';
+import { DashboardPage as RhDashboardPage } from '@/pages/rh/DashboardPage';
+import { EmpleadosPage } from '@/pages/rh/EmpleadosPage';
+import { NominasPage } from '@/pages/rh/NominasPage';
+import { NominaDetallePage } from '@/pages/rh/NominaDetallePage';
+import { PrestamosPage } from '@/pages/rh/PrestamosPage';
 
 export default function App() {
   return (
@@ -129,7 +136,16 @@ export default function App() {
         <Route path="ventas" element={<PlaceholderPage title="Ventas" subtitle="Próximamente" />} />
         <Route path="cobranza" element={<PlaceholderPage title="Cobranza" subtitle="Próximamente" />} />
         <Route path="contabilidad" element={<ContabilidadFacturasPage />} />
-        <Route path="rh" element={<PlaceholderPage title="Recursos Humanos" subtitle="Próximamente" />} />
+
+        {/* RH / Nómina (PML + Marlin; la empresa activa viene del switcher del Sidebar) */}
+        <Route path="rh" element={<RhLayout />}>
+          <Route index element={<RhDashboardPage />} />
+          <Route path="nominas" element={<NominasPage />} />
+          <Route path="nominas/:semanaId" element={<NominaDetallePage />} />
+          <Route path="empleados" element={<EmpleadosPage />} />
+          <Route path="prestamos" element={<PrestamosPage />} />
+          <Route path="vacaciones" element={<PlaceholderPage title="Vacaciones" subtitle="Próximamente (fase F4)" />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
