@@ -95,13 +95,14 @@ function ReciboModal({ d, onClose }: { d: any; onClose: () => void }) {
               <Linea label={`Retardos (${(c.totalRetHrs || 0).toFixed(2)}h)`} value={c.retardoMonto} neg />
               <Linea label="Préstamos" value={c.prestDesc} neg />
               <Linea label="Descuento de producto" value={c.descuentoProducto} neg />
-              {/* PML: el comedor SÍ baja el depósito fiscal → se muestra como renglón para que el
-                  total cuadre. Marlin: no baja el depósito (cae al efectivo) → se aclara al pie. */}
-              {!c.esMarlin && c.comedor > 0 && <Linea label="Comedor" value={c.comedor} neg />}
+              {/* El comedor baja el depósito fiscal en PML y Marlin SEMANAL → renglón para que el
+                  total cuadre. Marlin QUINCENAL: no baja el depósito (cae al efectivo) → nota al pie.
+                  El flag comedorAlEfectivo viene de calc.ts (única fuente de la regla). */}
+              {!c.comedorAlEfectivo && c.comedor > 0 && <Linea label="Comedor" value={c.comedor} neg />}
               <Linea label="ISR" value={c.isr} neg />
               <Linea label="IMSS" value={c.imss} neg />
               <Linea label="Depósito fiscal (calculado)" value={c.depositoFiscal} bold />
-              {c.esMarlin && c.comedor > 0 && (
+              {c.comedorAlEfectivo && c.comedor > 0 && (
                 <div className="text-xs muted" style={{ padding: '4px 0' }}>
                   El comedor ({fmt(c.comedor)}) NO se resta del depósito; se descuenta del efectivo.
                 </div>

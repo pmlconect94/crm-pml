@@ -1711,10 +1711,14 @@ dispersión Banorte…). **Leerlo antes de tocar `lib/nomina/calc.ts`.** Lo más
 - El **switch Real/Fiscal** (solo Marlin, `empleados.usar_sueldo_real`) **manda TODO el modelo**;
   el **Alta IMSS** solo decide la distribución del pago. No confundirlos (ya se rompió una vez).
 - El **depósito al banco SIEMPRE va sobre el sueldo fiscal**; la diferencia real−fiscal cae al efectivo.
-- **Comedor en el depósito fiscal — DEPENDE DE LA EMPRESA** (decisión del usuario 2026-07-17):
-  en **PML** el comedor **SÍ baja el depósito fiscal** (deducción normal al banco); en **Marlin NO**
-  lo baja → cae al **efectivo** (el depósito no lo absorbe; el efectivo baja lo mismo, el neto total
-  no cambia). En `calc.ts`: `dedDeposito = esMarlin ? (dedTotalesFiscal - comedor) : dedTotalesFiscal`.
+- **Comedor en el depósito fiscal — DEPENDE DE EMPRESA + TIPO** (decisión del usuario 2026-07-17,
+  afinada el mismo día): en **PML (semanal y quincenal) y MARLIN SEMANAL** el comedor **SÍ baja el
+  depósito fiscal** (deducción normal al banco); **solo en MARLIN QUINCENAL NO** lo baja → cae al
+  **efectivo** (el depósito no lo absorbe; el efectivo baja lo mismo, el neto total no cambia).
+  En `calc.ts`: `comedorAlEfectivo = esMarlin && tipo === 'quincenal'` y
+  `dedDeposito = comedorAlEfectivo ? (dedTotalesFiscal - comedor) : dedTotalesFiscal`. El flag
+  `comedorAlEfectivo` se expone en el return y lo usan el recibo (`TabResumen`) y `TabFiscal.depFiscalDe`
+  (que devuelve el comedor al depósito cuando aplica) — **una sola fuente de la regla**.
 
 > **🐛 Bug corregido 2026-07-17 (discrepancia Fiscal vs Resumen en PML).** El usuario reportó que en
 > una nómina PML el **depósito a banco NO cuadraba entre la pestaña Fiscal y el Resumen**. Causa: había

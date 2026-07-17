@@ -26,11 +26,15 @@ export function TabFiscal({ calcData, nominas, canEdit, onChanged }: any) {
   }
 
   // Depósito fiscal calculado EN VIVO (usa ISR/IMSS actuales de la tabla).
+  // MISMA regla del comedor que calc.ts (flag comedorAlEfectivo): en Marlin QUINCENAL el
+  // comedor NO baja el depósito (se regresa, cae al efectivo); en PML y Marlin semanal SÍ
+  // baja (totalDed ya lo incluye). Si esta fórmula cambia, cambiar también calc.ts (§18.6).
   const depFiscalDe = (e: any, c: any) => {
     const isr = getNum(e.id, 'isr'), imss = getNum(e.id, 'imss');
     // Marlin FISCAL: depósito por días trabajados en fiscal (asistencia+séptimo fiscales); PML/Real, fiscal completo.
     const sueldoDep = c.usaFiscalBase ? (c.asistMontoFiscal + c.septimoFiscal) : c.sueldoFiscalPeriodo;
-    return sueldoDep + c.vales + c.prevSocial - (c.totalDed + isr + imss);
+    const comedorDevuelto = c.comedorAlEfectivo ? c.comedor : 0;
+    return sueldoDep + c.vales + c.prevSocial - (c.totalDed + isr + imss) + comedorDevuelto;
   };
   // Depósito corregido mostrado: el capturado, o el fiscal por defecto.
   const corregidoDe = (e: any, c: any) => {

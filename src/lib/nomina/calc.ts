@@ -145,12 +145,15 @@ export function calcularNomina(empleado: any, nomina: any, asistencias: any[], i
   const imss = parseFloat(nomina?.imss || 0);
   // Todas las deducciones (las del neto + ISR e IMSS). Sirve para el NETO (modelo fiscal).
   const dedTotalesFiscal = totalDed + isr + imss;
-  // COMEDOR en el DEPÓSITO fiscal — depende de la EMPRESA (decisión del usuario 2026-07-16):
-  //  - PML: el comedor SÍ baja el depósito fiscal (deducción normal al banco). Así el depósito
-  //    del Resumen coincide con el que muestra la pestaña Fiscal (que ya lo restaba).
-  //  - MARLIN: queda como estaba → el comedor NO baja el depósito, cae al EFECTIVO (el depósito
-  //    no lo absorbe; el efectivo baja lo mismo, el neto total no cambia).
-  const dedDeposito = esMarlin ? (dedTotalesFiscal - comedor) : dedTotalesFiscal;
+  // COMEDOR en el DEPÓSITO fiscal — depende de EMPRESA + TIPO (decisión del usuario 2026-07-17):
+  //  - PML (semanal y quincenal) y MARLIN SEMANAL: el comedor SÍ baja el depósito fiscal
+  //    (deducción normal al banco).
+  //  - MARLIN QUINCENAL (única excepción): el comedor NO baja el depósito → cae al EFECTIVO
+  //    (el depósito no lo absorbe; el efectivo baja lo mismo, el neto total no cambia).
+  // OJO: la pestaña Fiscal (TabFiscal.depFiscalDe) replica esta misma regla — si se cambia
+  // aquí, cambiarla allá también (ver lección en CLAUDE.md §18.6).
+  const comedorAlEfectivo = esMarlin && tipo === 'quincenal';
+  const dedDeposito = comedorAlEfectivo ? (dedTotalesFiscal - comedor) : dedTotalesFiscal;
 
   // NETO A PAGAR — depende del SWITCH (Marlin) / empresa:
   //  - Modo PML / Marlin REAL: percepciones − deducciones (vales/previsión y ISR/IMSS NO entran al
@@ -189,7 +192,7 @@ export function calcularNomina(empleado: any, nomina: any, asistencias: any[], i
     asistMonto, septimo, asistMontoFiscal, septimoFiscal, tieneSeptimoCorr, te, teRetro, teRetroHrs, primaFiscal, primaEfectivo,
     incentivos, retardoMonto, prestDesc, descuentoProducto: descuentoProducto || 0, bono: bono || 0,
     retroactivo: retroactivo || 0, retroactivoTotal: (retroactivo || 0) + teRetro,
-    totalPerc, totalDed, neto, esMarlin, modeloMarlin,
+    totalPerc, totalDed, neto, esMarlin, modeloMarlin, comedorAlEfectivo,
     depositoFiscal, depositoCorregido, tieneCorregido,
     deposito: depositoCorregido, // compat: "depósito total" = el corregido (o el fiscal por defecto)
     depositoBanco, efectivo, puroEfectivo,
