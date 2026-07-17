@@ -110,7 +110,17 @@ export function Sidebar({ open = false }: { open?: boolean }) {
                   <button
                     key={e.id}
                     disabled={e.disabled}
-                    onClick={() => { if (!e.disabled) { setEmpresa(e.id); setEmpOpen(false); } }}
+                    onClick={() => {
+                      if (e.disabled) return;
+                      setEmpOpen(false);
+                      if (e.id === empresaId) return; // misma empresa: no hacer nada
+                      setEmpresa(e.id);
+                      // Al cambiar de empresa SIEMPRE se aterriza en el dashboard de la nueva
+                      // (decisión del usuario 2026-07-17): si te quedas parado en el módulo donde
+                      // estabas (p. ej. capturando una nómina de PML), los datos cambian de empresa
+                      // debajo de ti y se revuelven las capturas.
+                      navigate('/app/dashboard');
+                    }}
                     style={{
                       width: '100%', padding: '8px 12px', textAlign: 'left', border: 'none', color: 'white',
                       background: empresaId === e.id ? 'rgba(0,115,230,0.16)' : 'transparent',
