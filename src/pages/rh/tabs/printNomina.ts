@@ -237,12 +237,16 @@ function bodyFiscal(calcData: any[], semana: any): string {
   // Es el mismo para toda la nómina (depende solo del tipo); se muestra por fila
   // para que la persona de fiscal lo vea junto a los días de séptimo.
   const factorSeptimo = semana?.tipo === 'quincenal' ? '2/13' : '1/6';
+  // MARLIN: columna extra "Previsión social" (prorrateada, c.prevSocial) junto a Vales
+  // (pedido del usuario 2026-07-17). PML conserva su reporte sin la columna.
+  const esMarlin = semana?.empresa === 'MARLIN';
   const fila = (d: any) => {
     const e = d.empleado, c = d.calc;
     return `<tr>
       <td class="mono">${esc(nomexLabel(e))}</td>
       <td>${esc(e.nombre)}</td>
       <td class="r mono">${c.valesPago ? m(c.valesPago) : '—'}</td>
+      ${esMarlin ? `<td class="r mono">${c.prevSocial ? m(c.prevSocial) : '—'}</td>` : ''}
       <td class="r mono">${c.depositoBanco ? m(c.depositoBanco) : '—'}</td>
       <td class="r mono">${nd(c.diasA || 0)}</td>
       <td class="r mono">${nd(septDias(c))}</td>
@@ -256,15 +260,15 @@ function bodyFiscal(calcData: any[], semana: any): string {
   };
   const tot = data.reduce((a: any, d: any) => {
     const c = d.calc;
-    a.vales += c.valesPago || 0; a.banco += c.depositoBanco || 0;
+    a.vales += c.valesPago || 0; a.prev += c.prevSocial || 0; a.banco += c.depositoBanco || 0;
     a.asis += c.diasA || 0; a.sept += septDias(c);
     a.inf += c.infonavit || 0; a.com += c.comedor || 0; a.ret += c.retardoMonto || 0; a.prest += c.prestDesc || 0; a.dp += c.descuentoProducto || 0;
     return a;
-  }, { vales: 0, banco: 0, asis: 0, sept: 0, inf: 0, com: 0, ret: 0, prest: 0, dp: 0 });
+  }, { vales: 0, prev: 0, banco: 0, asis: 0, sept: 0, inf: 0, com: 0, ret: 0, prest: 0, dp: 0 });
   return `<table>
-    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th class="r">Vales</th><th class="r">Dep. Banco</th><th class="r">Asistencia</th><th class="r">Séptimo día</th><th class="r">Séptimo (dom.) · factor</th><th class="r">Infonavit</th><th class="r">Comedor</th><th class="r">Retardos</th><th class="r">Préstamo</th><th class="r">Desc. Producto</th></tr></thead>
+    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th class="r">Vales</th>${esMarlin ? '<th class="r">Previsión social</th>' : ''}<th class="r">Dep. Banco</th><th class="r">Asistencia</th><th class="r">Séptimo día</th><th class="r">Séptimo (dom.) · factor</th><th class="r">Infonavit</th><th class="r">Comedor</th><th class="r">Retardos</th><th class="r">Préstamo</th><th class="r">Desc. Producto</th></tr></thead>
     <tbody>${data.map(fila).join('')}</tbody>
-    <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td><td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${factorSeptimo}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
+    <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td>${esMarlin ? `<td class="r mono">${m(tot.prev)}</td>` : ''}<td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${factorSeptimo}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
   </table>
   <p class="muted" style="font-size:10px;margin-top:8px"><strong>Asistencia y Séptimo día van en número de días</strong> (no en dinero): semana completa = 6 y 1. <strong>Séptimo (dom.) · factor</strong> = ${factorSeptimo} (${semana?.tipo === 'quincenal' ? 'quincenal' : 'semanal'}). Dep. Banco = solo banco (los vales/toka van en su columna).</p>`;
 }
