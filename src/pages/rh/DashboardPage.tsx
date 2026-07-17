@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { fmt, MESES } from '@/lib/nomina/format';
 import { PageEnter } from '@/components/motion';
+import { Icon } from '@/components/Icon';
 import { useAuth } from '@/lib/nomina/auth';
 import { useEmpresa } from '@/lib/nomina/empresas';
+import { descargarXLSX } from './tabs/printNomina';
+
+const COSTO_COMEDOR = 30;
 
 /* ───────────────────────── helpers ───────────────────────── */
 const N = (v: any) => Number(v) || 0;
@@ -18,7 +22,7 @@ const mesLabel = (k: string) => {
 type Emp = { id: string; nombre: string; id_banco: number | null; activo: boolean };
 type Asis = { fecha: string; codigo: string | null; te_horas: any; te_motivo: string | null; retardo_min: any; nomina_id: string };
 type Viaje = { fecha: string; destino: string | null; chofer_id: string | null; acompanante_id: string | null; retroactivo: boolean };
-type Comida = { fecha: string; empleado_id: string };
+type Comida = { fecha: string; empleado_id: string; cantidad?: number | null };
 type Prestamo = { empleado_id: string; monto: any; saldo: any; activo: boolean };
 
 /* ─────────────── barra horizontal (ranking) ─────────────── */
@@ -44,13 +48,16 @@ function BarList({ items, color, unit = '', empty = 'Sin datos este mes.' }: {
   );
 }
 
-function SectionCard({ title, hint, children, style }: { title: string; hint?: string; children: any; style?: any }) {
+function SectionCard({ title, hint, children, style, action }: { title: string; hint?: string; children: any; style?: any; action?: any }) {
   return (
     <div className="card" style={style}>
       <div className="card-body">
-        <div style={{ marginBottom: 14 }}>
-          <div className="fw-700" style={{ fontSize: 14, letterSpacing: '-0.01em' }}>{title}</div>
-          {hint && <div className="text-xs muted" style={{ marginTop: 2 }}>{hint}</div>}
+        <div className="hstack" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+          <div>
+            <div className="fw-700" style={{ fontSize: 14, letterSpacing: '-0.01em' }}>{title}</div>
+            {hint && <div className="text-xs muted" style={{ marginTop: 2 }}>{hint}</div>}
+          </div>
+          {action}
         </div>
         {children}
       </div>
@@ -79,7 +86,7 @@ export function DashboardPage() {
         dbNomina.from('nominas').select('id,empleado_id'),
         dbNomina.from('asistencias').select('fecha,codigo,te_horas,te_motivo,retardo_min,nomina_id'),
         dbNomina.from('viajes').select('fecha,destino,chofer_id,acompanante_id,retroactivo'),
-        dbNomina.from('comedor_registro').select('fecha,empleado_id'),
+        dbNomina.from('comedor_registro').select('fecha,empleado_id,cantidad'),
         dbNomina.from('prestamos').select('empleado_id,monto,saldo,activo').eq('activo', true),
       ]);
       // Solo datos de los empleados de esta empresa.
@@ -197,6 +204,57 @@ export function DashboardPage() {
   const activos = emps.filter((e) => e.activo).length;
   const saldoPrestamos = prestamos.reduce((s, p) => s + N(p.saldo), 0);
 
+  // ── Exportar Excel del mes seleccionado ──
+  const fmtDia = (f: string) => { const d = new Date(f + 'T12:00:00'); return `${d.getDate()}/${d.getMonth() + 1}`; };
+
+  // Comedor: matriz empleados × días que comieron (cantidad por día) + total y monto.
+  function exportComedor() {
+    const comMes = comidas.filter((c) => mesKey(c.fecha) === mes);
+    if (!comMes.length) { alert(`No hay registros de comedor en ${mesLabel(mes)}.`); return; }
+    const fechas = Array.from(new Set(comMes.map((c) => c.fecha))).sort();
+    const porEmp = new Map<string, Map<string, number>>();
+    comMes.forEach((c) => {
+      const m = porEmp.get(c.empleado_id) ?? new Map<string, number>();
+      m.set(c.fecha, (m.get(c.fecha) || 0) + (N(c.cantidad) || 1));
+      porEmp.set(c.empleado_id, m);
+    });
+    const empIds = [...porEmp.keys()].sort((a, b) => nombre(a).localeCompare(nombre(b)));
+    const totalPorFecha: Record<string, number> = {};
+    let gran = 0;
+    const aoa: (string | number)[][] = [['Empleado', ...fechas.map(fmtDia), 'Total comidas', 'Monto']];
+    empIds.forEach((id) => {
+      const m = porEmp.get(id)!;
+      let tot = 0;
+      const row: (string | number)[] = [nombre(id)];
+      fechas.forEach((f) => { const c = m.get(f) || 0; row.push(c || ''); tot += c; totalPorFecha[f] = (totalPorFecha[f] || 0) + c; });
+      row.push(tot, Math.round(tot * COSTO_COMEDOR * 100) / 100);
+      gran += tot;
+      aoa.push(row);
+    });
+    aoa.push(['TOTAL', ...fechas.map((f) => totalPorFecha[f] || 0), gran, Math.round(gran * COSTO_COMEDOR * 100) / 100]);
+    descargarXLSX(aoa, 'Comedor', `comedor_${empresa}_${mes}.xlsx`);
+  }
+
+  // Incidencias: matriz empleados × tipo de incidencia (del mes) con su valor.
+  function exportIncidencias() {
+    const nombres = new Set<string>();
+    tiles.forEach((t) => t.list.forEach((p: any) => nombres.add(p.nombre)));
+    if (!nombres.size) { alert(`No hay incidencias en ${mesLabel(mes)}.`); return; }
+    const aoa: (string | number)[][] = [['Empleado', ...tiles.map((t) => `${t.label}${t.unit ? ` (${t.unit})` : ''}`)]];
+    [...nombres].sort((a, b) => a.localeCompare(b)).forEach((nom) => {
+      const row: (string | number)[] = [nom];
+      tiles.forEach((t) => { const f = t.list.find((p: any) => p.nombre === nom); row.push(f ? f.value : 0); });
+      aoa.push(row);
+    });
+    descargarXLSX(aoa, 'Incidencias', `incidencias_${empresa}_${mes}.xlsx`);
+  }
+
+  const btnExcel = (onClick: () => void) => (
+    <button className="btn btn-outline btn-sm" onClick={onClick} disabled={!mes} title="Descargar Excel del mes">
+      <Icon name="download" size={13} /> Excel
+    </button>
+  );
+
   return (
     <PageEnter>
       <div className="page-header" style={{ alignItems: 'flex-end' }}>
@@ -218,7 +276,7 @@ export function DashboardPage() {
       ) : (
         <div className="vstack" style={{ gap: 16 }}>
           {/* ───── Incidencias del mes (tiles + detalle desplegable) ───── */}
-          <SectionCard title="Incidencias del mes" hint={`${mesLabel(mes)} · pulsa una tarjeta para ver quién`}>
+          <SectionCard title="Incidencias del mes" hint={`${mesLabel(mes)} · pulsa una tarjeta para ver quién`} action={btnExcel(exportIncidencias)}>
             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
               {tiles.map((t) => {
                 const open = detalle === t.key;
@@ -281,7 +339,7 @@ export function DashboardPage() {
             <SectionCard title="Motivos de horas extra" hint={`${nh(data.teTot)} h en total`}>
               <BarList items={data.motivos} color="var(--violet-500)" unit="h" />
             </SectionCard>
-            <SectionCard title="Comedor" hint={`${mesLabel(mes)}`}>
+            <SectionCard title="Comedor" hint={`${mesLabel(mes)}`} action={btnExcel(exportComedor)}>
               <div className="hstack" style={{ gap: 24, alignItems: 'center', height: '100%', minHeight: 80 }}>
                 <div className="vstack" style={{ gap: 2 }}>
                   <span style={{ fontSize: 34, fontWeight: 700, lineHeight: 1, color: 'var(--ink-900)', fontVariantNumeric: 'tabular-nums' }}>{data.comidasTot}</span>

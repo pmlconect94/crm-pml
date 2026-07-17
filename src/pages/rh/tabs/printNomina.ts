@@ -4,7 +4,7 @@ import { supabase, dbNomina } from '@/lib/nomina/db';
 import { getEmpresa } from '@/lib/nomina/empresas';
 
 // Genera y descarga un .xlsx a partir de una matriz [filas][columnas].
-function descargarXLSX(aoa: (string | number)[][], sheetName: string, filename: string) {
+export function descargarXLSX(aoa: (string | number)[][], sheetName: string, filename: string) {
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
