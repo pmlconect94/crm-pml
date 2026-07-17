@@ -145,10 +145,12 @@ export function calcularNomina(empleado: any, nomina: any, asistencias: any[], i
   const imss = parseFloat(nomina?.imss || 0);
   // Todas las deducciones (las del neto + ISR e IMSS). Sirve para el NETO (modelo fiscal).
   const dedTotalesFiscal = totalDed + isr + imss;
-  // MARLIN: el COMEDOR se descuenta del NETO/general pero NO del DEPÓSITO fiscal → cae al EFECTIVO.
-  // Así el depósito al banco NO absorbe el comedor (sube por ese monto) y el efectivo baja lo mismo:
-  // se compensa (neto total no cambia). El resto de deducciones sí bajan el depósito.
-  const dedDeposito = dedTotalesFiscal - comedor;
+  // COMEDOR en el DEPÓSITO fiscal — depende de la EMPRESA (decisión del usuario 2026-07-16):
+  //  - PML: el comedor SÍ baja el depósito fiscal (deducción normal al banco). Así el depósito
+  //    del Resumen coincide con el que muestra la pestaña Fiscal (que ya lo restaba).
+  //  - MARLIN: queda como estaba → el comedor NO baja el depósito, cae al EFECTIVO (el depósito
+  //    no lo absorbe; el efectivo baja lo mismo, el neto total no cambia).
+  const dedDeposito = esMarlin ? (dedTotalesFiscal - comedor) : dedTotalesFiscal;
 
   // NETO A PAGAR — depende del SWITCH (Marlin) / empresa:
   //  - Modo PML / Marlin REAL: percepciones − deducciones (vales/previsión y ISR/IMSS NO entran al
