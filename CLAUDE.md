@@ -1711,6 +1711,29 @@ dispersión Banorte…). **Leerlo antes de tocar `lib/nomina/calc.ts`.** Lo más
 - El **switch Real/Fiscal** (solo Marlin, `empleados.usar_sueldo_real`) **manda TODO el modelo**;
   el **Alta IMSS** solo decide la distribución del pago. No confundirlos (ya se rompió una vez).
 - El **depósito al banco SIEMPRE va sobre el sueldo fiscal**; la diferencia real−fiscal cae al efectivo.
+- **Comedor en el depósito fiscal — DEPENDE DE LA EMPRESA** (decisión del usuario 2026-07-17):
+  en **PML** el comedor **SÍ baja el depósito fiscal** (deducción normal al banco); en **Marlin NO**
+  lo baja → cae al **efectivo** (el depósito no lo absorbe; el efectivo baja lo mismo, el neto total
+  no cambia). En `calc.ts`: `dedDeposito = esMarlin ? (dedTotalesFiscal - comedor) : dedTotalesFiscal`.
+
+> **🐛 Bug corregido 2026-07-17 (discrepancia Fiscal vs Resumen en PML).** El usuario reportó que en
+> una nómina PML el **depósito a banco NO cuadraba entre la pestaña Fiscal y el Resumen**. Causa: había
+> **dos caminos de cálculo del depósito que trataban el comedor distinto**:
+> - `lib/nomina/calc.ts` (lo que usa el **Resumen** y la dispersión real) restaba el comedor con
+>   `dedDeposito = dedTotalesFiscal - comedor` **para TODOS** → el comedor NO bajaba el depósito (regla
+>   que era **solo de Marlin**, aplicada por error también a PML).
+> - `TabFiscal.tsx` (`depFiscalDe`, lo que muestra la **pestaña Fiscal**) restaba el comedor vía
+>   `totalDed` (que lo incluye) → el comedor SÍ bajaba el depósito.
+>
+> Resultado: en PML, con comedor > 0 + Alta IMSS + sin `deposito_corregido` manual, el depósito del
+> **Resumen salía exactamente `$comedor` MÁS ALTO** que el de la pestaña Fiscal. **NO era cruce con
+> Marlin** (el cálculo ya usa `empleado.empresa` por persona y la nómina solo carga empleados de su
+> empresa). Arreglo: (1) `calc.ts` gatea la resta del comedor a Marlin (commit `5afca89`); (2) el
+> **recibo del Resumen** (`TabResumen`) quedó inconsistente — no mostraba el comedor como renglón (el
+> total "saltaba" $comedor sin explicar) y la nota al pie seguía diciendo "el comedor NO se resta del
+> depósito"; se hizo empresa-aware: **PML** muestra el renglón "Comedor" (−monto) en la parte fiscal y
+> **Marlin** conserva la nota (commit `45e9e67`). **Lección:** el depósito se calcula en DOS lugares
+> (`calc.ts` y `TabFiscal.depFiscalDe`) — si se toca la fórmula, revisar los dos o se desincronizan.
 
 ### 18.7 Estado y pendientes (2026-07-16)
 
