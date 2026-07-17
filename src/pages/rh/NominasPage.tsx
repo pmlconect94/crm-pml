@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
@@ -72,6 +72,39 @@ export function NominasPage() {
 
   const lista = filtro === 'todas' ? semanas : semanas.filter((s) => s.status === filtro);
 
+  // Agrupadas por mes (YYYY-MM). `lista` ya viene ordenada por fecha_inicio DESC,
+  // así que los meses salen del más reciente al más viejo.
+  const porMes = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const s of lista) {
+      const key = (s.fecha_inicio ?? '').slice(0, 7);
+      (map.get(key) ?? map.set(key, []).get(key)!).push(s);
+    }
+    return Array.from(map.entries());
+  }, [lista]);
+
+  // Colapsable por mes: por default se abre el mes más reciente (idx 0) y los
+  // demás quedan cerrados. En cuanto el usuario toca uno, manda su selección.
+  const [expandido, setExpandido] = useState<Set<string> | null>(null);
+  const estaAbierto = (key: string, idx: number) => (expandido ? expandido.has(key) : idx === 0);
+  const toggleMes = (key: string) => {
+    setExpandido((prev) => {
+      const base = new Set(prev ?? (porMes[0] ? [porMes[0][0]] : []));
+      base.has(key) ? base.delete(key) : base.add(key);
+      return base;
+    });
+  };
+  const mesLabel = (key: string) => {
+    const [y, m] = key.split('-');
+    return `${MESES[Number(m) - 1] ?? ''} ${y}`;
+  };
+  // Color por tipo, MUY tenue: solo diferencia semanal (azul) vs quincenal
+  // (violeta) sin resaltar. La franja izquierda es el diferenciador.
+  const tipoColor = (t: string) =>
+    t === 'semanal'
+      ? { accent: 'var(--blue-500)', tint: 'color-mix(in srgb, var(--blue-500) 5%, white)', soft: 'var(--blue-100)' }
+      : { accent: 'var(--violet-500)', tint: 'color-mix(in srgb, var(--violet-500) 6%, white)', soft: 'color-mix(in srgb, var(--violet-500) 15%, white)' };
+
   return (
     <PageEnter>
       <div className="page-header">
@@ -88,24 +121,66 @@ export function NominasPage() {
         ))}
       </div>
 
+      {/* Leyenda de colores por tipo */}
+      {lista.length > 0 && (
+        <div className="hstack" style={{ gap: 14, marginBottom: 10, fontSize: 11, color: 'var(--ink-500)' }}>
+          <span className="hstack" style={{ gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--blue-500)', opacity: 0.8 }} /> Semanal</span>
+          <span className="hstack" style={{ gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--violet-500)', opacity: 0.8 }} /> Quincenal</span>
+        </div>
+      )}
+
       <div className="vstack" style={{ gap: 10 }}>
         {lista.length === 0 && <div className="card"><div className="empty"><div className="empty-title">No hay nóminas</div></div></div>}
-        {lista.map((s) => (
-          <div key={s.id} className="card clickable" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => navigate(`/app/rh/nominas/${s.id}`)}>
-            <div className="hstack" style={{ gap: 14 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 'var(--r-md)', background: 'var(--blue-100)', color: 'var(--blue-500)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="file-text" size={18} /></div>
-              <div>
-                <div className="fw-600">{fmtPeriodo(s.fecha_inicio, s.fecha_fin)}</div>
-                <div className="text-xs muted" style={{ textTransform: 'capitalize' }}>{s.tipo}</div>
-              </div>
+        {porMes.map(([mesKey, items], idx) => {
+          const abierto = estaAbierto(mesKey, idx);
+          const nSem = items.filter((x) => x.tipo === 'semanal').length;
+          const nQui = items.length - nSem;
+          return (
+            <div key={mesKey} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <button
+                onClick={() => toggleMes(mesKey)}
+                className="hstack"
+                style={{ width: '100%', gap: 10, padding: '12px 16px', background: 'var(--ink-50)', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                aria-expanded={abierto}
+              >
+                <Icon name="chevron-right" size={15} style={{ color: 'var(--ink-500)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform 160ms' }} />
+                <span className="fw-700" style={{ textTransform: 'capitalize', fontSize: 13 }}>{mesLabel(mesKey)}</span>
+                <span className="text-xs muted" style={{ marginLeft: 'auto' }}>
+                  {items.length} nómina{items.length !== 1 ? 's' : ''}
+                  {nSem > 0 && ` · ${nSem} sem`}{nQui > 0 && ` · ${nQui} quinc`}
+                </span>
+              </button>
+              {abierto && (
+                <div className="vstack" style={{ gap: 0 }}>
+                  {items.map((s) => {
+                    const col = tipoColor(s.tipo);
+                    return (
+                      <div
+                        key={s.id}
+                        className="clickable"
+                        style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--ink-100)', borderLeft: `3px solid ${col.accent}`, background: col.tint }}
+                        onClick={() => navigate(`/app/rh/nominas/${s.id}`)}
+                      >
+                        <div className="hstack" style={{ gap: 14 }}>
+                          <div style={{ width: 38, height: 38, borderRadius: 'var(--r-md)', background: col.soft, color: col.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="file-text" size={17} /></div>
+                          <div>
+                            <div className="fw-600">{fmtPeriodo(s.fecha_inicio, s.fecha_fin)}</div>
+                            <div className="text-xs muted" style={{ textTransform: 'capitalize' }}>{s.tipo}</div>
+                          </div>
+                        </div>
+                        <div className="hstack" style={{ gap: 10 }}>
+                          <span className={`badge ${s.status === 'abierta' ? 'badge-blue' : 'badge-green'}`}><span className="dot" />{s.status === 'abierta' ? 'Abierta' : 'Guardada'}</span>
+                          {canEdit && s.status === 'abierta' && <button className="btn btn-ghost btn-sm" onClick={(e) => eliminar(e, s)} title="Eliminar"><Icon name="trash" size={14} /></button>}
+                          <Icon name="chevron-right" size={18} style={{ color: 'var(--ink-400)' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div className="hstack" style={{ gap: 10 }}>
-              <span className={`badge ${s.status === 'abierta' ? 'badge-blue' : 'badge-green'}`}><span className="dot" />{s.status === 'abierta' ? 'Abierta' : 'Guardada'}</span>
-              {canEdit && s.status === 'abierta' && <button className="btn btn-ghost btn-sm" onClick={(e) => eliminar(e, s)} title="Eliminar"><Icon name="trash" size={14} /></button>}
-              <Icon name="chevron-right" size={18} style={{ color: 'var(--ink-400)' }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {modal && (
