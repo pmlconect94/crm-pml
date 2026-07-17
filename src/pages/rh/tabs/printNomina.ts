@@ -12,7 +12,7 @@ export function descargarXLSX(aoa: (string | number)[][], sheetName: string, fil
 }
 
 // Formatos de impresión / exportación de la nómina.
-export type TipoImpresion = 'incidencias' | 'viajeshe' | 'dispersion' | 'fiscal';
+export type TipoImpresion = 'incidencias' | 'viajeshe' | 'horasextra' | 'bonos' | 'dispersion' | 'fiscal';
 
 const EMPRESA = 'Productos Marinos Lizárraga'; // fallback si la nómina no trae empresa
 
@@ -107,7 +107,7 @@ function bodyIncidencias(calcData: any[], semana: any): string {
 }
 
 // ───────────────────────── VIAJES + HORAS EXTRA ─────────────────────────
-async function bodyViajesHE(calcData: any[], semana: any): Promise<string> {
+async function bodyViajesHE(calcData: any[], semana: any, soloHE = false): Promise<string> {
   const empNombre: Record<string, string> = {};
   calcData.forEach((d) => (empNombre[d.empleado.id] = d.empleado.nombre));
 
@@ -144,6 +144,10 @@ async function bodyViajesHE(calcData: any[], semana: any): Promise<string> {
     <thead><tr><th>Nombre</th><th>Fecha</th><th>Motivo</th><th class="r">Horas</th></tr></thead>
     <tbody>${filasHE.join('') || '<tr><td colspan="4" class="muted c">Sin horas extra</td></tr>'}</tbody>
     <tfoot><tr><td colspan="3">Total horas</td><td class="r mono">${esc(totHE % 1 === 0 ? totHE : totHE.toFixed(2))}</td></tr></tfoot></table>`;
+
+  // Marlin no tiene viajes: su reporte es SOLO horas extra (sin las tablas de
+  // viajes / cruce / choferes, que saldrían vacías).
+  if (soloHE) return `<h2>Horas extra</h2>${tablaHE}`;
 
   // 3) Resumen chofer / acompañante
   const chof: Record<string, { nombre: string; viajes: number; dinero: number }> = {};
@@ -224,12 +228,15 @@ function bodyDispersion(calcData: any[], semana: any): string {
 // ID NOMEX · Nombre · Vales · Dep. Banco (solo banco) · Asistencia y Séptimo día EN DÍAS (número) ·
 // Infonavit · Comedor · Retardos · Préstamo · Desc. Producto (en dinero).
 function bodyFiscal(calcData: any[], semana: any): string {
-  void semana;
   const data = [...calcData].sort((a, b) => (a.empleado.id_nomex ?? 9e9) - (b.empleado.id_nomex ?? 9e9));
   // Número de días (entero si es redondo, si no 2 decimales). 0 → "—".
   const nd = (n: number) => { const r = Math.round(n * 100) / 100; return r === 0 ? '—' : (Number.isInteger(r) ? String(r) : r.toFixed(2)); };
   // días de séptimo = monto / sueldo diario base (real o fiscal según el switch de Marlin).
   const septDias = (c: any) => { const base = c.dBase ?? c.dDR; return base > 0 ? c.septimo / base : 0; };
+  // Factor del séptimo (domingo): 1/6 semanal, 2/13 quincenal (§18.6 de la nómina).
+  // Es el mismo para toda la nómina (depende solo del tipo); se muestra por fila
+  // para que la persona de fiscal lo vea junto a los días de séptimo.
+  const factorSeptimo = semana?.tipo === 'quincenal' ? '2/13' : '1/6';
   const fila = (d: any) => {
     const e = d.empleado, c = d.calc;
     return `<tr>
@@ -239,6 +246,7 @@ function bodyFiscal(calcData: any[], semana: any): string {
       <td class="r mono">${c.depositoBanco ? m(c.depositoBanco) : '—'}</td>
       <td class="r mono">${nd(c.diasA || 0)}</td>
       <td class="r mono">${nd(septDias(c))}</td>
+      <td class="r mono">${septDias(c) > 0 ? factorSeptimo : '—'}</td>
       <td class="r mono">${c.infonavit ? m(c.infonavit) : '—'}</td>
       <td class="r mono">${c.comedor ? m(c.comedor) : '—'}</td>
       <td class="r mono">${c.retardoMonto ? m(c.retardoMonto) : '—'}</td>
@@ -254,11 +262,27 @@ function bodyFiscal(calcData: any[], semana: any): string {
     return a;
   }, { vales: 0, banco: 0, asis: 0, sept: 0, inf: 0, com: 0, ret: 0, prest: 0, dp: 0 });
   return `<table>
-    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th class="r">Vales</th><th class="r">Dep. Banco</th><th class="r">Asistencia</th><th class="r">Séptimo día</th><th class="r">Infonavit</th><th class="r">Comedor</th><th class="r">Retardos</th><th class="r">Préstamo</th><th class="r">Desc. Producto</th></tr></thead>
+    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th class="r">Vales</th><th class="r">Dep. Banco</th><th class="r">Asistencia</th><th class="r">Séptimo día</th><th class="r">Séptimo (dom.) · factor</th><th class="r">Infonavit</th><th class="r">Comedor</th><th class="r">Retardos</th><th class="r">Préstamo</th><th class="r">Desc. Producto</th></tr></thead>
     <tbody>${data.map(fila).join('')}</tbody>
-    <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td><td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
+    <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td><td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${factorSeptimo}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
   </table>
-  <p class="muted" style="font-size:10px;margin-top:8px"><strong>Asistencia y Séptimo día van en número de días</strong> (no en dinero): semana completa = 6 y 1. Dep. Banco = solo banco (los vales/toka van en su columna).</p>`;
+  <p class="muted" style="font-size:10px;margin-top:8px"><strong>Asistencia y Séptimo día van en número de días</strong> (no en dinero): semana completa = 6 y 1. <strong>Séptimo (dom.) · factor</strong> = ${factorSeptimo} (${semana?.tipo === 'quincenal' ? 'quincenal' : 'semanal'}). Dep. Banco = solo banco (los vales/toka van en su columna).</p>`;
+}
+
+// ───────────────────────── BONOS ─────────────────────────
+// Reporte de bonos del periodo: ID NOMEX · Nombre · Área · Bono (solo > 0).
+function bodyBonos(calcData: any[]): string {
+  const data = [...calcData]
+    .filter((d) => (d.calc.bono || 0) > 0.005)
+    .sort((a, b) => (a.empleado.id_nomex ?? 9e9) - (b.empleado.id_nomex ?? 9e9));
+  if (!data.length) return '<p class="muted" style="padding:8px 0">Sin bonos en esta nómina.</p>';
+  const filas = data.map((d) => `<tr><td class="mono">${esc(nomexLabel(d.empleado))}</td><td>${esc(d.empleado.nombre)}</td><td>${esc(d.empleado.area || '—')}</td><td class="r mono">${m(d.calc.bono)}</td></tr>`).join('');
+  const tot = data.reduce((s, d) => s + (d.calc.bono || 0), 0);
+  return `<table>
+    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th>Área</th><th class="r">Bono</th></tr></thead>
+    <tbody>${filas}</tbody>
+    <tfoot><tr><td colspan="3">Total (${data.length})</td><td class="r mono">${m(tot)}</td></tr></tfoot>
+  </table>`;
 }
 
 // ───────────────────────── orquestador de impresión ─────────────────────────
@@ -274,6 +298,11 @@ export async function imprimirNomina(tipo: TipoImpresion, calcData: any[], seman
     } else if (tipo === 'viajeshe') {
       const body = await bodyViajesHE(calcData, semana);
       render(w, { titulo: 'Viajes y horas extra', periodo, tipoSemana, empresa, body, landscape: false });
+    } else if (tipo === 'horasextra') {
+      const body = await bodyViajesHE(calcData, semana, true);
+      render(w, { titulo: 'Horas extra', periodo, tipoSemana, empresa, body, landscape: false });
+    } else if (tipo === 'bonos') {
+      render(w, { titulo: 'Bonos', periodo, tipoSemana, empresa, body: bodyBonos(calcData), landscape: false });
     } else if (tipo === 'dispersion') {
       render(w, { titulo: 'Dispersión de nómina', periodo, tipoSemana, empresa, body: bodyDispersion(calcData, semana), landscape: true, firmas: true });
     } else if (tipo === 'fiscal') {

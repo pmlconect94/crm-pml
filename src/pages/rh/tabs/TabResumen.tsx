@@ -142,14 +142,27 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
   // ISR/IMSS…) mientras está abierto, se actualiza al instante.
   const detalle = detalleId != null ? calcData.find((r: any) => r.empleado.id === detalleId) : null;
   const [printMenu, setPrintMenu] = useState(false);
-  const acciones: { label: string; run: () => void; disabled?: boolean }[] = [
-    { label: '🖨  Incidencias', run: () => imprimirNomina('incidencias', calcData, semana) },
-    { label: '🖨  Viajes y horas extra', run: () => imprimirNomina('viajeshe', calcData, semana) },
-    { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
-    { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
-    { label: '⬇  Vales — Excel (.xlsx)', run: () => exportarValesXLSX(calcData, semana) },
-    { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
-  ];
+  // El menú depende de la empresa: Marlin NO tiene viajes, así que su reporte es
+  // "Horas extras" (solo HE) y suma "Bonos". PML conserva "Viajes y horas extra".
+  const esMarlin = semana?.empresa === 'MARLIN';
+  const acciones: { label: string; run: () => void; disabled?: boolean }[] = esMarlin
+    ? [
+        { label: '🖨  Incidencias', run: () => imprimirNomina('incidencias', calcData, semana) },
+        { label: '🖨  Horas extras', run: () => imprimirNomina('horasextra', calcData, semana) },
+        { label: '🖨  Bonos', run: () => imprimirNomina('bonos', calcData, semana) },
+        { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
+        { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
+        { label: '⬇  Vales — Excel (.xlsx)', run: () => exportarValesXLSX(calcData, semana) },
+        { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
+      ]
+    : [
+        { label: '🖨  Incidencias', run: () => imprimirNomina('incidencias', calcData, semana) },
+        { label: '🖨  Viajes y horas extra', run: () => imprimirNomina('viajeshe', calcData, semana) },
+        { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
+        { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
+        { label: '⬇  Vales — Excel (.xlsx)', run: () => exportarValesXLSX(calcData, semana) },
+        { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
+      ];
 
   const t = calcData.reduce((acc, d) => {
     acc.perc += d.calc.totalPerc; acc.ded += d.calc.totalDed; acc.neto += d.calc.neto;
