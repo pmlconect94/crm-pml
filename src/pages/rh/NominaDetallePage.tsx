@@ -36,6 +36,7 @@ export function NominaDetallePage() {
 
   const [semana, setSemana] = useState<any>(null);
   const [tab, setTab] = useState('resumen');
+  const [busca, setBusca] = useState('');                                // buscador de empleado (aplica a todas las pestañas de captura)
   const [empleados, setEmpleados] = useState<any[]>([]);
   const [nominas, setNominas] = useState<Record<string, any>>({});
   const [asistencias, setAsistencias] = useState<Record<string, any[]>>({});
@@ -207,7 +208,20 @@ export function NominaDetallePage() {
   if (loading) return <div className="loading-screen"><span className="spinner" /></div>;
   if (!semana) return <div className="empty"><div className="empty-title">Nómina no encontrada</div></div>;
 
-  const calcData = empleados.map((e) => {
+  // Buscador de empleado: filtra la lista que alimenta a TODAS las pestañas de
+  // captura (un solo buscador arriba en vez de uno por pestaña). Es solo de vista:
+  // el guardado usa `nominas`/`prestamosData` (completos), no esta lista filtrada.
+  const q = busca.trim().toLowerCase();
+  const empleadosFiltrados = q
+    ? empleados.filter((e) =>
+        (e.nombre ?? '').toLowerCase().includes(q) ||
+        (e.area ?? '').toLowerCase().includes(q) ||
+        String(e.id_nomex ?? '').includes(q),
+      )
+    : empleados;
+  const TABS_CON_BUSCADOR = new Set(['resumen', 'asistencias', 'comedor', 'fiscal', 'retroactivos', 'descproducto', 'bonos']);
+
+  const calcData = empleadosFiltrados.map((e) => {
     const nom = nominas[e.id];
     const asist = nom ? (asistencias[nom.id] || []) : [];
     return { empleado: e, nomina: nom, asistencias: asist, viajes: viajesEmp[e.id] || [], calc: calcularNomina(e, nom, asist, incentivos[e.id] || 0, prestamosDesc[e.id] || 0, semana.tipo, descProductoMap[e.id] || 0, bonoMap[e.id] || 0, retroIncentMap[e.id] || 0, heRetroMap[e.id] || 0) };
@@ -233,13 +247,32 @@ export function NominaDetallePage() {
         {TABS.filter((t) => !(t.key === 'viajes' && semana.empresa === 'MARLIN')).map((t) => <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>)}
       </div>
 
+      {/* Buscador de empleado — filtra las pestañas de captura por empleado (uno
+          solo para todas, en vez de uno por pestaña). No se muestra en Viajes ni
+          Préstamos (no son tablas por empleado). */}
+      {TABS_CON_BUSCADOR.has(tab) && (
+        <div className="hstack" style={{ gap: 8, margin: '10px 0', maxWidth: 420 }}>
+          <div className="hstack" style={{ gap: 8, flex: 1, padding: '7px 10px', background: 'white', border: '1px solid var(--ink-200)', borderRadius: 'var(--r-md)' }}>
+            <Icon name="search" size={14} />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar empleado por nombre, área o NOMEX…"
+              style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, background: 'transparent', color: 'var(--ink-900)' }}
+            />
+            {busca && <button className="btn btn-ghost btn-sm" style={{ padding: 3 }} onClick={() => setBusca('')} aria-label="Limpiar"><Icon name="x" size={13} /></button>}
+          </div>
+          {q && <span className="text-xs muted" style={{ whiteSpace: 'nowrap' }}>{empleadosFiltrados.length} de {empleados.length}</span>}
+        </div>
+      )}
+
       {tab === 'resumen' && <TabResumen calcData={calcData} semana={semana} />}
-      {tab === 'asistencias' && <TabAsistencias semana={semana} nominas={nominas} empleados={empleados} asistencias={asistencias} viajeDias={viajeDias} canEdit={canEdit && !timbrada} />}
+      {tab === 'asistencias' && <TabAsistencias semana={semana} nominas={nominas} empleados={empleadosFiltrados} asistencias={asistencias} viajeDias={viajeDias} canEdit={canEdit && !timbrada} />}
       {tab === 'viajes' && semana.empresa !== 'MARLIN' && <ViajesPanel semana={semana} canEdit={canEdit && !timbrada} onChanged={cargar} />}
-      {tab === 'comedor' && <TabComedor semana={semana} nominas={nominas} empleados={empleados} canEdit={canEdit && !timbrada} />}
-      {tab === 'descproducto' && <TabDescuentoProducto semana={semana} nominas={nominas} empleados={empleados} canEdit={canEdit && !timbrada} onChanged={cargar} />}
-      {tab === 'bonos' && <TabBonos semana={semana} nominas={nominas} empleados={empleados} canEdit={canEdit && !timbrada} onChanged={cargar} />}
-      {tab === 'retroactivos' && <TabRetroactivos semana={semana} nominas={nominas} empleados={empleados} canEdit={canEdit && !timbrada} onChanged={cargar} />}
+      {tab === 'comedor' && <TabComedor semana={semana} nominas={nominas} empleados={empleadosFiltrados} canEdit={canEdit && !timbrada} />}
+      {tab === 'descproducto' && <TabDescuentoProducto semana={semana} nominas={nominas} empleados={empleadosFiltrados} canEdit={canEdit && !timbrada} onChanged={cargar} />}
+      {tab === 'bonos' && <TabBonos semana={semana} nominas={nominas} empleados={empleadosFiltrados} canEdit={canEdit && !timbrada} onChanged={cargar} />}
+      {tab === 'retroactivos' && <TabRetroactivos semana={semana} nominas={nominas} empleados={empleadosFiltrados} canEdit={canEdit && !timbrada} onChanged={cargar} />}
       {tab === 'prestamos' && <TabPrestamosResumen prestamos={prestamosData} descMap={prestamosDesc} semana={semana} omitidos={omitidos} canEdit={canEdit && !timbrada} onToggleOmitir={toggleOmitir} />}
       {tab === 'fiscal' && <TabFiscal calcData={calcData} nominas={nominas} semana={semana} canEdit={canEdit && !timbrada} onChanged={recomputar} />}
 
