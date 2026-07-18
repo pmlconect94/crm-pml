@@ -46,7 +46,9 @@ def main():
     src, prefix = sys.argv[1], sys.argv[2]
     env = load_env()
     url = env["VITE_SUPABASE_URL"].rstrip("/")
-    key = env["VITE_SUPABASE_ANON_KEY"]
+    # Desde la RLS auth_all (2026-06-23) la anon key ya no puede subir a Storage:
+    # usar la service_role si está en .env.local (igual que los demás scripts).
+    key = env.get("SUPABASE_SERVICE_ROLE_KEY") or env["VITE_SUPABASE_ANON_KEY"]
 
     reader = PdfReader(src)
     groups: dict[str, list[int]] = {}
