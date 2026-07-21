@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from datetime import date, datetime, time as dtime, timedelta
 from typing import Iterator, Literal
 
@@ -63,6 +64,19 @@ def consultar_estado(sat_service: SAT, id_solicitud: str) -> dict:
     return sat_service.recover_comprobante_status(id_solicitud)
 
 
-def descargar_paquete(sat_service: SAT, id_paquete: str) -> bytes:
-    _, paquete_b64 = sat_service.recover_comprobante_download(id_paquete=id_paquete)
-    return base64.b64decode(paquete_b64)
+def descargar_paquete(sat_service: SAT, id_paquete: str, intentos: int = 3, espera_s: float = 5.0) -> bytes:
+    """El servicio de descarga del SAT a veces regresa el paquete vacio (None)
+    aunque la solicitud ya este TERMINADA - observado real con paquetes
+    grandes (miles de CFDIs). Es intermitente, no un rechazo real: se
+    reintenta unas veces con una pausa antes de darse por vencido."""
+    ultimo_error = "el SAT regreso el paquete vacio"
+    for intento in range(1, intentos + 1):
+        try:
+            _, paquete_b64 = sat_service.recover_comprobante_download(id_paquete=id_paquete)
+            if paquete_b64:
+                return base64.b64decode(paquete_b64)
+        except Exception as e:
+            ultimo_error = str(e)
+        if intento < intentos:
+            time.sleep(espera_s)
+    raise RuntimeError(f"No se pudo descargar el paquete {id_paquete} tras {intentos} intentos: {ultimo_error}")

@@ -68,11 +68,16 @@ def solicitar_incremental(config: Config, tipos: list[str], dias_atras: int = 5)
 
 
 def revisar_pendientes(config: Config) -> list[dict]:
-    sat_service = build_sat_service(config)
     sink = SupabaseSink(config)
 
     resultados = []
     for solicitud in sink.pending_solicitudes():
+        # Se renueva el servicio/token del SAT en cada iteracion: si un paquete
+        # grande tarda varios minutos en descargarse+importarse, el token de la
+        # sesion anterior puede expirar para cuando le toca al siguiente
+        # (observado real: el primer paquete de un lote se procesaba bien y los
+        # que seguian tronaban con CodEstatus 5004 / "token invalido").
+        sat_service = build_sat_service(config)
         id_solicitud = solicitud["id_solicitud"]
         tipo = solicitud["tipo"]
 
@@ -97,15 +102,27 @@ def revisar_pendientes(config: Config) -> list[dict]:
             continue
 
         if estado == EstadoSolicitud.TERMINADA:
-            total_importadas = 0
-            for id_paquete in estado_resp.get("IdsPaquetes", []):
-                zip_bytes = descargar_paquete(sat_service, id_paquete)
-                zip_dir = config.data_dir / "paquetes"
-                zip_dir.mkdir(parents=True, exist_ok=True)
-                zip_path = zip_dir / f"{id_paquete}.zip"
-                zip_path.write_bytes(zip_bytes)
+            try:
+                total_importadas = 0
+                for id_paquete in estado_resp.get("IdsPaquetes", []):
+                    zip_bytes = descargar_paquete(sat_service, id_paquete)
+                    zip_dir = config.data_dir / "paquetes"
+                    zip_dir.mkdir(parents=True, exist_ok=True)
+                    zip_path = zip_dir / f"{id_paquete}.zip"
+                    zip_path.write_bytes(zip_bytes)
 
-                total_importadas += storage.import_zip(sink, config, zip_path, tipo, id_solicitud)
+                    total_importadas += storage.import_zip(sink, config, zip_path, tipo, id_solicitud)
+            except Exception as e:
+                # descargar_paquete ya reintenta solo; si aun asi falla (u otro
+                # error de red/import), NO se marca procesada: se deja pendiente
+                # para reintentar en la proxima corrida (reimportar es seguro,
+                # todo el pipeline usa upsert). Sin este manejo, un solo paquete
+                # con problemas tumba el resto de la revision.
+                resultados.append({
+                    "id_solicitud": id_solicitud, "tipo": tipo, "estado": "REINTENTAR",
+                    "mensaje": f"{type(e).__name__}: {e}",
+                })
+                continue
 
             sink.update_solicitud(id_solicitud, estado="TERMINADA", procesada=True, facturas_importadas=total_importadas)
             resultados.append({

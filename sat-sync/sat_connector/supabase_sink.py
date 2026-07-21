@@ -19,6 +19,7 @@ class SupabaseSink:
 
     def __init__(self, config: Config):
         self.base_url = config.supabase_url.rstrip("/")
+        self.empresa_id = config.empresa_id
         self.session = requests.Session()
         self.session.headers.update({
             "apikey": config.supabase_service_key,
@@ -185,9 +186,13 @@ class SupabaseSink:
         resp.raise_for_status()
 
     def pending_solicitudes(self) -> list[dict]:
+        # Filtrado por empresa_id: sin esto, correr el conector para una empresa
+        # (ej. Marlin) recoge tambien las solicitudes pendientes de OTRA empresa
+        # (ej. PML) y las intenta revisar con el token/sesion SAT equivocado ->
+        # "Token invalido" y la solicitud ajena queda marcada ERROR sin serlo.
         resp = self.session.get(
             f"{self.base_url}/rest/v1/cont_solicitudes",
-            params={"procesada": "eq.false", "select": "*"},
+            params={"procesada": "eq.false", "empresa_id": f"eq.{self.empresa_id}", "select": "*"},
             headers=self._headers(),
         )
         resp.raise_for_status()
