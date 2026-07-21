@@ -8,6 +8,11 @@ name: Sincronizar facturas SAT
 # GitHub puede retrasar unos minutos una corrida programada en horas pico —
 # no importa para este caso de uso. `workflow_dispatch` permite correrlo a
 # mano desde la pestaña Actions para probar sin esperar al cron.
+#
+# Sincroniza las 2 empresas del grupo (PML y Marlin Lizárraga) como un matrix
+# job: cada una en su propio runner aislado, con sus propias credenciales de
+# e.firma (RFC distinto = e.firma distinta). Si se agrega una empresa nueva
+# más adelante, solo hay que sumar otra entrada al matrix + sus secrets.
 on:
   schedule:
     - cron: '30 13 * * *'
@@ -18,6 +23,20 @@ on:
 jobs:
   sincronizar:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        empresa:
+          - id: pml
+            rfc_secret: SAT_RFC
+            cert_secret: SAT_EFIRMA_CERT_B64
+            key_secret: SAT_EFIRMA_KEY_B64
+            password_secret: SAT_EFIRMA_PASSWORD
+          - id: marlin
+            rfc_secret: SAT_RFC_MARLIN
+            cert_secret: SAT_EFIRMA_CERT_B64_MARLIN
+            key_secret: SAT_EFIRMA_KEY_B64_MARLIN
+            password_secret: SAT_EFIRMA_PASSWORD_MARLIN
     defaults:
       run:
         working-directory: sat-sync
@@ -30,19 +49,19 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Preparar credenciales de e.firma
+      - name: Preparar credenciales de e.firma (${{ matrix.empresa.id }})
         run: |
           mkdir -p credentials
-          echo "${{ secrets.SAT_EFIRMA_CERT_B64 }}" | base64 -d > credentials/efirma.cer
-          echo "${{ secrets.SAT_EFIRMA_KEY_B64 }}" | base64 -d > credentials/efirma.key
+          echo "${{ secrets[matrix.empresa.cert_secret] }}" | base64 -d > credentials/efirma.cer
+          echo "${{ secrets[matrix.empresa.key_secret] }}" | base64 -d > credentials/efirma.key
 
-      - name: Sincronizar con el SAT
+      - name: Sincronizar con el SAT (${{ matrix.empresa.id }})
         env:
-          SAT_RFC: ${{ secrets.SAT_RFC }}
+          SAT_RFC: ${{ secrets[matrix.empresa.rfc_secret] }}
           SAT_EFIRMA_CERT_PATH: credentials/efirma.cer
           SAT_EFIRMA_KEY_PATH: credentials/efirma.key
-          SAT_EFIRMA_PASSWORD: ${{ secrets.SAT_EFIRMA_PASSWORD }}
+          SAT_EFIRMA_PASSWORD: ${{ secrets[matrix.empresa.password_secret] }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          EMPRESA_ID: pml
+          EMPRESA_ID: ${{ matrix.empresa.id }}
         run: python run_sync.py --dias 5 --tipo recibidas
