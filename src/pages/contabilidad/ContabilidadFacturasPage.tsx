@@ -97,7 +97,9 @@ export function ContabilidadFacturasPage() {
       <PageEnter className="page-header" style={{ marginBottom: 8 }}>
         <div>
           <h1 className="page-title">Facturas recibidas</h1>
-          <p className="page-subtitle">CFDIs sincronizados automáticamente del SAT — proveedores y gastos de PML</p>
+          <p className="page-subtitle">
+            CFDIs sincronizados automáticamente del SAT — proveedores y gastos de {empresaId === 'marlin' ? 'Marlin' : 'PML'}
+          </p>
         </div>
         <div className="hstack" style={{ gap: 14, flexShrink: 0 }}>
           <div className="text-xs muted" title="El sincronizador corre 3 veces al día (7:30, 11:00 y 13:00)">
