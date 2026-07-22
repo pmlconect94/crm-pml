@@ -16,12 +16,19 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
   const [form, setForm] = useState<any>({ ...EMPTY });
   const [incent, setIncent] = useState({ chofer: 0, acomp: 0, tramo: null as number | null });
   const [editId, setEditId] = useState<string | null>(null); // viaje en edición (null = alta nueva)
-  // Destinos del catálogo (RH → Catálogos): se SELECCIONAN, ya no se teclean —
-  // el histórico tenía el mismo destino escrito de varias formas (León/leon/…).
+  // Destinos del catálogo (RH → Catálogos). Se capturan con un input+datalist:
+  // escribes y el navegador filtra los que se parecen (feedback del usuario
+  // 2026-07-17: "poder escribir el destino y que te mapee el más parecido").
+  // Al guardar, lo tecleado se NORMALIZA al nombre canónico del catálogo
+  // (ignorando mayúsculas y acentos) — así no regresan los León/leon/león.
   const [destinos, setDestinos] = useState<string[]>([]);
   useEffect(() => {
     fetchMotivosActivos(semana.empresa, 'viaje').then(setDestinos).catch(() => {});
   }, [semana.empresa]);
+  const normalizar = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  /** Texto libre → nombre canónico del catálogo, o null si no hay match. */
+  const resolverDestino = (texto: string): string | null =>
+    destinos.find((d) => normalizar(d) === normalizar(texto)) ?? null;
 
   useEffect(() => { (async () => {
     const { data: emps } = await dbNomina.from('empleados').select('id,nombre,id_banco,area').eq('activo', true).eq('empresa', semana.empresa).order('id_banco', { ascending: true, nullsFirst: false });
@@ -46,6 +53,23 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
 
   async function guardar() {
     if (!form.chofer_id && !form.acompanante_id) { toast.error('Selecciona chofer o acompañante'); return; }
+
+    // Destino: normalizar lo tecleado al nombre canónico del catálogo. Si no
+    // matchea, solo se permite cuando es el destino ORIGINAL de un viaje viejo
+    // que se está editando (para no bloquear correcciones de hora, etc.).
+    let destinoFinal = form.destino?.trim() || '';
+    if (destinoFinal) {
+      const canonico = resolverDestino(destinoFinal);
+      if (canonico) {
+        destinoFinal = canonico;
+      } else {
+        const original = editId ? (viajes.find((v) => v.id === editId)?.destino || '') : '';
+        if (destinoFinal !== original) {
+          toast.error(`"${destinoFinal}" no está en el catálogo de destinos — elígelo de la lista o agrégalo en RH → Catálogos`);
+          return;
+        }
+      }
+    }
 
     // Validación de fecha: dentro del periodo = normal; hasta 7 días antes = retroactivo (avisa);
     // más viejo o posterior al periodo = bloqueado.
@@ -79,7 +103,7 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
       }
     }
 
-    const payload = { semana_id: semana.id, fecha: form.fecha || null, destino: form.destino, cliente: form.cliente, vehiculo: form.vehiculo, chofer_id: form.chofer_id || null, acompanante_id: form.acompanante_id || null, hora_salida: form.hora_salida || null, hora_llegada: form.hora_llegada || null, se_quedo_dormir: form.se_quedo_dormir, incent_chofer: incent.chofer, incent_acompanante: incent.acomp, retroactivo: retro };
+    const payload = { semana_id: semana.id, fecha: form.fecha || null, destino: destinoFinal, cliente: form.cliente, vehiculo: form.vehiculo, chofer_id: form.chofer_id || null, acompanante_id: form.acompanante_id || null, hora_salida: form.hora_salida || null, hora_llegada: form.hora_llegada || null, se_quedo_dormir: form.se_quedo_dormir, incent_chofer: incent.chofer, incent_acompanante: incent.acomp, retroactivo: retro };
 
     if (editId) {
       // Modificar requiere validación explícita (recalcula incentivos).
@@ -117,7 +141,7 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
           <div className="card-body">
             <div className="form-grid form-grid-3">
               <div><label className="field-label">Fecha</label><input className="field-input" type="date" value={form.fecha} onChange={(e) => onForm('fecha', e.target.value)} /></div>
-              <div><label className="field-label">Destino</label><select className="field-input" value={form.destino} onChange={(e) => onForm('destino', e.target.value)}><option value="">— Elegir destino —</option>{(form.destino && !destinos.includes(form.destino) ? [form.destino, ...destinos] : destinos).map((d) => <option key={d} value={d}>{d}</option>)}</select></div>
+              <div><label className="field-label">Destino</label><input className="field-input" list="catalogo-destinos-viaje" placeholder="Escribe y elige…" value={form.destino} onChange={(e) => onForm('destino', e.target.value)} /><datalist id="catalogo-destinos-viaje">{destinos.map((d) => <option key={d} value={d} />)}</datalist></div>
               <div><label className="field-label">Cliente</label><input className="field-input" value={form.cliente} onChange={(e) => onForm('cliente', e.target.value)} /></div>
               <div><label className="field-label">Vehículo</label><input className="field-input" value={form.vehiculo} onChange={(e) => onForm('vehiculo', e.target.value)} /></div>
               <div><label className="field-label">Chofer <span className="text-xs muted">(Logística/Almacén)</span></label><select className="field-input" value={form.chofer_id} onChange={(e) => onForm('chofer_id', e.target.value)}><option value="">—</option>{logistica.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>

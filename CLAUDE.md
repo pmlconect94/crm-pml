@@ -1660,9 +1660,14 @@ viaje**, listas separadas por empresa (`empresa` PML|MARLIN, `tipo` horas_extra|
 administra en **RH → Catálogos** (`CatalogosPage`, sin hard-delete: activar/desactivar) y lo
 consumen como `<select>` (vía `lib/nomina/catalogos.ts` con respaldo hardcodeado si no carga):
 `TabAsistencias` (motivo HE — antes MOTIVOS_TE fijo), `TabBonos` (motivo de bono del periodo y
-permanente — antes texto libre) y `ViajesPage` (destino — antes texto libre; viajes solo PML).
-Sembrado con el histórico DEPURADO (León/leon/león → León, etc.); los valores viejos que no
-están en el catálogo se siguen mostrando en su fila (se inyectan como opción).
+permanente — antes texto libre) y `ViajesPage` (destino; viajes solo PML). **El destino de viaje
+se captura con input+datalist** (feedback 2026-07-17: "escribir y que mapee el más parecido"):
+se teclea, el navegador filtra los parecidos, y al guardar `resolverDestino` lo NORMALIZA al
+nombre canónico del catálogo ignorando mayúsculas/acentos ("leon" → "León"); si lo tecleado no
+matchea ningún destino se BLOQUEA el guardado (toast que manda a RH → Catálogos), con una
+excepción: el destino original de un viaje viejo que se está editando (para poder corregirle la
+hora sin pelear con el catálogo). Sembrado con el histórico DEPURADO (León/leon/león → León,
+etc.); en HE/bonos los valores viejos fuera de catálogo se inyectan como opción en su fila.
 
 ### 18.3 Auth y empresa — adaptadores
 
