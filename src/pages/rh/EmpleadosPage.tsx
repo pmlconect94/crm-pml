@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { useAuth } from '@/lib/nomina/auth';
+import { useRhPermisos } from '@/lib/nomina/permisos';
 import { useEmpresa, getEmpresa } from '@/lib/nomina/empresas';
 import { calcEdad, fmtFecha, nomexLabel } from '@/lib/nomina/format';
 import { Icon } from '@/components/Icon';
@@ -31,10 +32,16 @@ function Campo({ label, value }: { label: string; value: any }) {
 
 export function EmpleadosPage() {
   const { user, reauth } = useAuth();
+  const rhPerm = useRhPermisos();
   const { code: empresa } = useEmpresa();
   const areas = getEmpresa(empresa).areas;
   const canEdit = user?.rol === 'admin';
-  const canSueldo = user?.rol === 'admin' || user?.rol === 'editor';
+  // Restricciones granulares dentro de Empleados (ej. Efraín: sí ficha/jornada,
+  // NO ver switches IMSS/cálculo, NO sueldos, NO banco).
+  const canSueldo = (user?.rol === 'admin' || user?.rol === 'editor') && rhPerm.emp.sueldos;
+  const canBanco = (user?.rol === 'admin' || user?.rol === 'editor') && rhPerm.emp.banco;
+  const verImss = rhPerm.emp.imss;
+  const verCalculo = rhPerm.emp.calculo;
   const [empleados, setEmpleados] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [filtro, setFiltro] = useState<'activos' | 'bajas' | 'todos'>('activos');
@@ -71,7 +78,9 @@ export function EmpleadosPage() {
   }, [empleados, filtro, busqueda]);
 
   function abrirNuevo() {
-    setForm({ activo: true, alta_imss: false, ubicacion: 'Matriz', razon_social: 'Productos Marinos Lizarraga, S. de R.L. de C.V.', esquema_pago: 'Semanal' });
+    // La razón social por default es la de la EMPRESA ACTIVA (bug reportado
+    // 2026-07-18: en Marlin salía la de Productos hardcodeada).
+    setForm({ activo: true, alta_imss: false, ubicacion: 'Matriz', razon_social: getEmpresa(empresa).razonSocial, esquema_pago: 'Semanal' });
     setNuevo(true); setEditando('nuevo');
   }
   function abrirEdicion(e: any) { setForm({ ...e }); setNuevo(false); setVerEmp(null); setEditando(e.id); }
@@ -202,7 +211,7 @@ export function EmpleadosPage() {
           <thead>
             <tr>
               <th>Nomex</th><th>Nombre</th><th>Área</th><th>Puesto</th><th>Esquema</th>
-              <th className="center">Alta IMSS</th>{empresa === 'MARLIN' && <><th className="center">Cálculo</th><th className="center">Jornada</th></>}<th>Status</th><th></th>
+              {verImss && <th className="center">Alta IMSS</th>}{empresa === 'MARLIN' && <>{verCalculo && <th className="center">Cálculo</th>}<th className="center">Jornada</th></>}<th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -213,13 +222,15 @@ export function EmpleadosPage() {
                 <td><span className="badge badge-gray">{e.area || '—'}</span></td>
                 <td className="muted">{e.puesto || '—'}</td>
                 <td className="muted">{e.esquema_pago || '—'}</td>
+                {verImss && (
                 <td className="center">
                   <div className="hstack" style={{ gap: 8, justifyContent: 'center' }}>
                     <button className={`switch ${e.alta_imss ? 'on' : ''}`} onClick={() => onToggleImss(e)} disabled={!canEdit} title={e.alta_imss ? 'Apagar requiere autorización' : 'Activar alta IMSS'} />
                     <span className={`text-xs ${e.alta_imss ? 'pos' : 'muted'}`}>{e.alta_imss ? 'Transf. + vales' : 'Efectivo'}</span>
                   </div>
                 </td>
-                {empresa === 'MARLIN' && (
+                )}
+                {empresa === 'MARLIN' && verCalculo && (
                   <td className="center">
                     <div className="hstack" style={{ gap: 8, justifyContent: 'center' }}>
                       <button className={`switch ${e.usar_sueldo_real === false ? 'on' : ''}`} onClick={() => setUsarReal(e, !(e.usar_sueldo_real !== false))} disabled={!canEdit} title="Prendido: cálculos con sueldo FISCAL · Apagado: con sueldo REAL" />
@@ -229,7 +240,7 @@ export function EmpleadosPage() {
                 )}
                 {empresa === 'MARLIN' && (
                   <td className="center">
-                    <select className="field-input" value={Number(e.dias_trabajo) === 6 ? 6 : 5} disabled={!canEdit} onChange={(ev) => setJornada(e, Number(ev.target.value))} style={{ width: 96, padding: '4px 6px', fontSize: 12 }} title="Días de trabajo + descanso por semana">
+                    <select className="field-input" value={Number(e.dias_trabajo) === 6 ? 6 : 5} disabled={!canEdit || !rhPerm.emp.jornada} onChange={(ev) => setJornada(e, Number(ev.target.value))} style={{ width: 96, padding: '4px 6px', fontSize: 12 }} title="Días de trabajo + descanso por semana">
                       <option value={5}>5 + 2</option>
                       <option value={6}>6 + 1</option>
                     </select>
@@ -244,7 +255,7 @@ export function EmpleadosPage() {
                 </td>
               </tr>
             ))}
-            {lista.length === 0 && <tr><td colSpan={empresa === 'MARLIN' ? 10 : 8}><div className="empty"><div className="empty-title">Sin empleados</div></div></td></tr>}
+            {lista.length === 0 && <tr><td colSpan={7 + (verImss ? 1 : 0) + (empresa === 'MARLIN' ? 1 + (verCalculo ? 1 : 0) : 0)}><div className="empty"><div className="empty-title">Sin empleados</div></div></td></tr>}
           </tbody>
         </table>
       </div>
@@ -259,7 +270,7 @@ export function EmpleadosPage() {
                 <div className="text-xs muted">{verEmp.puesto || '—'} · {verEmp.area || '—'} · {verEmp.activo ? 'Activo' : 'Baja'}</div>
               </div>
               <div className="hstack" style={{ gap: 6 }}>
-                {canSueldo && <button className="btn btn-outline btn-sm" onClick={() => { setGate({ emp: verEmp, action: 'banco' }); setGatePass(''); }} title="Ficha del banco (protegida)"><Icon name="lock" size={13} /> Ficha del banco</button>}
+                {canBanco && <button className="btn btn-outline btn-sm" onClick={() => { setGate({ emp: verEmp, action: 'banco' }); setGatePass(''); }} title="Ficha del banco (protegida)"><Icon name="lock" size={13} /> Ficha del banco</button>}
                 {canEdit && <button className="btn btn-primary btn-sm" onClick={() => abrirEdicion(verEmp)}><Icon name="edit" size={13} /> Editar</button>}
                 <button className="btn btn-ghost btn-sm" onClick={() => setVerEmp(null)}><Icon name="x" size={16} /></button>
               </div>
@@ -270,7 +281,7 @@ export function EmpleadosPage() {
               <div className="form-section-title">Datos generales</div>
               <div className="grid grid-3">
                 <Campo label="Jefe inmediato" value={verEmp.jefe_inmediato} /><Campo label="Fecha de ingreso" value={fmtFecha(verEmp.fecha_ingreso)} /><Campo label="Esquema" value={verEmp.esquema_pago} />
-                <Campo label="Turno" value={verEmp.turno ? `Turno ${verEmp.turno}` : null} /><Campo label="Horario" value={verEmp.horario} /><Campo label="Alta IMSS" value={verEmp.alta_imss ? 'Sí (transf. + vales)' : 'No (efectivo)'} />
+                <Campo label="Turno" value={verEmp.turno ? `Turno ${verEmp.turno}` : null} /><Campo label="Horario" value={verEmp.horario} />{verImss && <Campo label="Alta IMSS" value={verEmp.alta_imss ? 'Sí (transf. + vales)' : 'No (efectivo)'} />}
                 <Campo label="Ubicación" value={verEmp.ubicacion} /><Campo label="Razón social" value={verEmp.razon_social} />
               </div>
               <div className="form-section-title">Datos personales</div>

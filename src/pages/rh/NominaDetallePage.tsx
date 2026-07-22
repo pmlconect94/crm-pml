@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { useAuth } from '@/lib/nomina/auth';
+import { useRhPermisos } from '@/lib/nomina/permisos';
 import { fmtPeriodo } from '@/lib/nomina/format';
 import { calcularNomina } from '@/lib/nomina/calc';
 import { Icon } from '@/components/Icon';
@@ -32,10 +33,13 @@ export function NominaDetallePage() {
   const { semanaId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const rhPerm = useRhPermisos();
   const canEdit = user?.rol !== 'viewer';
 
   const [semana, setSemana] = useState<any>(null);
-  const [tab, setTab] = useState('resumen');
+  // Pestaña inicial = la primera permitida (un capturista sin "Resumen" aterriza
+  // en Asistencias en vez de en una pestaña que no puede ver).
+  const [tab, setTab] = useState(() => (rhPerm.tabs.includes('resumen') ? 'resumen' : (rhPerm.tabs[0] ?? 'resumen')));
   const [busca, setBusca] = useState('');                                // buscador de empleado (aplica a todas las pestañas de captura)
   const [empleados, setEmpleados] = useState<any[]>([]);
   const [nominas, setNominas] = useState<Record<string, any>>({});
@@ -207,6 +211,9 @@ export function NominaDetallePage() {
 
   if (loading) return <div className="loading-screen"><span className="spinner" /></div>;
   if (!semana) return <div className="empty"><div className="empty-title">Nómina no encontrada</div></div>;
+  // Permisos granulares: tipo de nómina no permitido (ej. quincenal para un
+  // capturista solo-semanales) → de regreso a la lista, aunque tecleen la URL.
+  if (!rhPerm.nominasTipos.includes(semana.tipo)) return <Navigate to="/app/rh/nominas" replace />;
 
   // Buscador de empleado: filtra la lista que alimenta a TODAS las pestañas de
   // captura (un solo buscador arriba en vez de uno por pestaña). Es solo de vista:
@@ -238,13 +245,13 @@ export function NominaDetallePage() {
           </div>
           <span className={`badge ${timbrada ? 'badge-green' : 'badge-blue'}`}><span className="dot" />{timbrada ? 'Guardada' : 'Abierta'}</span>
         </div>
-        {canEdit && (timbrada
+        {canEdit && rhPerm.cerrarNomina && (timbrada
           ? <button className="btn btn-danger btn-sm" onClick={() => setUnlock(true)}><Icon name="lock" size={14} /> Desbloquear</button>
           : <button className="btn btn-primary" onClick={guardar}><Icon name="check" size={15} /> Guardar nómina</button>)}
       </div>
 
       <div className="tabs">
-        {TABS.filter((t) => !(t.key === 'viajes' && semana.empresa === 'MARLIN')).map((t) => <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>)}
+        {TABS.filter((t) => rhPerm.tabs.includes(t.key) && !(t.key === 'viajes' && semana.empresa === 'MARLIN')).map((t) => <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>)}
       </div>
 
       {/* Buscador de empleado — filtra las pestañas de captura por empleado (uno

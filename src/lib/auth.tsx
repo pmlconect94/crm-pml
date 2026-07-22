@@ -32,6 +32,12 @@ export type Usuario = {
   tabs: string[] | null;
   /** Puede capturar/editar/borrar. false = solo ver. */
   capturar: boolean;
+  /** Empresas a las que el usuario tiene acceso (switcher). Default: ambas. */
+  empresas: ('pml' | 'marlin')[];
+  /** Permisos granulares del módulo RH (crudo de user_metadata.rh).
+   *  null = acceso completo a RH (usuarios previos). Lo normaliza
+   *  `lib/nomina/permisos.ts`. */
+  rh: Record<string, unknown> | null;
 };
 
 // Los ids deben coincidir con los de MODULOS_POR_EMPRESA (lib/modulos).
@@ -60,6 +66,12 @@ function usuarioDeSesion(session: Session | null): Usuario | null {
   // la nómina. El acceso ahora es explícito: lo da un admin asignando el rol.
   const rol: Rol = (m.rol as Rol) ?? 'sin_acceso';
   const esAdmin = rol === 'admin_total';
+  // Empresas permitidas en el switcher. Sin la llave en metadata = ambas
+  // (usuarios previos); con lista explícita, solo esas (ej. Efraín: ['marlin']).
+  const empresasRaw = Array.isArray(m.empresas)
+    ? (m.empresas as string[]).filter((x): x is 'pml' | 'marlin' => x === 'pml' || x === 'marlin')
+    : [];
+  const empresas: ('pml' | 'marlin')[] = empresasRaw.length > 0 ? empresasRaw : ['pml', 'marlin'];
   return {
     id: u.id,
     nombre: (m.nombre as string) || u.email || 'Usuario',
@@ -68,6 +80,8 @@ function usuarioDeSesion(session: Session | null): Usuario | null {
     empresaId: ((m.empresa_id as 'pml' | 'marlin') ?? 'pml'),
     tabs: esAdmin ? null : Array.isArray(m.tabs) ? (m.tabs as string[]) : [],
     capturar: esAdmin ? true : m.capturar === true,
+    empresas,
+    rh: m.rh && typeof m.rh === 'object' ? (m.rh as Record<string, unknown>) : null,
   };
 }
 
@@ -106,12 +120,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Si el usuario NO tiene acceso a la empresa activa (ej. solo Marlin), se
+  // aterriza en su primera empresa permitida — el default 'pml' no aplica a todos.
+  useEffect(() => {
+    if (user && !user.empresas.includes(empresaId)) setEmpresaIdState(user.empresas[0]);
+  }, [user, empresaId]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
       empresaId,
-      setEmpresa: (e) => setEmpresaIdState(e),
+      // Guard: no se puede cambiar a una empresa fuera de las permitidas.
+      setEmpresa: (e) => { if (!user || user.empresas.includes(e)) setEmpresaIdState(e); },
       signIn: async (email, password) => {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),

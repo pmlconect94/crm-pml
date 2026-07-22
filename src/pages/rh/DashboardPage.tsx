@@ -4,6 +4,7 @@ import { fmt, MESES } from '@/lib/nomina/format';
 import { PageEnter } from '@/components/motion';
 import { Icon } from '@/components/Icon';
 import { useAuth } from '@/lib/nomina/auth';
+import { useRhPermisos } from '@/lib/nomina/permisos';
 import { useEmpresa } from '@/lib/nomina/empresas';
 import { descargarXLSX } from './tabs/printNomina';
 
@@ -67,6 +68,9 @@ function SectionCard({ title, hint, children, style, action }: { title: string; 
 
 export function DashboardPage() {
   const { user } = useAuth();
+  const rhPerm = useRhPermisos();
+  // Qué tarjetas del Resumen puede ver este usuario (permisos granulares).
+  const ve = (k: string) => rhPerm.resumen.includes(k);
   const { code: empresa } = useEmpresa();
   const [loading, setLoading] = useState(true);
   const [emps, setEmps] = useState<Emp[]>([]);
@@ -276,6 +280,7 @@ export function DashboardPage() {
       ) : (
         <div className="vstack" style={{ gap: 16 }}>
           {/* ───── Incidencias del mes (tiles + detalle desplegable) ───── */}
+          {ve('incidencias') && (
           <SectionCard title="Incidencias del mes" hint={`${mesLabel(mes)} · pulsa una tarjeta para ver quién`} action={btnExcel(exportIncidencias)}>
             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12 }}>
               {tiles.map((t) => {
@@ -323,8 +328,10 @@ export function DashboardPage() {
               </div>
             )}
           </SectionCard>
+          )}
 
           {/* ───── Viajes: destinos + choferes ───── */}
+          {ve('viajes') && (
           <div className="grid grid-2" style={{ gap: 16 }}>
             <SectionCard title="Destinos más visitados" hint={`${data.viajesMes} viaje${data.viajesMes === 1 ? '' : 's'} en ${mesLabel(mes)}`}>
               <BarList items={data.topDest} color="var(--blue-500)" unit="viajes" />
@@ -333,12 +340,17 @@ export function DashboardPage() {
               <BarList items={data.topChof} color="var(--green-500)" unit="viajes" />
             </SectionCard>
           </div>
+          )}
 
           {/* ───── Motivos HE + Comedor ───── */}
+          {(ve('motivos_he') || ve('comedor')) && (
           <div className="grid grid-2" style={{ gap: 16 }}>
+            {ve('motivos_he') && (
             <SectionCard title="Motivos de horas extra" hint={`${nh(data.teTot)} h en total`}>
               <BarList items={data.motivos} color="var(--violet-500)" unit="h" />
             </SectionCard>
+            )}
+            {ve('comedor') && (
             <SectionCard title="Comedor" hint={`${mesLabel(mes)}`} action={btnExcel(exportComedor)}>
               <div className="hstack" style={{ gap: 24, alignItems: 'center', height: '100%', minHeight: 80 }}>
                 <div className="vstack" style={{ gap: 2 }}>
@@ -352,9 +364,12 @@ export function DashboardPage() {
                 </div>
               </div>
             </SectionCard>
+            )}
           </div>
+          )}
 
           {/* ───── Préstamos ───── */}
+          {ve('prestamos') && (
           <SectionCard title="Préstamos activos" hint={`${prestamos.length} activo${prestamos.length === 1 ? '' : 's'} · saldo total ${fmt(saldoPrestamos)}`}>
             {prestamos.length === 0 ? (
               <p className="text-sm muted" style={{ margin: 0 }}>Sin préstamos activos.</p>
@@ -376,13 +391,14 @@ export function DashboardPage() {
               </div>
             )}
           </SectionCard>
+          )}
 
-          {/* ───── Pie: totales generales ───── */}
+          {/* ───── Pie: totales generales (cada KPI sigue su permiso) ───── */}
           <div className="grid grid-4" style={{ gap: 12 }}>
-            <div className="kpi"><span className="kpi-label">Empleados activos</span><span className="kpi-value">{activos}</span></div>
-            <div className="kpi"><span className="kpi-label">Viajes del mes</span><span className="kpi-value">{data.viajesMes}</span></div>
-            <div className="kpi"><span className="kpi-label">Horas extra del mes</span><span className="kpi-value">{nh(data.teTot)} <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-400)' }}>h</span></span></div>
-            <div className="kpi"><span className="kpi-label">Saldo en préstamos</span><span className="kpi-value" style={{ fontSize: 16 }}>{fmt(saldoPrestamos)}</span></div>
+            {ve('empleados') && <div className="kpi"><span className="kpi-label">Empleados activos</span><span className="kpi-value">{activos}</span></div>}
+            {ve('viajes') && <div className="kpi"><span className="kpi-label">Viajes del mes</span><span className="kpi-value">{data.viajesMes}</span></div>}
+            {ve('motivos_he') && <div className="kpi"><span className="kpi-label">Horas extra del mes</span><span className="kpi-value">{nh(data.teTot)} <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink-400)' }}>h</span></span></div>}
+            {ve('prestamos') && <div className="kpi"><span className="kpi-label">Saldo en préstamos</span><span className="kpi-value" style={{ fontSize: 16 }}>{fmt(saldoPrestamos)}</span></div>}
           </div>
         </div>
       )}

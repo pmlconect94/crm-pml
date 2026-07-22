@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { useAuth } from '@/lib/nomina/auth';
+import { useRhPermisos } from '@/lib/nomina/permisos';
 import { useEmpresa } from '@/lib/nomina/empresas';
 import { fmtPeriodo, toISO, MESES } from '@/lib/nomina/format';
 import { Icon } from '@/components/Icon';
@@ -23,6 +24,7 @@ function sugerencia(tipo: string) {
 
 export function NominasPage() {
   const { user } = useAuth();
+  const rhPerm = useRhPermisos();
   const { code: empresa } = useEmpresa();
   const navigate = useNavigate();
   const canEdit = user?.rol !== 'viewer';
@@ -70,7 +72,10 @@ export function NominasPage() {
     fetch();
   }
 
-  const lista = filtro === 'todas' ? semanas : semanas.filter((s) => s.status === filtro);
+  // Permisos granulares: solo los TIPOS de nómina permitidos (ej. Efraín solo
+  // ve semanales; las quincenales ni aparecen en la lista).
+  const visibles = semanas.filter((s) => rhPerm.nominasTipos.includes(s.tipo));
+  const lista = filtro === 'todas' ? visibles : visibles.filter((s) => s.status === filtro);
 
   // Agrupadas por mes (YYYY-MM). `lista` ya viene ordenada por fecha_inicio DESC,
   // así que los meses salen del más reciente al más viejo.
@@ -112,7 +117,7 @@ export function NominasPage() {
           <h1 className="page-title">Nóminas</h1>
           <p className="page-subtitle">Selecciona una nómina para capturar incidencias</p>
         </div>
-        {canEdit && <button className="btn btn-primary" onClick={() => { setModal(true); setTipo(null); setIni(''); setFin(''); }}><Icon name="plus" size={15} /> Crear nómina</button>}
+        {canEdit && rhPerm.crearNomina && <button className="btn btn-primary" onClick={() => { setModal(true); setTipo(null); setIni(''); setFin(''); }}><Icon name="plus" size={15} /> Crear nómina</button>}
       </div>
 
       <div className="segmented" style={{ marginBottom: 14 }}>

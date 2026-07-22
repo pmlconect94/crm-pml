@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Icon } from './Icon';
 import { useAuth } from '@/lib/auth';
 import { MODULOS_POR_EMPRESA } from '@/lib/modulos';
+import { useRhPermisos } from '@/lib/nomina/permisos';
 
 const PROVEEDORES = [
   { id: 'blufin',     label: 'Blufin Seafood',       href: '/app/importaciones/blufin',     enabled: true },
@@ -56,6 +57,9 @@ export function Sidebar({ open = false }: { open?: boolean }) {
   const depts = MODULOS_POR_EMPRESA[empresaId].filter(
     (m) => !m.expandible && hasDept(m.id),
   );
+  // Permisos granulares de RH: qué secciones del desplegable ve este usuario.
+  const rhPerm = useRhPermisos();
+  const rhSecciones = RH_SECCIONES.filter((s) => rhPerm.secciones.includes(s.id));
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}${esMarlin ? ' sidebar-marlin' : ''}`}>
@@ -107,7 +111,7 @@ export function Sidebar({ open = false }: { open?: boolean }) {
                   borderRadius: 'var(--r-md)', overflow: 'hidden', boxShadow: 'var(--shadow-lg)',
                 }}
               >
-                {EMPRESAS.map((e) => (
+                {EMPRESAS.filter((e) => !user || user.empresas.includes(e.id)).map((e) => (
                   <button
                     key={e.id}
                     disabled={e.disabled}
@@ -225,7 +229,7 @@ export function Sidebar({ open = false }: { open?: boolean }) {
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
               >
-                {RH_SECCIONES.map((s) =>
+                {rhSecciones.map((s) =>
                   s.enabled ? (
                     <NavLink
                       key={s.id}

@@ -1685,6 +1685,21 @@ Las pantallas de nómina esperaban su propio `useAuth`. En vez de reescribirlas,
 
 Acceso al módulo: `hasDept('rh')` → roles `admin_total`, `director_ops`, `gerente_rh`.
 
+**Permisos GRANULARES de RH ✅ (2026-07-18, para el alta de Efraín):** `user_metadata` ganó dos
+llaves nuevas que lee `lib/auth.tsx`: **`empresas`** (`['pml','marlin']` default; con lista
+explícita el switcher solo ofrece esas y al entrar se aterriza en la primera — ej. Efraín solo
+`['marlin']`) y **`rh`** (objeto crudo de permisos granulares del módulo). El normalizador vive en
+**`lib/nomina/permisos.ts`** (`useRhPermisos()` → `RhPermisos`): sin la llave `rh` = acceso
+COMPLETO (los usuarios previos no cambian); con ella, cada campo restringe — `nominas_tipos`
+(semanal/quincenal), `secciones` (menú RH del Sidebar), `tabs` (pestañas del detalle de nómina;
+la inicial es la primera permitida), `resumen` (tarjetas del dashboard RH: incidencias ·
+motivos_he · comedor · empleados · viajes · prestamos), `empleados` ({imss, calculo, jornada,
+sueldos, banco} — oculta columnas/botones), y `crear_nomina`/`cerrar_nomina` (**opt-in explícito**
+cuando hay granulares: crear duplica semanas y cerrar descuenta préstamos). Lo consumen Sidebar,
+NominasPage (filtra tipos + botón Crear), NominaDetallePage (tabs + guard de tipo por URL +
+Guardar/Desbloquear), DashboardPage RH y EmpleadosPage. Es candado de **UI** (como el resto de
+permisos del CRM); el RLS de `nomina` sigue por rol admin/editor.
+
 ### 18.4 Estilos — `.rh-module` (⚠️ NO BORRAR)
 
 La app de nómina se diseñó **más densa y a ancho completo** que el CRM (tablas de 15+ columnas,
