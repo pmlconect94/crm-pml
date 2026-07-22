@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { CODIGOS_ASISTENCIA, MOTIVOS_TE, DIAS_SEMANA } from '@/lib/nomina/calc';
+import { fetchMotivosActivos } from '@/lib/nomina/catalogos';
 import { fmt, toISO } from '@/lib/nomina/format';
 
 const MESES_C = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -11,6 +12,14 @@ export function TabAsistencias({ semana, nominas, empleados, asistencias, viajeD
   const [sortEmp, setSortEmp] = useState<{ key: 'id_banco' | 'nombre'; dir: 1 | -1 }>({ key: 'id_banco', dir: 1 });
   const [areaFiltro, setAreaFiltro] = useState<string>('Todas');
   const [fullscreen, setFullscreen] = useState(false);
+  // Motivos de HE del catálogo (por empresa; ver RH → Catálogos). Respaldo: la
+  // lista hardcodeada MOTIVOS_TE si el catálogo no carga.
+  const [motivosTE, setMotivosTE] = useState<string[]>(MOTIVOS_TE);
+  useEffect(() => {
+    fetchMotivosActivos(semana.empresa, 'horas_extra')
+      .then((m) => { if (m.length) setMotivosTE(m); })
+      .catch(() => {});
+  }, [semana.empresa]);
   const toggleSort = (key: 'id_banco' | 'nombre') => setSortEmp((s) => s.key === key ? { key, dir: (s.dir === 1 ? -1 : 1) } : { key, dir: 1 });
 
   // Modo pantalla completa (enfoque): overlay que cubre toda la ventana para capturar sin scrollear el shell.
@@ -160,7 +169,7 @@ export function TabAsistencias({ semana, nominas, empleados, asistencias, viajeD
                           <input type="number" value={a?.retardo_min || ''} min="0" step="0.25" placeholder="0" disabled={!canEdit} onChange={(e) => update(nom.id, i, toISO(d), 'retardo_min', parseFloat(e.target.value) || 0)} style={{ width: 40, padding: '4px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 11 }} />
                           <input type="number" value={a?.te_horas || ''} min="0" step="0.5" placeholder="0" disabled={!canEdit} onChange={(e) => update(nom.id, i, toISO(d), 'te_horas', parseFloat(e.target.value) || 0)} style={{ width: 40, padding: '4px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 11 }} />
                           <select value={a?.te_motivo || ''} disabled={!canEdit || !(a?.te_horas > 0)} onChange={(e) => update(nom.id, i, toISO(d), 'te_motivo', e.target.value)} style={{ width: 64, padding: '4px 2px', borderRadius: 6, border: '1px solid var(--ink-200)', fontSize: 10 }}>
-                            <option value="">—</option>{MOTIVOS_TE.map((m) => <option key={m} value={m}>{m}</option>)}
+                            <option value="">—</option>{(a?.te_motivo && !motivosTE.includes(a.te_motivo) ? [a.te_motivo, ...motivosTE] : motivosTE).map((m) => <option key={m} value={m}>{m}</option>)}
                           </select>
                         </div>
                       </td>

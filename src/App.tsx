@@ -56,6 +56,7 @@ import { EmpleadosPage } from '@/pages/rh/EmpleadosPage';
 import { NominasPage } from '@/pages/rh/NominasPage';
 import { NominaDetallePage } from '@/pages/rh/NominaDetallePage';
 import { PrestamosPage } from '@/pages/rh/PrestamosPage';
+import { CatalogosPage } from '@/pages/rh/CatalogosPage';
 
 export default function App() {
   return (
@@ -148,6 +149,7 @@ export default function App() {
             <Route path="nominas/:semanaId" element={<NominaDetallePage />} />
             <Route path="empleados" element={<EmpleadosPage />} />
             <Route path="prestamos" element={<PrestamosPage />} />
+            <Route path="catalogos" element={<CatalogosPage />} />
             <Route path="vacaciones" element={<PlaceholderPage title="Vacaciones" subtitle="Próximamente (fase F4)" />} />
           </Route>
         </Route>

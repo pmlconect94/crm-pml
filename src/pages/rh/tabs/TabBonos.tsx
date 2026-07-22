@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { fmt, fmtFecha } from '@/lib/nomina/format';
+import { fetchMotivosActivos } from '@/lib/nomina/catalogos';
 import { Icon } from '@/components/Icon';
 
+// Respaldo si el catálogo no carga (la lista real vive en RH → Catálogos).
 const MOTIVOS = ['Productividad mensual', 'Ventas'];
 
 export function TabBonos({ semana, nominas, empleados, canEdit, onChanged }: any) {
@@ -14,6 +16,13 @@ export function TabBonos({ semana, nominas, empleados, canEdit, onChanged }: any
   const [form, setForm] = useState<any>({ monto: '', motivo: 'Productividad mensual' });
   const [permForm, setPermForm] = useState<any>({ monto: '', motivo: '' });
   const [saving, setSaving] = useState(false);
+  // Motivos del catálogo (por empresa). Se seleccionan, ya no se teclean.
+  const [motivos, setMotivos] = useState<string[]>(MOTIVOS);
+  useEffect(() => {
+    fetchMotivosActivos(semana.empresa, 'bono')
+      .then((m) => { if (m.length) setMotivos(m); })
+      .catch(() => {}); // el respaldo hardcodeado se queda si el catálogo no carga
+  }, [semana.empresa]);
 
   useEffect(() => { fetchAll(); }, [semana.id]);
   async function fetchAll() {
@@ -125,7 +134,7 @@ export function TabBonos({ semana, nominas, empleados, canEdit, onChanged }: any
               {canEdit && (
                 <div className="form-grid form-grid-3" style={{ alignItems: 'end', marginTop: 8 }}>
                   <div><label className="field-label">Monto</label><input className="field-input mono" type="number" step="0.01" value={permForm.monto} onChange={(e) => setPermForm((f: any) => ({ ...f, monto: e.target.value }))} /></div>
-                  <div style={{ gridColumn: 'span 1' }}><label className="field-label">Motivo</label><input className="field-input" placeholder="ej. Bono de puntualidad" value={permForm.motivo} onChange={(e) => setPermForm((f: any) => ({ ...f, motivo: e.target.value }))} /></div>
+                  <div style={{ gridColumn: 'span 1' }}><label className="field-label">Motivo</label><select className="field-input" value={permForm.motivo} onChange={(e) => setPermForm((f: any) => ({ ...f, motivo: e.target.value }))}><option value="">— Elegir motivo —</option>{motivos.map((m) => <option key={m}>{m}</option>)}</select></div>
                   <div><button className="btn btn-primary btn-sm" onClick={agregarPerm} disabled={saving} style={{ width: '100%' }}><Icon name="plus" size={14} /> Agregar permanente</button></div>
                 </div>
               )}
@@ -135,7 +144,7 @@ export function TabBonos({ semana, nominas, empleados, canEdit, onChanged }: any
               {canEdit && (
                 <div className="form-grid form-grid-2" style={{ alignItems: 'end' }}>
                   <div><label className="field-label">Monto</label><input className="field-input mono" type="number" step="0.01" value={form.monto} onChange={(e) => setForm((f: any) => ({ ...f, monto: e.target.value }))} /></div>
-                  <div><label className="field-label">Motivo</label><select className="field-input" value={form.motivo} onChange={(e) => setForm((f: any) => ({ ...f, motivo: e.target.value }))}>{MOTIVOS.map((m) => <option key={m}>{m}</option>)}</select></div>
+                  <div><label className="field-label">Motivo</label><select className="field-input" value={form.motivo} onChange={(e) => setForm((f: any) => ({ ...f, motivo: e.target.value }))}>{(motivos.includes(form.motivo) ? motivos : [form.motivo, ...motivos]).map((m) => <option key={m}>{m}</option>)}</select></div>
                 </div>
               )}
               {canEdit && <div className="hstack" style={{ justifyContent: 'flex-end', marginTop: 10 }}><button className="btn btn-primary btn-sm" onClick={agregar} disabled={saving}><Icon name="plus" size={14} /> Agregar bono</button></div>}

@@ -21,6 +21,7 @@ const RH_SECCIONES = [
   { id: 'nominas',    label: 'Nóminas',    href: '/app/rh/nominas',    enabled: true,  end: false },
   { id: 'empleados',  label: 'Empleados',  href: '/app/rh/empleados',  enabled: true,  end: false },
   { id: 'prestamos',  label: 'Préstamos',  href: '/app/rh/prestamos',  enabled: true,  end: false },
+  { id: 'catalogos',  label: 'Catálogos',  href: '/app/rh/catalogos',  enabled: true,  end: false },
   { id: 'vacaciones', label: 'Vacaciones', href: '/app/rh/vacaciones', enabled: false, end: false },
 ];
 

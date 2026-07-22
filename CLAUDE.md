@@ -1613,6 +1613,7 @@ src/pages/rh/
   NominaDetallePage.tsx detalle: orquesta las pestañas internas + guardar/desbloquear (PIN)
   EmpleadosPage.tsx     catálogo + ficha + Alta IMSS + switch Real/Fiscal + ficha del banco
   PrestamosPage.tsx     préstamos, abonos, avance
+  CatalogosPage.tsx     RH → Catálogos: motivos de HE / bonos / destinos de viaje (ver nota abajo)
   SueldoModal.tsx       sueldos por movimientos (candado con contraseña)
   ViajesPage.tsx        exporta `ViajesPanel` — NO es una ruta: es una PESTAÑA del detalle
   tabs/                 TabResumen, TabAsistencias, TabComedor, TabFiscal, TabRetroactivos,
@@ -1651,7 +1652,17 @@ export const dbNomina = (supabase as unknown as SupabaseClient).schema('nomina')
 Tablas del schema `nomina`: `empleados`, `semanas`, `nominas`, `asistencias`, `viajes`, `prestamos`,
 `prestamo_descuentos`, `prestamo_omitir`, `empleado_sueldo_movimientos`, `empleado_descuentos`,
 `comedor_registro`, `nomina_descuento_producto`, `nomina_bono`, `nomina_retroactivo`,
-`bono_permanente` (+ `_excluido`), `usuarios_roles` (legado, ya no se usa), vista `v_incidencias`.
+`bono_permanente` (+ `_excluido`), `usuarios_roles` (legado, ya no se usa), vista `v_incidencias`,
+y **`catalogo_motivos`** ✅ (2026-07-17, migración `20260717120000` — la ÚNICA tabla de `nomina`
+versionada en este repo): catálogo de **motivos de horas extra / motivos de bono / destinos de
+viaje**, listas separadas por empresa (`empresa` PML|MARLIN, `tipo` horas_extra|bono|viaje,
+`nombre`, `activo`, unique(empresa,tipo,nombre)); RLS patrón lec_/esc_ como sus hermanas. Se
+administra en **RH → Catálogos** (`CatalogosPage`, sin hard-delete: activar/desactivar) y lo
+consumen como `<select>` (vía `lib/nomina/catalogos.ts` con respaldo hardcodeado si no carga):
+`TabAsistencias` (motivo HE — antes MOTIVOS_TE fijo), `TabBonos` (motivo de bono del periodo y
+permanente — antes texto libre) y `ViajesPage` (destino — antes texto libre; viajes solo PML).
+Sembrado con el histórico DEPURADO (León/leon/león → León, etc.); los valores viejos que no
+están en el catálogo se siguen mostrando en su fila (se inyectan como opción).
 
 ### 18.3 Auth y empresa — adaptadores
 

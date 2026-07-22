@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { fmt } from '@/lib/nomina/format';
 import { calcIncentivos, getTramo, TAB_CHOFER, TAB_ACOMP } from '@/lib/nomina/calc';
+import { fetchMotivosActivos } from '@/lib/nomina/catalogos';
 import { Icon } from '@/components/Icon';
 
 const TRAMOS = ['7am–3pm', '3pm–7pm', '7pm–11pm', '11pm–7am'];
@@ -15,6 +16,12 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
   const [form, setForm] = useState<any>({ ...EMPTY });
   const [incent, setIncent] = useState({ chofer: 0, acomp: 0, tramo: null as number | null });
   const [editId, setEditId] = useState<string | null>(null); // viaje en edición (null = alta nueva)
+  // Destinos del catálogo (RH → Catálogos): se SELECCIONAN, ya no se teclean —
+  // el histórico tenía el mismo destino escrito de varias formas (León/leon/…).
+  const [destinos, setDestinos] = useState<string[]>([]);
+  useEffect(() => {
+    fetchMotivosActivos(semana.empresa, 'viaje').then(setDestinos).catch(() => {});
+  }, [semana.empresa]);
 
   useEffect(() => { (async () => {
     const { data: emps } = await dbNomina.from('empleados').select('id,nombre,id_banco,area').eq('activo', true).eq('empresa', semana.empresa).order('id_banco', { ascending: true, nullsFirst: false });
@@ -110,7 +117,7 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
           <div className="card-body">
             <div className="form-grid form-grid-3">
               <div><label className="field-label">Fecha</label><input className="field-input" type="date" value={form.fecha} onChange={(e) => onForm('fecha', e.target.value)} /></div>
-              <div><label className="field-label">Destino</label><input className="field-input" value={form.destino} onChange={(e) => onForm('destino', e.target.value)} /></div>
+              <div><label className="field-label">Destino</label><select className="field-input" value={form.destino} onChange={(e) => onForm('destino', e.target.value)}><option value="">— Elegir destino —</option>{(form.destino && !destinos.includes(form.destino) ? [form.destino, ...destinos] : destinos).map((d) => <option key={d} value={d}>{d}</option>)}</select></div>
               <div><label className="field-label">Cliente</label><input className="field-input" value={form.cliente} onChange={(e) => onForm('cliente', e.target.value)} /></div>
               <div><label className="field-label">Vehículo</label><input className="field-input" value={form.vehiculo} onChange={(e) => onForm('vehiculo', e.target.value)} /></div>
               <div><label className="field-label">Chofer <span className="text-xs muted">(Logística/Almacén)</span></label><select className="field-input" value={form.chofer_id} onChange={(e) => onForm('chofer_id', e.target.value)}><option value="">—</option>{logistica.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
