@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { fmt, MESES } from '@/lib/nomina/format';
 import { PageEnter } from '@/components/motion';
@@ -258,6 +259,14 @@ export function DashboardPage() {
       <Icon name="download" size={13} /> Excel
     </button>
   );
+
+  // Sin permiso de "Resumen" (ej. Isabel), la raíz de RH redirige a la primera
+  // sección permitida — la tarjeta del Dashboard general lleva a /app/rh y sin
+  // esto aterrizaría en una página vacía. (Después de todos los hooks.)
+  if (!rhPerm.secciones.includes('resumen')) {
+    const destino = rhPerm.secciones.find((s) => s !== 'resumen');
+    if (destino) return <Navigate to={`/app/rh/${destino}`} replace />;
+  }
 
   return (
     <PageEnter>
