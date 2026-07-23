@@ -1329,10 +1329,13 @@ usuarios → retirar el repo/deploy separado de la nómina (`pmlconect94/nomina-
 
 **Contabilidad — módulo completo (2026-07-09 → 07-13):** construido de cero (saltó el flujo de prototipo, pedido directo del usuario) — sync SAT→Supabase corriendo en GitHub Actions 3x/día, visor de facturas con filtros, PDF on-demand vía función de Vercel, relaciones (NC↔factura) y pagos/saldo pendiente en el detalle, export a Excel línea-por-concepto con desglose de impuestos, y un fix de robustez en el sync (el SAT a veces "pierde" una solicitud y sin manejarlo tumbaba TODA la sincronización). **Detalle completo, gotchas y las 9 propuestas de features contables pendientes: ver la subsección `### Contabilidad` arriba (dentro de §16) y la fila de §15.**
 
-**PENDIENTE para otra sesión:**
+**PENDIENTE para otra sesión** (repriorizado por el usuario 2026-07-23 — los puntos 2 y 4 quedan
+EN PAUSA hasta que se construya el **sistema de VENTAS**, que "ya casi sucede"):
 1. **Contabilidad**: ver la lista de 9 propuestas en la subsección `### Contabilidad` arriba — las más directas de construir con lo que ya está son **antigüedad de saldos (AP aging)** y la **alerta de PPD sin complemento de pago**.
-2. **Versión celular — pulir pantalla por pantalla** (la fundación/shell ya está — ver nota arriba). Priorizar con el usuario: ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes, Contratos.
+2. ⏸️ (hasta Ventas) **Versión celular — pulir pantalla por pantalla** (la fundación/shell ya está — ver nota arriba). Priorizar con el usuario: ventas en Llegadas→Por producto, almacén en Recepción, Pagos→Pendientes, Contratos.
 3. Pulir Camanchaca/Neptuno conforme el usuario los pruebe (no verificados interactivamente — se generaron con subagentes).
+4. ⏸️ (hasta Ventas) **Auditoría de concurrencia — Fases 1-4** (2026-07-17, ver conversación): Vercel/Supabase aguantan 100 usuarios; el riesgo es concurrencia. F1 = constraints únicos anti-duplicados (nomina.nominas semana+empleado — YA HAY 1 duplicado real: José de Jesús Martín, semana PML 2026-05-25 timbrada, filas a 178ms; nomina.semanas; prestamo_descuentos; blufin_recepciones contrato_id; forwards Pendiente parcial) + limpiar ese duplicado — requiere ventana sin captura de nómina. F2 = Realtime + refetch (que el cambio de un usuario le aparezca al otro). F3 = RPCs transaccionales para pagos/NC/forwards/guardar-nómina (doble pago, NC sobre-aplicada, guardado doble). F4 = RLS por rol (los advisors marcan 56 políticas always-true).
+5. **Reporte MERCANTIL DE ALIMENTOS DEL MAR** (proveedor de surimi, RFC MAM870921QB1): compras 2024→hoy con kg/precios. Solo hay 2026 sincronizado; el histórico requiere backfill del SAT vía GitHub Actions (la e.firma NO está local) — falta decidir alcance (solo MERCANTIL vs todas las recibidas 2024-25) y que el usuario dispare el workflow.
 
 ---
 
