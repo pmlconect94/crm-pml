@@ -106,6 +106,19 @@ export function SueldoModal({ empleado, onClose, onChanged }: { empleado: any; o
     const periodoReal = parseFloat(form.periodo_real) || 0;
     const periodoFiscal = parseFloat(form.periodo_fiscal) || 0;
     if (periodoReal <= 0 && periodoFiscal <= 0) { toast.error(`Captura al menos un sueldo ${periodoAdj}`); return; }
+    // El sueldo BASE (el que calcula asistencia/séptimo/HE) no puede quedar en cero: si queda,
+    // la nómina sale en $0 y parece que "no le cuenta los días" (bug real 2026-07-25, ver
+    // CLAUDE.md §18.6). Misma regla que calc.ts: PML siempre usa el REAL; Marlin usa el REAL
+    // salvo que el switch de cálculo esté en Fiscal.
+    const usaFiscalBase = empleado?.empresa === 'MARLIN' && empleado?.usar_sueldo_real === false;
+    if (usaFiscalBase ? periodoFiscal <= 0 : periodoReal <= 0) {
+      toast.error(
+        usaFiscalBase
+          ? `Falta el sueldo ${periodoAdj} FISCAL: ${empleado.nombre} calcula con el sueldo fiscal, sin él su nómina sale en $0.`
+          : `Falta el sueldo ${periodoAdj} REAL: ${empleado.nombre} calcula con el sueldo real, sin él su nómina sale en $0.`,
+      );
+      return;
+    }
     if (!form.fecha_inicio) { toast.error('Falta la fecha de inicio'); return; }
     setSaving(true);
 

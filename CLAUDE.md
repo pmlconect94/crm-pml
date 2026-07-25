@@ -1773,6 +1773,38 @@ dispersión Banorte…). **Leerlo antes de tocar `lib/nomina/calc.ts`.** Lo más
 > **Marlin** conserva la nota (commit `45e9e67`). **Lección:** el depósito se calcula en DOS lugares
 > (`calc.ts` y `TabFiscal.depFiscalDe`) — si se toca la fórmula, revisar los dos o se desincronizan.
 
+> **🐛 Bug corregido 2026-07-25 (empleado nuevo con la nómina en $0 — "no le cuenta los días").**
+> El usuario reportó que a **Vanessa** (alta reciente, Marlin, área Salmón) **no le contaban los días
+> trabajados**. Las asistencias estaban bien capturadas (A/A/A/D): el problema era el **sueldo base en
+> cero**. Al darla de alta le capturaron solo el sueldo **fiscal** ($2,408) y el **real quedó en $0**;
+> como el modelo default de Marlin es **Real**, `dBase = dDR = 0` y **todo el renglón se multiplicaba
+> por cero**. Se ve idéntico a "no cuenta los días" pero es un dato faltante, NO un bug de asistencias.
+>
+> **La regla exacta (`calc.ts:52-60`), que es de donde nace la trampa:**
+> `dBase` (el diario que calcula asistencia, séptimo, HE y retardos) sale del **sueldo REAL**;
+> **solo Marlin con el switch en Fiscal** (`usar_sueldo_real === false`) usa el **FISCAL**.
+> ⚠️ **PML SIEMPRE usa el real** → el hoyo existía en las DOS empresas, no solo en Marlin: capturar
+> únicamente el sueldo fiscal (que es lo intuitivo) dejaba la nómina en $0 sin avisar.
+>
+> **Por qué era fácil caer:** el **alta del empleado (`EmpleadosPage.guardar`) NO captura sueldos** —
+> van aparte en `SueldoModal` (con candado de contraseña). Un empleado nuevo nace con
+> `sd_real = sd_fiscal = 0`, y `SueldoModal.guardar` solo exigía **"al menos uno"** de los dos.
+>
+> **Arreglo (2 partes):** (a) dato — a Vanessa se le puso el `sd_real` de su área ($2,613.44);
+> (b) código — `SueldoModal.guardar` ahora **bloquea el guardado si el sueldo BASE queda en cero**,
+> replicando la misma regla de `calc.ts` (`usaFiscalBase = empresa==='MARLIN' && usar_sueldo_real===false`)
+> y diciendo cuál falta y por qué ("sin él su nómina sale en $0"). Auditado: **0 empleados activos**
+> quedaron con base en cero.
+>
+> **Lección:** ante un "no le cuenta los días/no le paga", **revisar primero el sueldo base del
+> empleado (`sd_real`/`sd_fiscal` según empresa+switch) ANTES de sospechar de las asistencias o del
+> cálculo.** Query de auditoría (corre en cualquier momento; debe devolver 0 filas):
+> ```sql
+> select nombre, empresa, sd_real, sd_fiscal from nomina.empleados where activo
+> and coalesce(case when empresa='MARLIN' and usar_sueldo_real = false
+>                   then sd_fiscal else sd_real end, 0) <= 0;
+> ```
+
 ### 18.7 Estado y pendientes (2026-07-16)
 
 - ✅ Portado, compila (`tsc` 0 errores) y build OK. Estilos verificados contra la nómina.
