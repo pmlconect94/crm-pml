@@ -171,16 +171,28 @@ class SupabaseSink:
         )
         resp.raise_for_status()
 
-    def update_solicitud(self, id_solicitud: str, *, estado: str, procesada: bool, facturas_importadas: int = 0) -> None:
+    def update_solicitud(
+        self,
+        id_solicitud: str,
+        *,
+        estado: str,
+        procesada: bool,
+        facturas_importadas: int = 0,
+        intentos_fallidos: int | None = None,
+    ) -> None:
+        payload = {
+            "estado": estado,
+            "procesada": procesada,
+            "facturas_importadas": facturas_importadas,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if intentos_fallidos is not None:
+            payload["intentos_fallidos"] = intentos_fallidos
+
         resp = self.session.patch(
             f"{self.base_url}/rest/v1/cont_solicitudes",
             params={"id_solicitud": f"eq.{id_solicitud}"},
-            json={
-                "estado": estado,
-                "procesada": procesada,
-                "facturas_importadas": facturas_importadas,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            },
+            json=payload,
             headers=self._headers(write=True, prefer="return=minimal"),
         )
         resp.raise_for_status()

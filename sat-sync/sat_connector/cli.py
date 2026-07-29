@@ -5,7 +5,7 @@ from datetime import datetime
 
 from .config import load_config
 from .supabase_sink import SupabaseSink
-from .sync import revisar_pendientes, solicitar_incremental, solicitar_rango
+from .sync import MAX_FALLOS_CONSECUTIVOS, revisar_pendientes, solicitar_incremental, solicitar_rango
 
 
 def _parse_date(value: str):
@@ -41,6 +41,9 @@ def cmd_revisar(args: argparse.Namespace) -> None:
         estado = r["estado"]
         if estado == "TERMINADA":
             print(f"  [LISTO]   {r['tipo']:10s} id_solicitud={r['id_solicitud']}   facturas importadas: {r['facturas_importadas']}")
+        elif estado == "REINTENTAR":
+            detalle = r.get("mensaje") or r.get("codigo") or ""
+            print(f"  [REINTENT] {r['tipo']:10s} id_solicitud={r['id_solicitud']}   fallo {r['intentos_fallidos']}/{MAX_FALLOS_CONSECUTIVOS}: {detalle}")
         elif estado in ("ERROR", "RECHAZADA", "VENCIDA"):
             detalle = r.get("mensaje") or r.get("codigo") or ""
             print(f"  [{estado:9s}] {r['tipo']:10s} id_solicitud={r['id_solicitud']}   {detalle}")
@@ -64,6 +67,11 @@ def cmd_sincronizar(args: argparse.Namespace) -> None:
         if r["estado"] == "TERMINADA":
             importadas_total += r["facturas_importadas"]
             lineas_log.append(f"revisar: {r['tipo']} id_solicitud={r['id_solicitud']} -> {r['facturas_importadas']} facturas importadas")
+        elif r["estado"] == "REINTENTAR":
+            lineas_log.append(
+                f"revisar: {r['tipo']} id_solicitud={r['id_solicitud']} -> fallo {r['intentos_fallidos']}/{MAX_FALLOS_CONSECUTIVOS}, "
+                f"se reintenta en la proxima corrida ({r.get('mensaje') or r.get('codigo') or ''})"
+            )
         elif r["estado"] in ("ERROR", "RECHAZADA", "VENCIDA"):
             lineas_log.append(f"revisar: {r['tipo']} id_solicitud={r['id_solicitud']} -> {r['estado']} ({r.get('mensaje') or r.get('codigo') or ''})")
         else:

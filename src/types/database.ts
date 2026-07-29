@@ -988,6 +988,7 @@ export type Database = {
           estado: string;
           procesada: boolean;
           facturas_importadas: number;
+          intentos_fallidos: number;
           created_at: string;
           updated_at: string;
         };
@@ -1000,6 +1001,7 @@ export type Database = {
           estado?: string;
           procesada?: boolean;
           facturas_importadas?: number;
+          intentos_fallidos?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -1011,6 +1013,7 @@ export type Database = {
           estado?: string;
           procesada?: boolean;
           facturas_importadas?: number;
+          intentos_fallidos?: number;
           updated_at?: string;
         };
         Relationships: Empty;

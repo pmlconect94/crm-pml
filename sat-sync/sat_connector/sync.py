@@ -10,7 +10,46 @@ from .config import Config
 from .descarga import chunk_date_range, consultar_estado, descargar_paquete, solicitar_descarga, solicitar_descarga_datetime
 from .supabase_sink import SupabaseSink
 
-ESTADOS_FINALES_SIN_PAQUETES = {EstadoSolicitud.ERROR, EstadoSolicitud.RECHAZADA, EstadoSolicitud.VENCIDA}
+# RECHAZADA y VENCIDA si son definitivos: el SAT no va a entregar nada de esa
+# solicitud por mas que se le vuelva a preguntar. ERROR *no* entra aqui a
+# proposito, ver _registrar_fallo_transitorio.
+ESTADOS_FINALES_SIN_PAQUETES = {EstadoSolicitud.RECHAZADA, EstadoSolicitud.VENCIDA}
+
+# Cuantas consultas de estado seguidas tienen que fallar antes de dar una
+# solicitud por muerta. Con 3 corridas al dia son ~24h de margen.
+MAX_FALLOS_CONSECUTIVOS = 3
+
+
+def _registrar_fallo_transitorio(sink: SupabaseSink, solicitud: dict, *, mensaje: str | None, codigo: str | None) -> dict:
+    """El SAT respondio algo que no deja avanzar con esta solicitud (ERROR, o un
+    EstadoSolicitud fuera de su propio catalogo con CodEstatus 5004/404).
+
+    Ojo: eso NO significa que la solicitud este muerta. El SAT es intermitente
+    consultando estados y se le ha visto reportar ERROR sobre una solicitud que
+    minutos despues vuelve a salir EN_PROCESO y termina entregando su paquete
+    (caso real 2026-07-29: la solicitud 802d8780 se reporto ERROR "Error no
+    controlado" y 15 min despues el propio SAT la daba por viva). Por eso se
+    cuenta el fallo y se deja pendiente para reintentarla en las siguientes
+    corridas; solo tras MAX_FALLOS_CONSECUTIVOS seguidos se abandona.
+
+    Aun abandonandola no se pierden facturas: el sync incremental pide siempre
+    los ultimos `dias_atras` dias (5 por default), asi que ese rango de fechas
+    se vuelve a cubrir con una solicitud nueva. Lo que este manejo evita es
+    tirar a la basura solicitudes buenas y retrasar la sincronizacion un dia."""
+    id_solicitud = solicitud["id_solicitud"]
+    intentos = int(solicitud.get("intentos_fallidos") or 0) + 1
+    agotada = intentos >= MAX_FALLOS_CONSECUTIVOS
+    estado = "ERROR" if agotada else "REINTENTAR"
+
+    sink.update_solicitud(id_solicitud, estado=estado, procesada=agotada, intentos_fallidos=intentos)
+    return {
+        "id_solicitud": id_solicitud,
+        "tipo": solicitud["tipo"],
+        "estado": estado,
+        "mensaje": mensaje,
+        "codigo": codigo,
+        "intentos_fallidos": intentos,
+    }
 
 
 def solicitar_rango(config: Config, tipos: list[str], desde: date, hasta: date) -> list[dict]:
@@ -86,19 +125,16 @@ def revisar_pendientes(config: Config) -> list[dict]:
             estado = EstadoSolicitud(estado_resp["EstadoSolicitud"])
         except ValueError:
             # El SAT a veces "pierde" una solicitud (ej. CodEstatus 5004 "No se
-            # encontro la informacion") y regresa un EstadoSolicitud fuera del
-            # catalogo (0) en vez de un estado valido (1-6). No hay nada que
-            # reintentar sobre esa solicitud puntual: se marca como fallida para
-            # dejar de revisarla en cada corrida (el siguiente sync incremental,
-            # dias_atras=5 por default, vuelve a cubrir ese rango de fechas con
-            # una solicitud nueva). Sin este manejo, una sola solicitud "perdida"
-            # tumba el resto de la sincronizacion en cada corrida.
-            sink.update_solicitud(id_solicitud, estado="ERROR", procesada=True)
-            resultados.append({
-                "id_solicitud": id_solicitud, "tipo": tipo, "estado": "ERROR",
-                "mensaje": estado_resp.get("Mensaje") or f"EstadoSolicitud invalido: {estado_resp.get('EstadoSolicitud')!r}",
-                "codigo": estado_resp.get("CodEstatus") or estado_resp.get("CodigoEstadoSolicitud"),
-            })
+            # encontro la informacion" o 404 "Error no controlado") y regresa un
+            # EstadoSolicitud fuera del catalogo (0) en vez de un estado valido
+            # (1-6). Se reintenta unas corridas antes de abandonarla; sin este
+            # manejo (o marcandola muerta al primer fallo) una respuesta mala
+            # pasajera tumba la sincronizacion o tira una solicitud buena.
+            resultados.append(_registrar_fallo_transitorio(
+                sink, solicitud,
+                mensaje=estado_resp.get("Mensaje") or f"EstadoSolicitud invalido: {estado_resp.get('EstadoSolicitud')!r}",
+                codigo=estado_resp.get("CodEstatus") or estado_resp.get("CodigoEstadoSolicitud"),
+            ))
             continue
 
         if estado == EstadoSolicitud.TERMINADA:
@@ -114,17 +150,19 @@ def revisar_pendientes(config: Config) -> list[dict]:
                     total_importadas += storage.import_zip(sink, config, zip_path, tipo, id_solicitud)
             except Exception as e:
                 # descargar_paquete ya reintenta solo; si aun asi falla (u otro
-                # error de red/import), NO se marca procesada: se deja pendiente
-                # para reintentar en la proxima corrida (reimportar es seguro,
-                # todo el pipeline usa upsert). Sin este manejo, un solo paquete
-                # con problemas tumba el resto de la revision.
-                resultados.append({
-                    "id_solicitud": id_solicitud, "tipo": tipo, "estado": "REINTENTAR",
-                    "mensaje": f"{type(e).__name__}: {e}",
-                })
+                # error de red/import) se deja pendiente para reintentar en la
+                # proxima corrida (reimportar es seguro, todo el pipeline usa
+                # upsert). Sin este manejo, un solo paquete con problemas tumba
+                # el resto de la revision.
+                resultados.append(_registrar_fallo_transitorio(
+                    sink, solicitud, mensaje=f"{type(e).__name__}: {e}", codigo=None,
+                ))
                 continue
 
-            sink.update_solicitud(id_solicitud, estado="TERMINADA", procesada=True, facturas_importadas=total_importadas)
+            sink.update_solicitud(
+                id_solicitud, estado="TERMINADA", procesada=True,
+                facturas_importadas=total_importadas, intentos_fallidos=0,
+            )
             resultados.append({
                 "id_solicitud": id_solicitud, "tipo": tipo, "estado": estado.name,
                 "facturas_importadas": total_importadas,
@@ -138,8 +176,10 @@ def revisar_pendientes(config: Config) -> list[dict]:
                 "codigo": estado_resp.get("CodigoEstadoSolicitud"),
             })
 
-        else:  # ACEPTADA o EN_PROCESO: el SAT todavia no termina de generar los paquetes
-            sink.update_solicitud(id_solicitud, estado=estado.name, procesada=False)
+        else:  # ACEPTADA o EN_PROCESO: el SAT todavia no termina de generar los paquetes.
+            # El contador de fallos se reinicia: solo importan los fallos
+            # *consecutivos*, y el SAT acaba de contestar un estado valido.
+            sink.update_solicitud(id_solicitud, estado=estado.name, procesada=False, intentos_fallidos=0)
             resultados.append({
                 "id_solicitud": id_solicitud, "tipo": tipo, "estado": estado.name,
             })
