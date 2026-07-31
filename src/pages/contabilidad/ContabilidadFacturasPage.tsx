@@ -10,7 +10,7 @@ import { PageEnter } from '@/components/motion';
 import { FacturaDetalleModal } from '@/features/contabilidad/FacturaDetalleModal';
 import { fetchFacturas, fetchUltimaSincronizacion, FACTURAS_PAGE_SIZE, type FacturasFiltros } from '@/features/contabilidad/facturas-queries';
 import { exportFacturasDetallado } from '@/features/contabilidad/facturas-export';
-import { TIPO_COMPROBANTE_FILTROS, METODO_PAGO_FILTROS, formaPagoCorto } from '@/features/contabilidad/catalogos-sat';
+import { TIPO_COMPROBANTE_FILTROS, METODO_PAGO_FILTROS, FORMA_PAGO_FILTROS, formaPagoCorto } from '@/features/contabilidad/catalogos-sat';
 import { useAuth } from '@/lib/auth';
 import { fmtPorMoneda, fmtFechaTS, fmtFechaHoraTS } from '@/lib/format';
 import type { ContFactura } from '@/types/database';
@@ -47,13 +47,14 @@ export function ContabilidadFacturasPage() {
   const [hasta, setHasta] = useState('');
   const [tipoComprobante, setTipoComprobante] = useState<string | undefined>(undefined);
   const [metodoPago, setMetodoPago] = useState<string | undefined>(undefined);
+  const [formaPago, setFormaPago] = useState<string | undefined>(undefined);
   const [page, setPage] = useState(0);
   const [detalleUuid, setDetalleUuid] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
 
   const filtros: FacturasFiltros = useMemo(
-    () => ({ q: q.trim() || undefined, desde: desde || undefined, hasta: hasta || undefined, tipoComprobante, metodoPago }),
-    [q, desde, hasta, tipoComprobante, metodoPago],
+    () => ({ q: q.trim() || undefined, desde: desde || undefined, hasta: hasta || undefined, tipoComprobante, metodoPago, formaPago }),
+    [q, desde, hasta, tipoComprobante, metodoPago, formaPago],
   );
 
   const { data, isLoading, isFetching } = useQuery({
@@ -71,7 +72,7 @@ export function ContabilidadFacturasPage() {
   const facturas = data?.facturas ?? [];
   const total = data?.count ?? 0;
   const totalPaginas = Math.max(1, Math.ceil(total / FACTURAS_PAGE_SIZE));
-  const hayFiltros = !!(q || desde || hasta || tipoComprobante || metodoPago);
+  const hayFiltros = !!(q || desde || hasta || tipoComprobante || metodoPago || formaPago);
 
   const cambiarFiltro = <T,>(setter: (v: T) => void) => (v: T) => {
     setter(v);
@@ -171,6 +172,7 @@ export function ContabilidadFacturasPage() {
                   setHasta('');
                   setTipoComprobante(undefined);
                   setMetodoPago(undefined);
+                  setFormaPago(undefined);
                   setPage(0);
                 }}
               >
@@ -195,6 +197,21 @@ export function ContabilidadFacturasPage() {
                 </Chip>
               ))}
             </div>
+            <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink-200)' }} />
+            {/* Forma de pago: son 11 claves, demasiadas para chips → select. */}
+            <select
+              className="field-input"
+              style={{ width: 210, padding: '5px 8px', fontSize: 12 }}
+              value={formaPago ?? ''}
+              onChange={(e) => cambiarFiltro(setFormaPago)(e.target.value || undefined)}
+              title="Forma de pago (c_FormaPago del SAT). Los comprobantes de Pago y Carta porte no la traen en el encabezado, así que quedan fuera al filtrar."
+            >
+              {FORMA_PAGO_FILTROS.map((f) => (
+                <option key={f.label} value={f.value ?? ''}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

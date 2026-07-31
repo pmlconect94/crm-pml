@@ -33,6 +33,7 @@ async function fetchTodasLasFacturas(empresaId: string, filtros: FacturasFiltros
     if (filtros.hasta) query = query.lte('fecha_emision', `${filtros.hasta}T23:59:59`);
     if (filtros.tipoComprobante) query = query.eq('tipo_comprobante', filtros.tipoComprobante);
     if (filtros.metodoPago) query = query.eq('metodo_pago', filtros.metodoPago);
+    if (filtros.formaPago) query = query.eq('forma_pago', filtros.formaPago);
     const q = filtros.q?.trim();
     if (q) {
       const term = q.replace(/[%,()]/g, ' ').trim();

@@ -20,6 +20,11 @@ export type FacturasFiltros = {
   tipoComprobante?: string;
   /** c_MetodoPago: PUE/PPD. */
   metodoPago?: string;
+  /** c_FormaPago: 01 Efectivo, 03 Transferencia, 99 Por definir… Ojo: los
+   *  comprobantes de Pago (P) y Carta porte (T) no la traen en el encabezado
+   *  (en los P vive en el complemento, `cont_pagos.forma_pago`), así que
+   *  filtrar por forma de pago los deja fuera. */
+  formaPago?: string;
 };
 
 export type FacturasPagina = {
@@ -51,6 +56,7 @@ export async function fetchFacturas(
   if (filtros.hasta) query = query.lte('fecha_emision', `${filtros.hasta}T23:59:59`);
   if (filtros.tipoComprobante) query = query.eq('tipo_comprobante', filtros.tipoComprobante);
   if (filtros.metodoPago) query = query.eq('metodo_pago', filtros.metodoPago);
+  if (filtros.formaPago) query = query.eq('forma_pago', filtros.formaPago);
 
   const q = filtros.q?.trim();
   if (q) {

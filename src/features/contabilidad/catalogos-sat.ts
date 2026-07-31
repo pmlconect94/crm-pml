@@ -34,11 +34,24 @@ export const FORMA_PAGO_SAT: Record<string, string> = {
   '02': 'Cheque nominativo',
   '03': 'Transferencia electrónica',
   '04': 'Tarjeta de crédito',
+  '06': 'Dinero electrónico',
   '15': 'Condonación',
+  '17': 'Compensación',
   '28': 'Tarjeta de débito',
+  '30': 'Aplicación de anticipos',
   '31': 'Intermediario pagos',
   '99': 'Por definir',
 };
+
+// Orden explícito para el filtro: `Object.keys` reordena las claves numéricas
+// canónicas ('15','99'…) antes que las que llevan cero a la izquierda ('01'),
+// así que la lista se declara a mano en orden de clave.
+const FORMA_PAGO_ORDEN = ['01', '02', '03', '04', '06', '15', '17', '28', '30', '31', '99'];
+
+export const FORMA_PAGO_FILTROS: { value: string | undefined; label: string }[] = [
+  { value: undefined, label: 'Todas las formas de pago' },
+  ...FORMA_PAGO_ORDEN.map((c) => ({ value: c, label: `${c} · ${FORMA_PAGO_SAT[c]}` })),
+];
 
 export const formaPagoLabel = (c: string | null) => (c ? `${c} · ${FORMA_PAGO_SAT[c] ?? 'Otro'}` : '—');
 export const formaPagoCorto = (c: string | null) => (c ? (FORMA_PAGO_SAT[c] ?? c) : '—');
