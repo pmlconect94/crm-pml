@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase, dbNomina } from '@/lib/nomina/db';
+import { supabase, dbNomina, avisarNoGuardado } from '@/lib/nomina/db';
 import { CODIGOS_ASISTENCIA, MOTIVOS_TE, DIAS_SEMANA } from '@/lib/nomina/calc';
 import { fetchMotivosActivos } from '@/lib/nomina/catalogos';
 import { fmt, toISO } from '@/lib/nomina/format';
@@ -88,17 +88,26 @@ export function TabAsistencias({ semana, nominas, empleados, asistencias, viajeD
     const idx = asistencias[nomId].findIndex((a: any) => a.dia_index === i);
     if (idx >= 0) asistencias[nomId][idx] = upd; else asistencias[nomId].push(upd);
     try {
-      if (ex?.id) await dbNomina.from('asistencias').update({ [campo]: valor }).eq('id', ex.id);
-      else {
+      if (ex?.id) {
+        const { error } = await dbNomina.from('asistencias').update({ [campo]: valor }).eq('id', ex.id);
+        if (error) throw error;
+      } else {
         // upsert por (nomina_id, dia_index): si ya existe la fila del día la actualiza,
         // si no, la crea. Evita filas duplicadas para el mismo día. Manda la celda completa.
-        const { data } = await dbNomina.from('asistencias').upsert({
+        const { data, error } = await dbNomina.from('asistencias').upsert({
           nomina_id: nomId, dia_index: i, fecha,
           codigo: upd.codigo || '', te_horas: upd.te_horas || 0, te_motivo: upd.te_motivo || '', retardo_min: upd.retardo_min || 0,
         }, { onConflict: 'nomina_id,dia_index' }).select().single();
+        if (error) throw error;
         if (data) { setLocal((p) => ({ ...p, [key]: { ...p[key], id: data.id } })); const j = asistencias[nomId].findIndex((a: any) => a.dia_index === i); if (j >= 0) asistencias[nomId][j].id = data.id; }
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      // La celda NO debe quedar pintada si la base no la recibió: se revierte al valor previo.
+      setLocal((p) => { const n = { ...p }; if (ex) n[key] = ex; else delete n[key]; return n; });
+      const j = asistencias[nomId].findIndex((a: any) => a.dia_index === i);
+      if (j >= 0) { if (ex) asistencias[nomId][j] = ex; else asistencias[nomId].splice(j, 1); }
+      avisarNoGuardado(err);
+    }
   }
 
   return (

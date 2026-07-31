@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase, dbNomina } from '@/lib/nomina/db';
+import { supabase, dbNomina, avisarNoGuardado } from '@/lib/nomina/db';
 import { fmt, toISO } from '@/lib/nomina/format';
 
 const COSTO = 30;
@@ -64,22 +64,29 @@ export function TabComedor({ semana, nominas, empleados, canEdit }: any) {
   async function syncMonto(empId: string, nomId: string, next: Map<string, number>) {
     const monto = countNom(nomId, next) * COSTO;
     if (nominas[empId]) nominas[empId].comedor = monto;
-    await dbNomina.from('nominas').update({ comedor: monto }).eq('id', nomId);
+    const { error } = await dbNomina.from('nominas').update({ comedor: monto }).eq('id', nomId);
+    if (error) throw error;
   }
 
   // Marca / desmarca el día (cantidad 1). Desmarcar borra el registro.
   async function toggle(empId: string, nomId: string, fecha: string) {
     if (!canEdit) return;
     const key = `${nomId}|${fecha}`;
+    const previo = marcados; // para revertir si la BD rechaza la escritura
     const next = new Map(marcados);
     const checked = next.has(key);
     if (checked) next.delete(key); else next.set(key, 1);
     setMarcados(next);
     try {
-      if (checked) await dbNomina.from('comedor_registro').delete().eq('nomina_id', nomId).eq('fecha', fecha);
-      else await dbNomina.from('comedor_registro').insert({ semana_id: semana.id, nomina_id: nomId, empleado_id: empId, fecha, cantidad: 1 });
+      const { error } = checked
+        ? await dbNomina.from('comedor_registro').delete().eq('nomina_id', nomId).eq('fecha', fecha)
+        : await dbNomina.from('comedor_registro').insert({ semana_id: semana.id, nomina_id: nomId, empleado_id: empId, fecha, cantidad: 1 });
+      if (error) throw error;
       await syncMonto(empId, nomId, next);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      setMarcados(previo); // la pantalla NO debe mostrar algo que no quedó guardado
+      avisarNoGuardado(err);
+    }
   }
 
   // Comida doble: pone la cantidad del día en 2 (o de vuelta en 1). Solo si el día ya está marcado.
@@ -88,13 +95,18 @@ export function TabComedor({ semana, nominas, empleados, canEdit }: any) {
     const key = `${nomId}|${fecha}`;
     if (!marcados.has(key)) return;
     const cant = doble ? 2 : 1;
+    const previo = marcados;
     const next = new Map(marcados);
     next.set(key, cant);
     setMarcados(next);
     try {
-      await dbNomina.from('comedor_registro').update({ cantidad: cant }).eq('nomina_id', nomId).eq('fecha', fecha);
+      const { error } = await dbNomina.from('comedor_registro').update({ cantidad: cant }).eq('nomina_id', nomId).eq('fecha', fecha);
+      if (error) throw error;
       await syncMonto(empId, nomId, next);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      setMarcados(previo);
+      avisarNoGuardado(err);
+    }
   }
 
   let totalDias = 0;

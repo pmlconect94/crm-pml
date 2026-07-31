@@ -1655,7 +1655,8 @@ export const dbNomina = (supabase as unknown as SupabaseClient).schema('nomina')
 Tablas del schema `nomina`: `empleados`, `semanas`, `nominas`, `asistencias`, `viajes`, `prestamos`,
 `prestamo_descuentos`, `prestamo_omitir`, `empleado_sueldo_movimientos`, `empleado_descuentos`,
 `comedor_registro`, `nomina_descuento_producto`, `nomina_bono`, `nomina_retroactivo`,
-`bono_permanente` (+ `_excluido`), `usuarios_roles` (legado, ya no se usa), vista `v_incidencias`,
+`bono_permanente` (+ `_excluido`), **`usuarios_roles`** (⚠️ **NO es legado — es lo que decide quién
+puede ESCRIBIR en todo el schema `nomina`; ver §18.8**), vista `v_incidencias`,
 y **`catalogo_motivos`** ✅ (2026-07-17, migración `20260717120000` — la ÚNICA tabla de `nomina`
 versionada en este repo): catálogo de **motivos de horas extra / motivos de bono / destinos de
 viaje**, listas separadas por empresa (`empresa` PML|MARLIN, `tipo` horas_extra|bono|viaje,
@@ -1820,3 +1821,62 @@ dispersión Banorte…). **Leerlo antes de tocar `lib/nomina/calc.ts`.** Lo más
 **Tip de entorno:** el dev server del CRM no arranca vía `npm --prefix` por el **espacio** en la ruta
 `CRM PML`; usar el nombre corto 8.3 (`C:/Users/ddlpm/PROYEC~1/GRUPOL~1/CRMPML~1`) o correr `npm run
 dev` dentro de la carpeta.
+
+### 18.8 Permisos de ESCRITURA en Nómina — `nomina.usuarios_roles` (⚠️ LEER AL DAR DE ALTA UN USUARIO)
+
+**Los permisos de RH viven en DOS lugares que no se hablan entre sí.** Si solo se configura uno, el
+usuario entra, captura… y nada se guarda.
+
+| Capa | Dónde | Qué controla |
+|---|---|---|
+| **UI** | `user_metadata` de Auth (`rol`, `capturar`, `empresas`, `rh`) | Qué VE y qué botones puede tocar (§18.3) |
+| **Base de datos** | **`nomina.usuarios_roles`** | Si la BD le **acepta o rechaza cada escritura** |
+
+Las **19 políticas de escritura** del schema `nomina` (`esc_*`) exigen
+`get_user_rol() IN ('admin','editor')`, y esa función es literalmente
+`select rol from nomina.usuarios_roles where user_id = auth.uid()`. **Sin renglón en esa tabla →
+NULL → RLS rechaza TODO** (comedor, asistencias, bonos, retroactivos, descuentos).
+El frontend **nunca lee** esa tabla (cero referencias en `src/`): es una puerta invisible para la app.
+⚠️ El schema **`crm` NO usa esto** (usa `auth_all`) — por eso Importaciones/Contabilidad no se ven afectadas.
+
+**➡️ CHECKLIST al dar de alta un usuario que deba CAPTURAR en RH** (los 3 pasos, o no funciona):
+1. Crear la cuenta en Supabase Auth (lo hace el usuario, no Claude — las contraseñas no pasan por aquí).
+2. Sellar `user_metadata` (`rol`, `empresas`, permisos granulares `rh` — §18.3).
+3. **`insert into nomina.usuarios_roles (user_id, email, nombre, rol, activo)` con rol `editor`**
+   (`admin` solo para gerentes de RH). **Este es el paso que se olvida.**
+
+Auditoría (quién puede escribir en Nómina hoy):
+```sql
+select u.raw_user_meta_data->>'nombre' as usuario, coalesce(r.rol,'(sin rol)') as rol_bd,
+       case when coalesce(r.rol,'') = any(array['admin','editor']) then 'CAPTURA' else 'solo consulta' end
+from auth.users u left join nomina.usuarios_roles r on r.user_id = u.id
+where u.raw_user_meta_data->>'app' = 'crm-pml' order by 3 desc, 1;
+```
+
+> **🐛 Bug corregido 2026-07-31 (pérdida de capturas — "se borra lo que hacen").** Efraín y María
+> Isabel capturaban comedor/incidencias, salían y al volver **todo había desaparecido**. Causa: se
+> les configuró el `user_metadata` (paso 2) pero **nunca se les agregó a `usuarios_roles`** (paso 3),
+> así que el RLS rechazaba cada escritura. **Estuvo así 9 días**, desde que se crearon las cuentas el
+> 22-jul hasta el 31-jul. Lo que lo hizo invisible:
+> - ⚠️ **`supabase-js` NO lanza excepción cuando el RLS rechaza una escritura** — devuelve `{ error }`.
+>   Las capturas estaban envueltas en `try/catch` **sin revisar `error`**, así que el `catch` nunca se
+>   ejecutaba: ni un `console.error` salía. Silencio absoluto.
+> - Las pantallas hacen **update optimista** (pintan primero, guardan después): la palomita se quedaba
+>   puesta y el usuario se iba convencido de que había guardado.
+>
+> **Arreglo:** (a) dato — los 2 renglones en `usuarios_roles` como `editor`; (b) código — helper
+> **`avisarNoGuardado`** en `lib/nomina/db.ts` + los 4 puntos de captura (TabComedor ×2,
+> TabAsistencias, NominaDetalle→omitir préstamo) ahora hacen
+> **`const { error } = await …; if (error) throw error;`**, **revierten el estado local** y muestran
+> un toast rojo *"NO se guardó…"*. La pantalla ya no puede mentir.
+>
+> **Decisión del usuario (31-jul):** **Ana Silvia y Jesús se quedan de CONSULTA** (no se agregaron a
+> `usuarios_roles`); si intentan capturar verán el toast rojo — es el comportamiento esperado.
+>
+> **Lección:** cualquier escritura nueva en el módulo RH **debe revisar `error` explícitamente**;
+> un `try/catch` solo NO detecta un rechazo de RLS. Y ante un *"se borra lo que capturo"*, revisar
+> **primero `usuarios_roles`** con la query de arriba.
+>
+> **Deuda que quedó abierta:** unificar las dos fuentes de verdad (que `usuarios_roles` se derive del
+> `user_metadata`, o que el RLS lea el JWT) — hoy siguen desacopladas y volver a olvidar el paso 3 es
+> posible. Va junto con el endurecimiento de RLS por-rol (F4 de la auditoría, §16).

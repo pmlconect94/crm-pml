@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { supabase, dbNomina } from '@/lib/nomina/db';
+import { supabase, dbNomina, avisarNoGuardado } from '@/lib/nomina/db';
 import { useAuth } from '@/lib/nomina/auth';
 import { useRhPermisos } from '@/lib/nomina/permisos';
 import { fmtPeriodo } from '@/lib/nomina/format';
@@ -170,9 +170,15 @@ export function NominaDetallePage() {
     });
     setPrestamosDesc(dMap);
     try {
-      if (isOm) await dbNomina.from('prestamo_omitir').delete().eq('semana_id', semana.id).eq('prestamo_id', prestamoId);
-      else await dbNomina.from('prestamo_omitir').insert({ semana_id: semana.id, prestamo_id: prestamoId });
-    } catch (err) { console.error(err); }
+      const { error } = isOm
+        ? await dbNomina.from('prestamo_omitir').delete().eq('semana_id', semana.id).eq('prestamo_id', prestamoId)
+        : await dbNomina.from('prestamo_omitir').insert({ semana_id: semana.id, prestamo_id: prestamoId });
+      if (error) throw error;
+    } catch (err) {
+      setOmitidos(omitidos); // revertir: el switch no debe quedar en un estado que no se guardó
+      avisarNoGuardado(err);
+      cargar();              // recarga para dejar los descuentos consistentes con la BD
+    }
   }
 
   async function guardar() {
