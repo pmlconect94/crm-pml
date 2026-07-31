@@ -51,6 +51,8 @@ export function NominaDetallePage() {
   const [bonoMap, setBonoMap] = useState<Record<string, number>>({});
   const [retroIncentMap, setRetroIncentMap] = useState<Record<string, number>>({}); // incentivo de viajes retro
   const [heRetroMap, setHeRetroMap] = useState<Record<string, number>>({});          // horas extra retro
+  const [descPermMap, setDescPermMap] = useState<Record<string, number>>({});        // suma de descuentos permanentes (sin Infonavit)
+  const [descPermDet, setDescPermDet] = useState<Record<string, any[]>>({});         // su desglose por concepto (para el recibo)
   const [viajesEmp, setViajesEmp] = useState<Record<string, any[]>>({});
   const [viajeDias, setViajeDias] = useState<Record<string, string>>({});             // "nomId|fecha" -> hora_llegada
   const [loading, setLoading] = useState(true);
@@ -69,7 +71,7 @@ export function NominaDetallePage() {
     setSemana(sem);
 
     const esquema = sem.tipo === 'semanal' ? 'Semanal' : 'Quincenal';
-    const [empRes, nomRes, viajesRes, prestRes, descRes, bonoRes, retroRes, bpRes, bxRes, omitRes] = await Promise.all([
+    const [empRes, nomRes, viajesRes, prestRes, descRes, bonoRes, retroRes, bpRes, bxRes, omitRes, permRes] = await Promise.all([
       dbNomina.from('empleados').select('*').eq('activo', true).eq('esquema_pago', esquema).eq('empresa', sem.empresa).order('id_banco', { ascending: true, nullsFirst: false }),
       dbNomina.from('nominas').select('*').eq('semana_id', sem.id),
       dbNomina.from('viajes').select('*').eq('semana_id', sem.id),
@@ -80,6 +82,13 @@ export function NominaDetallePage() {
       dbNomina.from('bono_permanente').select('id,empleado_id,monto').eq('activo', true),
       dbNomina.from('bono_permanente_excluido').select('bono_permanente_id').eq('semana_id', sem.id),
       dbNomina.from('prestamo_omitir').select('prestamo_id').eq('semana_id', sem.id),
+      // Descuentos permanentes vigentes (Fonacot, pensión, caja de ahorro, otro). El
+      // Infonavit se EXCLUYE: ya entra al cálculo por `empleados.infonavit` y contarlo
+      // aquí lo duplicaría. `fecha_inicio <= fin de la semana` evita que uno capturado
+      // a futuro se cobre antes de tiempo.
+      dbNomina.from('empleado_descuentos').select('empleado_id,concepto,monto')
+        .eq('activo', true).is('fecha_fin', null).neq('concepto', 'Infonavit')
+        .lte('fecha_inicio', sem.fecha_fin),
     ]);
     setEmpleados(empRes.data || []);
 
@@ -125,6 +134,15 @@ export function NominaDetallePage() {
     (bpRes.data || []).forEach((bp: any) => { if (!excl.has(bp.id)) bMap[bp.empleado_id] = (bMap[bp.empleado_id] || 0) + (bp.monto || 0); });
     setBonoMap(bMap);
     const hrMap: any = {}; (retroRes.data || []).forEach((r: any) => { hrMap[r.empleado_id] = (hrMap[r.empleado_id] || 0) + (r.horas || 0); }); setHeRetroMap(hrMap);
+    // Descuentos permanentes: suma para el cálculo + desglose por concepto para el recibo.
+    const perMap: any = {}; const perDet: any = {};
+    (permRes.data || []).forEach((d: any) => {
+      const m = Number(d.monto) || 0;
+      if (m <= 0) return;
+      perMap[d.empleado_id] = (perMap[d.empleado_id] || 0) + m;
+      (perDet[d.empleado_id] ||= []).push({ concepto: d.concepto, monto: m });
+    });
+    setDescPermMap(perMap); setDescPermDet(perDet);
 
     const fechaIni = new Date(sem.fecha_inicio + 'T12:00:00');
     const dMap: any = {};
@@ -237,7 +255,7 @@ export function NominaDetallePage() {
   const calcData = empleadosFiltrados.map((e) => {
     const nom = nominas[e.id];
     const asist = nom ? (asistencias[nom.id] || []) : [];
-    return { empleado: e, nomina: nom, asistencias: asist, viajes: viajesEmp[e.id] || [], calc: calcularNomina(e, nom, asist, incentivos[e.id] || 0, prestamosDesc[e.id] || 0, semana.tipo, descProductoMap[e.id] || 0, bonoMap[e.id] || 0, retroIncentMap[e.id] || 0, heRetroMap[e.id] || 0) };
+    return { empleado: e, nomina: nom, asistencias: asist, viajes: viajesEmp[e.id] || [], descuentosPerm: descPermDet[e.id] || [], calc: calcularNomina(e, nom, asist, incentivos[e.id] || 0, prestamosDesc[e.id] || 0, semana.tipo, descProductoMap[e.id] || 0, bonoMap[e.id] || 0, retroIncentMap[e.id] || 0, heRetroMap[e.id] || 0, descPermMap[e.id] || 0) };
   });
 
   return (

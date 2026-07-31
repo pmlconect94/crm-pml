@@ -48,7 +48,12 @@ export function descuentoPrestamoMonto(monto: number, _tipo?: string): number {
 // retroactivo = incentivo de VIAJES retroactivos.
 // horasExtraRetro = horas extra retroactivas (su monto se suma a la columna RETROACTIVO,
 //   junto con el incentivo de viajes retro; NO a las horas extra normales).
-export function calcularNomina(empleado: any, nomina: any, asistencias: any[], incentivosViaje: number, descuentoPrestamo: number, tipo: string = 'semanal', descuentoProducto: number = 0, bono: number = 0, retroactivo: number = 0, horasExtraRetro: number = 0) {
+// descuentoPermanente = suma de los descuentos permanentes vigentes del empleado
+//   (`nomina.empleado_descuentos`) EXCEPTO Infonavit, que entra por su propia vía
+//   (`empleados.infonavit`, sincronizada por SueldoModal). Cubre Fonacot, Pensión
+//   alimenticia, Caja de ahorro y Otro — que antes se capturaban y NUNCA se aplicaban
+//   (bug 2026-07-31, ver CLAUDE.md §18.9).
+export function calcularNomina(empleado: any, nomina: any, asistencias: any[], incentivosViaje: number, descuentoPrestamo: number, tipo: string = 'semanal', descuentoProducto: number = 0, bono: number = 0, retroactivo: number = 0, horasExtraRetro: number = 0, descuentoPermanente: number = 0) {
   const sdFiscal = empleado.sd_fiscal || 0; // semanal-equivalente (diario × 7)
   const sdReal = empleado.sd_real || 0;
   const dDR = sdReal / 7;   // sueldo diario real
@@ -138,7 +143,8 @@ export function calcularNomina(empleado: any, nomina: any, asistencias: any[], i
 
   const infonavit = parseFloat(nomina?.infonavit || empleado.infonavit || 0);
   const comedor = parseFloat(nomina?.comedor || 0);
-  const totalDed = infonavit + comedor + retardoMonto + prestDesc + (descuentoProducto || 0);
+  const descPerm = descuentoPermanente || 0; // Fonacot, pensión, caja de ahorro, otro
+  const totalDed = infonavit + descPerm + comedor + retardoMonto + prestDesc + (descuentoProducto || 0);
 
   // --- Parte fiscal ---
   const isr = parseFloat(nomina?.isr || 0);
@@ -197,7 +203,7 @@ export function calcularNomina(empleado: any, nomina: any, asistencias: any[], i
     deposito: depositoCorregido, // compat: "depósito total" = el corregido (o el fiscal por defecto)
     depositoBanco, efectivo, puroEfectivo,
     valesPago: (altaImss && !puroEfectivo) ? vales : 0, // vales dispersados en tarjeta (0 si todo va en efectivo)
-    infonavit, comedor, isr, imss,
+    infonavit, descuentoPermanente: descPerm, comedor, isr, imss,
     comisiones: parseFloat(nomina?.comisiones || 0),
     retroactivos: parseFloat(nomina?.retroactivos || 0),
   };

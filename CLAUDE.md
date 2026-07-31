@@ -1880,3 +1880,46 @@ where u.raw_user_meta_data->>'app' = 'crm-pml' order by 3 desc, 1;
 > **Deuda que quedó abierta:** unificar las dos fuentes de verdad (que `usuarios_roles` se derive del
 > `user_metadata`, o que el RLS lea el JWT) — hoy siguen desacopladas y volver a olvidar el paso 3 es
 > posible. Va junto con el endurecimiento de RLS por-rol (F4 de la auditoría, §16).
+
+### 18.9 Descuentos permanentes (Fonacot, pensión, caja de ahorro…) ✅ 2026-07-31
+
+Los **descuentos permanentes** de un empleado se capturan en la ficha de Sueldo (`SueldoModal` →
+"Descuentos permanentes") y viven en `nomina.empleado_descuentos` (concepto, monto **por periodo**,
+`fecha_inicio`/`fecha_fin`, `activo`). Conceptos: **Infonavit · Fonacot · Pensión alimenticia ·
+Caja de ahorro · Otro**.
+
+**Cómo llegan al cálculo — son DOS caminos distintos:**
+
+| Concepto | Camino | Nota |
+|---|---|---|
+| **Infonavit** | `syncInfonavit()` lo copia a la columna `empleados.infonavit`, y `calc.ts` lee esa columna | Admite override por periodo en `nominas.infonavit` |
+| **Los otros 4** | `NominaDetallePage` los consulta y los pasa a `calcularNomina(..., descuentoPermanente)` | Se suman en `totalDed`; el desglose por concepto viaja en `row.descuentosPerm` para el recibo |
+
+El filtro de vigencia es `activo = true` + `fecha_fin is null` + `fecha_inicio <= semana.fecha_fin`
+(lo último evita que uno capturado a futuro se cobre antes de tiempo), y **excluye Infonavit** para
+no duplicarlo con su columna.
+
+> **🐛 Bug corregido 2026-07-31 (el Fonacot no aparecía en la nómina).** El catálogo ofrecía 5
+> conceptos pero **solo Infonavit llegaba al cálculo**: `syncInfonavit()` filtra
+> `.eq('concepto','Infonavit')` y `calc.ts` solo leía `empleado.infonavit`. Los otros 4 se guardaban,
+> se veían en la ficha y **quedaban inertes** — nadie los descontaba nunca. No era una regresión: fue
+> así desde siempre (la nota al pie del modal lo decía de pasada, pero al capturar no se nota).
+> Caso que lo destapó: Fonacot de $684/semana a José Guadalupe Rodríguez.
+>
+> **Landmine que venía de pilón:** `TabResumen` calculaba el descuento de préstamos **por resta**
+> (`totalDed − infonavit − comedor − retardos − desc.producto`), así que **cualquier deducción nueva
+> se colaba ahí y salía etiquetada como "Préstamos"**. Ahora usa `c.prestDesc`, que el cálculo ya
+> exponía. Si agregas una deducción a `totalDed`, revisa que nadie la esté derivando por resta.
+>
+> **Dónde se muestra ahora:** recibo (desglosado por concepto), columna "Otros desc." en el resumen
+> (con el detalle en el tooltip), y los reportes de **Dispersión** y **Fiscal**. La pestaña Fiscal se
+> alineó sola porque `depFiscalDe` usa `c.totalDed` — a diferencia del comedor (§18.6), aquí no hubo
+> que tocar dos lugares.
+
+**⚠️ REGLA: un préstamo va en el módulo de Préstamos, NO como descuento permanente "Otro"**
+(decisión del usuario 2026-07-31). Los préstamos tienen saldo, historial de abonos y se liquidan
+solos; un descuento permanente es indefinido. Al activar los 4 conceptos aparecieron **2 renglones
+"Otro" que duplicaban préstamos ya activos** (Francisco Aceves $2,000 y Alejandro Abaroa $1,220,
+capturados el 15-jun) — de haberse quedado, a esas dos personas se les habría descontado **doble**.
+Se cerraron (`activo=false` + `fecha_fin`, siguen en el historial). Si alguien vuelve a capturar un
+préstamo como "Otro", ciérralo y regístralo en Préstamos.

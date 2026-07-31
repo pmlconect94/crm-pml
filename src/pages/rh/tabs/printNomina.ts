@@ -207,15 +207,15 @@ function bodyDispersion(calcData: any[], semana: any): string {
     const c = d.calc;
     const sueldo = c.asistMonto + c.septimo;
     // Dep. Banco = banco + toka (vales) = depósito fiscal/corregido.
-    const vals = [sueldo, c.prestDesc, c.comedor, c.descuentoProducto, c.infonavit, c.retardoMonto, c.bono, c.retroactivoTotal, (c.te || 0), (c.incentivos || 0), c.neto, c.depositoCorregido, c.efectivo];
-    const ded = new Set([1, 2, 3, 4, 5]); // índices de deducciones (rojo)
+    const vals = [sueldo, c.prestDesc, c.comedor, c.descuentoProducto, c.infonavit, (c.descuentoPermanente || 0), c.retardoMonto, c.bono, c.retroactivoTotal, (c.te || 0), (c.incentivos || 0), c.neto, c.depositoCorregido, c.efectivo];
+    const ded = new Set([1, 2, 3, 4, 5, 6]); // índices de deducciones (rojo)
     return `<tr><td class="c mono">${esc(d.empleado.id_banco ?? '—')}</td><td>${esc(d.empleado.nombre)}</td>${vals.map((v, i) => `<td class="r mono ${ded.has(i) && v > 0 ? 'neg' : ''}">${v ? m(v) : '—'}</td>`).join('')}</tr>`;
   };
   const tot = data.reduce((a: any, d: any) => {
-    const c = d.calc; a.sueldo += c.asistMonto + c.septimo; a.prest += c.prestDesc; a.com += c.comedor; a.dp += c.descuentoProducto; a.inf += c.infonavit; a.fr += c.retardoMonto; a.bono += c.bono; a.retro += c.retroactivoTotal; a.he += (c.te || 0); a.viajes += (c.incentivos || 0); a.neto += c.neto; a.banco += c.depositoCorregido; a.efvo += c.efectivo; return a;
-  }, { sueldo: 0, prest: 0, com: 0, dp: 0, inf: 0, fr: 0, bono: 0, retro: 0, he: 0, viajes: 0, neto: 0, banco: 0, efvo: 0 });
-  const totVals = [tot.sueldo, tot.prest, tot.com, tot.dp, tot.inf, tot.fr, tot.bono, tot.retro, tot.he, tot.viajes, tot.neto, tot.banco, tot.efvo];
-  const heads = ['Sueldo', 'Préstamo', 'Comedor', 'Desc. Prod.', 'Infonavit', 'Falta/Ret.', 'Bono', 'Retro.', 'Horas Extra', 'Viajes', 'Neto', 'Dep. Banco', 'Efectivo'];
+    const c = d.calc; a.sueldo += c.asistMonto + c.septimo; a.prest += c.prestDesc; a.com += c.comedor; a.dp += c.descuentoProducto; a.inf += c.infonavit; a.otros += (c.descuentoPermanente || 0); a.fr += c.retardoMonto; a.bono += c.bono; a.retro += c.retroactivoTotal; a.he += (c.te || 0); a.viajes += (c.incentivos || 0); a.neto += c.neto; a.banco += c.depositoCorregido; a.efvo += c.efectivo; return a;
+  }, { sueldo: 0, prest: 0, com: 0, dp: 0, inf: 0, otros: 0, fr: 0, bono: 0, retro: 0, he: 0, viajes: 0, neto: 0, banco: 0, efvo: 0 });
+  const totVals = [tot.sueldo, tot.prest, tot.com, tot.dp, tot.inf, tot.otros, tot.fr, tot.bono, tot.retro, tot.he, tot.viajes, tot.neto, tot.banco, tot.efvo];
+  const heads = ['Sueldo', 'Préstamo', 'Comedor', 'Desc. Prod.', 'Infonavit', 'Otros desc.', 'Falta/Ret.', 'Bono', 'Retro.', 'Horas Extra', 'Viajes', 'Neto', 'Dep. Banco', 'Efectivo'];
   return `<table>
     <thead><tr><th class="c">ID Banco</th><th>Empleado</th>${heads.map((h) => `<th class="r">${esc(h)}</th>`).join('')}</tr></thead>
     <tbody>${data.map(fila).join('')}</tbody>
@@ -252,6 +252,7 @@ function bodyFiscal(calcData: any[], semana: any): string {
       <td class="r mono">${nd(septDias(c))}</td>
       <td class="r mono">${septDias(c) > 0 ? factorSeptimo : '—'}</td>
       <td class="r mono">${c.infonavit ? m(c.infonavit) : '—'}</td>
+      <td class="r mono">${c.descuentoPermanente ? m(c.descuentoPermanente) : '—'}</td>
       <td class="r mono">${c.comedor ? m(c.comedor) : '—'}</td>
       <td class="r mono">${c.retardoMonto ? m(c.retardoMonto) : '—'}</td>
       <td class="r mono">${c.prestDesc ? m(c.prestDesc) : '—'}</td>
@@ -262,13 +263,13 @@ function bodyFiscal(calcData: any[], semana: any): string {
     const c = d.calc;
     a.vales += c.valesPago || 0; a.prev += c.prevSocial || 0; a.banco += c.depositoBanco || 0;
     a.asis += c.diasA || 0; a.sept += septDias(c);
-    a.inf += c.infonavit || 0; a.com += c.comedor || 0; a.ret += c.retardoMonto || 0; a.prest += c.prestDesc || 0; a.dp += c.descuentoProducto || 0;
+    a.inf += c.infonavit || 0; a.otros += c.descuentoPermanente || 0; a.com += c.comedor || 0; a.ret += c.retardoMonto || 0; a.prest += c.prestDesc || 0; a.dp += c.descuentoProducto || 0;
     return a;
-  }, { vales: 0, prev: 0, banco: 0, asis: 0, sept: 0, inf: 0, com: 0, ret: 0, prest: 0, dp: 0 });
+  }, { vales: 0, prev: 0, banco: 0, asis: 0, sept: 0, inf: 0, otros: 0, com: 0, ret: 0, prest: 0, dp: 0 });
   return `<table>
-    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th class="r">Vales</th>${esMarlin ? '<th class="r">Previsión social</th>' : ''}<th class="r">Dep. Banco</th><th class="r">Asistencia</th><th class="r">Séptimo día</th><th class="r">Séptimo (dom.) · factor</th><th class="r">Infonavit</th><th class="r">Comedor</th><th class="r">Retardos</th><th class="r">Préstamo</th><th class="r">Desc. Producto</th></tr></thead>
+    <thead><tr><th>ID NOMEX</th><th>Nombre</th><th class="r">Vales</th>${esMarlin ? '<th class="r">Previsión social</th>' : ''}<th class="r">Dep. Banco</th><th class="r">Asistencia</th><th class="r">Séptimo día</th><th class="r">Séptimo (dom.) · factor</th><th class="r">Infonavit</th><th class="r">Otros desc.</th><th class="r">Comedor</th><th class="r">Retardos</th><th class="r">Préstamo</th><th class="r">Desc. Producto</th></tr></thead>
     <tbody>${data.map(fila).join('')}</tbody>
-    <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td>${esMarlin ? `<td class="r mono">${m(tot.prev)}</td>` : ''}<td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${factorSeptimo}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
+    <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td>${esMarlin ? `<td class="r mono">${m(tot.prev)}</td>` : ''}<td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${factorSeptimo}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.otros)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
   </table>
   <p class="muted" style="font-size:10px;margin-top:8px"><strong>Asistencia y Séptimo día van en número de días</strong> (no en dinero): semana completa = 6 y 1. <strong>Séptimo (dom.) · factor</strong> = ${factorSeptimo} (${semana?.tipo === 'quincenal' ? 'quincenal' : 'semanal'}). Dep. Banco = solo banco (los vales/toka van en su columna).</p>`;
 }

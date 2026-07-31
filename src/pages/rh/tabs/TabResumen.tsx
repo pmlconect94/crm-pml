@@ -15,7 +15,11 @@ function Linea({ label, value, neg, bold, red }: any) {
 
 function ReciboModal({ d, onClose }: { d: any; onClose: () => void }) {
   const e = d.empleado, c = d.calc;
-  const descPrestamo = c.totalDed - c.infonavit - c.comedor - c.retardoMonto - (c.descuentoProducto || 0);
+  // El descuento de préstamos lo expone el cálculo directo. (Antes se sacaba restando
+  // los demás conceptos de totalDed; cualquier deducción nueva se colaba aquí y salía
+  // etiquetada como "Préstamos" — pasó con los descuentos permanentes, §18.9.)
+  const descPrestamo = c.prestDesc || 0;
+  const descPerm = d.descuentosPerm || [];
   const diasHE = (d.asistencias || []).filter((a: any) => (parseFloat(a.te_horas) || 0) > 0);
   const viajes = d.viajes || [];
   return (
@@ -72,6 +76,7 @@ function ReciboModal({ d, onClose }: { d: any; onClose: () => void }) {
 
           <div className="form-section-title">Deducciones</div>
           <Linea label="Infonavit" value={c.infonavit} neg />
+          {descPerm.map((x: any, i: number) => <Linea key={i} label={x.concepto} value={x.monto} neg />)}
           <Linea label="Comedor" value={c.comedor} neg />
           <Linea label="Descuento de producto" value={c.descuentoProducto} neg />
           <Linea label={`Retardos (${(c.totalRetHrs || 0).toFixed(2)}h)`} value={c.retardoMonto} neg />
@@ -92,6 +97,7 @@ function ReciboModal({ d, onClose }: { d: any; onClose: () => void }) {
               <Linea label="Previsión social (prorrateada)" value={c.prevSocial} />
               <Linea label="Vales de despensa (prorrateados)" value={c.vales} />
               <Linea label="Infonavit" value={c.infonavit} neg />
+              {descPerm.map((x: any, i: number) => <Linea key={i} label={x.concepto} value={x.monto} neg />)}
               <Linea label={`Retardos (${(c.totalRetHrs || 0).toFixed(2)}h)`} value={c.retardoMonto} neg />
               <Linea label="Préstamos" value={c.prestDesc} neg />
               <Linea label="Descuento de producto" value={c.descuentoProducto} neg />
@@ -242,14 +248,16 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
               <Th k="id_banco">ID Banco</Th>
               <Th k="nombre">Empleado</Th>
               <th className="right">T. extra</th><th className="right">Viajes</th><th className="right">Bono</th><th className="right">Retro.</th>
-              <th className="right">Infonavit</th><th className="right">Comedor</th><th className="right">Retardos</th><th className="right">Préstamos</th><th className="right">Desc. prod.</th>
+              <th className="right">Infonavit</th><th className="right">Otros desc.</th><th className="right">Comedor</th><th className="right">Retardos</th><th className="right">Préstamos</th><th className="right">Desc. prod.</th>
               <Th k="neto" right>Neto</Th><Th k="depBanco" right>Dep. banco</Th><th className="right">Vales</th><Th k="efectivo" right>Efectivo</Th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => {
               const e = row.empleado, c = row.calc;
-              const descPrestamo = c.totalDed - c.infonavit - c.comedor - c.retardoMonto - (c.descuentoProducto || 0);
+              const descPrestamo = c.prestDesc || 0;
+              const otrosDesc = c.descuentoPermanente || 0;
+              const detOtros = (row.descuentosPerm || []).map((x: any) => `${x.concepto}: ${fmt(x.monto)}`).join(' · ');
               return (
                 <tr key={e.id} className="clickable" style={{ cursor: 'pointer' }} onClick={() => setDetalleId(e.id)} title="Ver tarjeta de nómina">
                   <td className="mono fw-600">{e.id_banco ?? '—'}</td>
@@ -259,6 +267,7 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
                   <td className="right mono pos">{c.bono > 0 ? fmt(c.bono) : '—'}</td>
                   <td className="right mono pos" title={c.teRetro > 0 ? `Incluye ${fmt(c.teRetro)} de HE retro (${c.teRetroHrs}h)` : undefined}>{c.retroactivoTotal > 0 ? fmt(c.retroactivoTotal) : '—'}</td>
                   <td className="right mono">{c.infonavit > 0 ? '-' + fmt(c.infonavit) : '—'}</td>
+                  <td className="right mono" title={detOtros || undefined}>{otrosDesc > 0 ? '-' + fmt(otrosDesc) : '—'}</td>
                   <td className="right mono">{c.comedor > 0 ? '-' + fmt(c.comedor) : '—'}</td>
                   <td className="right mono">{c.retardoMonto > 0 ? '-' + fmt(c.retardoMonto) : '—'}</td>
                   <td className="right mono">{descPrestamo > 0 ? '-' + fmt(descPrestamo) : '—'}</td>
@@ -273,7 +282,7 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
           </tbody>
           <tfoot>
             <tr style={{ background: 'var(--ink-50)', fontWeight: 700 }}>
-              <td colSpan={2}>Totales</td><td colSpan={9}></td>
+              <td colSpan={2}>Totales</td><td colSpan={10}></td>
               <td className="right mono">{fmt(t.neto)}</td><td className="right mono orange">{fmt(t.depBanco)}</td><td className="right mono orange">{fmt(t.vales)}</td><td className="right mono blue">{fmt(t.efectivo)}</td>
             </tr>
           </tfoot>
