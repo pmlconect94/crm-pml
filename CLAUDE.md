@@ -1923,3 +1923,27 @@ solos; un descuento permanente es indefinido. Al activar los 4 conceptos apareci
 capturados el 15-jun) — de haberse quedado, a esas dos personas se les habría descontado **doble**.
 Se cerraron (`activo=false` + `fecha_fin`, siguen en el historial). Si alguien vuelve a capturar un
 préstamo como "Otro", ciérralo y regístralo en Préstamos.
+
+### 18.10 Viajes — chofer sin acompañante (solo PML) ✅ 2026-07-31
+
+Los **viajes existen únicamente en PML** (la pestaña no se renderiza en Marlin). El incentivo sale
+del tabulador por tramo de hora de llegada (`TAB_CHOFER`/`TAB_ACOMP` en `calc.ts`) y se **guarda en
+la fila del viaje** (`viajes.incent_chofer` / `incent_acompanante`) al capturarlo — el cálculo de la
+nómina solo los suma. Consecuencia importante: **cambiar la fórmula NO altera los viajes ya
+guardados** (las nóminas timbradas no se mueven solas); un viaje viejo solo se recalcula si alguien
+lo edita y lo vuelve a guardar.
+
+**Regla (decisión del usuario 2026-07-31):** si el chofer hace el viaje **SOLO**, se le suma la
+**mitad de lo que habría cobrado el acompañante**. Ej.: llegada 4pm → tramo 3pm-7pm → chofer $400 +
+($200 / 2) = **$500**. Aplica igual con "se quedó a dormir" (la mitad se toma del monto que le habría
+tocado al acompañante en ese mismo escenario: llegada 8pm + dormir → 1200 + 800/2 = 1600).
+
+Vive en `calcIncentivos(hora, dormir, choferSinAcompanante)`; `ViajesPanel` calcula el flag como
+`empresa !== 'MARLIN' && chofer_id && !acompanante_id` y muestra "incluye +$X por ir solo" en la
+captura. `bonoChoferSolo()` existe solo para ese desglose visual.
+
+**De paso se limpió un dato fantasma:** antes, un viaje sin acompañante guardaba de todos modos un
+`incent_acompanante` (ej. $100) que **nadie cobraba** — el cálculo lo ignora porque filtra por
+`acompanante_id`. Ahora ese campo queda en 0. Los viajes históricos conservan el valor fantasma; es
+inofensivo (nunca se pagó), pero explica por qué la columna "Inc. acomp." de viajes viejos sin
+acompañante no está vacía.

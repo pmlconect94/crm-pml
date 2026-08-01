@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase, dbNomina } from '@/lib/nomina/db';
 import { fmt } from '@/lib/nomina/format';
-import { calcIncentivos, getTramo, TAB_CHOFER, TAB_ACOMP } from '@/lib/nomina/calc';
+import { calcIncentivos, bonoChoferSolo, getTramo, TAB_CHOFER, TAB_ACOMP } from '@/lib/nomina/calc';
 import { fetchMotivosActivos } from '@/lib/nomina/catalogos';
 import { Icon } from '@/components/Icon';
 
@@ -14,7 +14,7 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
   const [empleados, setEmpleados] = useState<any[]>([]);
   const [viajes, setViajes] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ ...EMPTY });
-  const [incent, setIncent] = useState({ chofer: 0, acomp: 0, tramo: null as number | null });
+  const [incent, setIncent] = useState({ chofer: 0, acomp: 0, tramo: null as number | null, bonoSolo: 0 });
   const [editId, setEditId] = useState<string | null>(null); // viaje en edición (null = alta nueva)
   // Destinos del catálogo (RH → Catálogos). Se capturan con un input+datalist:
   // escribes y el navegador filtra los que se parecen (feedback del usuario
@@ -44,11 +44,26 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
     setViajes(data || []);
   }
 
+  // Regla PML: chofer que va SOLO cobra la mitad de lo que habría cobrado el
+  // acompañante. Los viajes solo existen en PML (la pestaña no se muestra en
+  // Marlin), pero se deja explícito para que la regla no se herede sin decidirlo.
+  const esPml = semana?.empresa !== 'MARLIN';
+  const vaSolo = (f: any) => esPml && !!f.chofer_id && !f.acompanante_id;
+
+  function recalcIncent(nf: any) {
+    const { chofer, acomp } = calcIncentivos(nf.hora_llegada, nf.se_quedo_dormir, vaSolo(nf));
+    setIncent({
+      chofer,
+      acomp,
+      tramo: getTramo(nf.hora_llegada),
+      bonoSolo: vaSolo(nf) ? bonoChoferSolo(nf.hora_llegada, nf.se_quedo_dormir) : 0,
+    });
+  }
+
   function onForm(campo: string, valor: any) {
     const nf = { ...form, [campo]: valor };
     setForm(nf);
-    const { chofer, acomp } = calcIncentivos(nf.hora_llegada, nf.se_quedo_dormir);
-    setIncent({ chofer, acomp, tramo: getTramo(nf.hora_llegada) });
+    recalcIncent(nf);
   }
 
   async function guardar() {
@@ -121,11 +136,10 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
     setEditId(v.id);
     const nf = { fecha: v.fecha || '', destino: v.destino || '', cliente: v.cliente || '', vehiculo: v.vehiculo || '', chofer_id: v.chofer_id || '', acompanante_id: v.acompanante_id || '', hora_salida: v.hora_salida || '', hora_llegada: v.hora_llegada || '', se_quedo_dormir: !!v.se_quedo_dormir };
     setForm(nf);
-    const { chofer, acomp } = calcIncentivos(nf.hora_llegada, nf.se_quedo_dormir);
-    setIncent({ chofer, acomp, tramo: getTramo(nf.hora_llegada) });
+    recalcIncent(nf);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function cancelarEdicion() { setEditId(null); setForm({ ...EMPTY }); setIncent({ chofer: 0, acomp: 0, tramo: null }); }
+  function cancelarEdicion() { setEditId(null); setForm({ ...EMPTY }); setIncent({ chofer: 0, acomp: 0, tramo: null, bonoSolo: 0 }); }
   async function eliminar(id: string) { if (!confirm('¿Eliminar viaje?')) return; await dbNomina.from('viajes').delete().eq('id', id); if (editId === id) cancelarEdicion(); fetchViajes(); onChanged?.(); }
 
   const total = viajes.reduce((s, v) => s + (v.incent_chofer || 0) + (v.incent_acompanante || 0), 0);
@@ -155,8 +169,20 @@ export function ViajesPanel({ semana, canEdit, onChanged }: any) {
             </div>
             <div className="hstack" style={{ justifyContent: 'space-between', marginTop: 16 }}>
               <div className="hstack" style={{ gap: 16 }}>
-                <div><div className="text-xs muted">Chofer {incent.tramo != null ? `· ${TRAMOS[incent.tramo]}` : ''}</div><div className="fw-700 blue">{fmt(incent.chofer)}</div></div>
-                <div><div className="text-xs muted">Acompañante</div><div className="fw-700 blue">{fmt(incent.acomp)}</div></div>
+                <div>
+                  <div className="text-xs muted">Chofer {incent.tramo != null ? `· ${TRAMOS[incent.tramo]}` : ''}</div>
+                  <div className="fw-700 blue">{fmt(incent.chofer)}</div>
+                  {incent.bonoSolo > 0 && (
+                    <div className="text-xs pos" title="Va sin acompañante: se le suma la mitad de lo que le habría tocado al acompañante">
+                      incluye +{fmt(incent.bonoSolo)} por ir solo
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs muted">Acompañante</div>
+                  <div className="fw-700 blue">{fmt(incent.acomp)}</div>
+                  {incent.bonoSolo > 0 && <div className="text-xs muted">sin acompañante</div>}
+                </div>
                 <div><div className="text-xs muted">Total</div><div className="fw-700">{fmt(incent.chofer + incent.acomp)}</div></div>
               </div>
               <button className="btn btn-primary" onClick={guardar}><Icon name={editId ? 'check' : 'plus'} size={15} /> {editId ? 'Actualizar viaje' : 'Guardar viaje'}</button>

@@ -25,8 +25,16 @@ export function getTramo(horaStr?: string | null): number | null {
   return 3;                                    // 11:00pm – 7:00am
 }
 
-export function calcIncentivos(horaLlegada?: string | null, dormir?: boolean) {
+// choferSinAcompanante: regla de PML (2026-07-31) — si el chofer hace el viaje SOLO,
+// se le suma la MITAD de lo que habría cobrado el acompañante. Ej.: llegada 4pm →
+// tramo 3pm-7pm → chofer $400 + (acomp $200 / 2) = $500. El incentivo de acompañante
+// queda en 0: no hay a quién pagárselo (antes se guardaba un monto "fantasma" que
+// nadie cobraba). Aplica igual con "se quedó a dormir": la mitad se saca del monto
+// que le habría tocado al acompañante EN ESE MISMO escenario.
+export function calcIncentivos(horaLlegada?: string | null, dormir?: boolean, choferSinAcompanante = false) {
   const t = getTramo(horaLlegada);
+  let chofer = 0;
+  let acomp = 0;
   if (dormir) {
     // "Se quedó a dormir" = último tabular + $100 (tope) + el tabular de la HORA DE LLEGADA del
     // día siguiente. Ej.: tope (600+100)/(400+100) + (500/300 si llega 8pm) = 1200/800.
@@ -34,10 +42,21 @@ export function calcIncentivos(horaLlegada?: string | null, dormir?: boolean) {
     const baseA = TAB_ACOMP[TAB_ACOMP.length - 1] + DORMIR_EXTRA;
     const sigC = t !== null ? TAB_CHOFER[t] : 0;
     const sigA = t !== null ? TAB_ACOMP[t] : 0;
-    return { chofer: baseC + sigC, acomp: baseA + sigA };
+    chofer = baseC + sigC;
+    acomp = baseA + sigA;
+  } else if (t !== null) {
+    chofer = TAB_CHOFER[t];
+    acomp = TAB_ACOMP[t];
   }
-  if (t === null) return { chofer: 0, acomp: 0 };
-  return { chofer: TAB_CHOFER[t], acomp: TAB_ACOMP[t] };
+  if (choferSinAcompanante) return { chofer: chofer + acomp / 2, acomp: 0 };
+  return { chofer, acomp };
+}
+
+/** Lo que se le suma al chofer por ir sin acompañante (0 si va acompañado). Solo
+ *  para mostrarlo desglosado en la captura del viaje; el monto ya viene incluido
+ *  en `calcIncentivos(...).chofer`. */
+export function bonoChoferSolo(horaLlegada?: string | null, dormir?: boolean): number {
+  return calcIncentivos(horaLlegada, dormir).acomp / 2;
 }
 
 export function descuentoPrestamoMonto(monto: number, _tipo?: string): number {
