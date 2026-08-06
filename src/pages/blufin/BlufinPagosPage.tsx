@@ -26,6 +26,7 @@ import { PagoModal } from '@/features/blufin/PagoModal';
 import { ForwardModal } from '@/features/blufin/ForwardModal';
 import { AsignarForwardModal } from '@/features/blufin/AsignarForwardModal';
 import { PdfViewerModal, type PdfTarget } from '@/features/blufin/PdfViewerModal';
+import { SkusContratoModal } from '@/features/blufin/SkusContratoModal';
 import type { BlufinPagoEnriquecido, BlufinForwardEnriquecido } from '@/types/database';
 
 type View = 'pendientes' | 'realizados' | 'forwards';
@@ -356,7 +357,24 @@ type PendItem = {
   fecha: string | null;
   facturaPdfPath: string | null;
   facturaDrivePdfId: string | null;
+  /** Resumen de una línea: de qué es el contenedor (producto principal + "+N más"). */
+  productoResumen: string;
+  /** Renglones completos, para el modal de SKUs al picar el folio. */
+  productos: ContratoConPendiente['productos'];
 };
+
+/** "Basa Pangabay 100% 5/7 · 7/9 · +2 más" — una sola línea, se recorta con
+ *  ellipsis en la fila para no crecer el alto ni mover las proporciones. */
+function resumenProductos(productos: ContratoConPendiente['productos']): string {
+  const p = productos?.[0];
+  if (!p) return '';
+  const base = (p.descripcion ?? '').replace('FROZEN ', '').trim() || (p.marca ?? '');
+  const partes = [base];
+  if (p.talla) partes.push(p.talla);
+  const extra = (productos?.length ?? 0) - 1;
+  if (extra > 0) partes.push(`+${extra} más`);
+  return partes.filter(Boolean).join(' · ');
+}
 
 type GrupoSemana = {
   key: string;
@@ -403,6 +421,7 @@ function PendientesView({
   const [tipoTab, setTipoTab] = useState<TipoPend>('saldo');
   const [pdf, setPdf] = useState<PdfTarget | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [verSkus, setVerSkus] = useState<string | null>(null); // contratoId del folio picado
 
   const verFactura = async (it: PendItem) => {
     setPdfLoading(true);
@@ -440,6 +459,8 @@ function PendientesView({
       const factura = {
         facturaPdfPath: c.factura_pdf_path,
         facturaDrivePdfId: c.factura_drive_pdf_id,
+        productos: c.productos ?? [],
+        productoResumen: resumenProductos(c.productos),
       };
       if (tipoTab === 'anticipo' && !c.anticipo_pagado && c.anticipo_usd) {
         items.push({
@@ -712,19 +733,46 @@ function PendientesView({
                       }}
                     >
                       <div>
-                        <div className="mono fw-700" style={{ fontSize: 13 }}>
+                        {/* Folio clicable → productos del contenedor, igual que en Llegadas. */}
+                        <button
+                          onClick={() => setVerSkus(it.contratoId)}
+                          className="mono fw-700"
+                          title="Ver los productos de este contenedor"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: 'var(--blue-500)',
+                            fontSize: 13,
+                          }}
+                        >
                           {it.folio}
-                        </div>
+                        </button>
                         <div className="text-xs muted" style={{ marginTop: 2 }}>
                           {it.status}
                         </div>
                       </div>
-                      <div>
+                      {/* minWidth:0 deja que el texto se recorte dentro del grid en
+                          vez de ensanchar la columna (rompería las proporciones). */}
+                      <div style={{ minWidth: 0 }}>
                         <div className="mono fw-700" style={{ fontSize: 15 }}>
                           {fmtUSD(it.monto)}
                         </div>
-                        <div className="text-xs muted" style={{ marginTop: 2 }}>
+                        <div
+                          className="text-xs muted"
+                          style={{
+                            marginTop: 2,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                          title={it.productoResumen || undefined}
+                        >
                           Programado {fmtFecha(it.fecha)}
+                          {it.productoResumen && (
+                            <span style={{ color: 'var(--ink-400)' }}> · {it.productoResumen}</span>
+                          )}
                         </div>
                       </div>
                       <div>
@@ -813,6 +861,18 @@ function PendientesView({
           setPdf(null);
           setPdfLoading(false);
         }}
+      />
+
+      {/* Productos del contenedor al picar el folio (mismo modal que Llegadas).
+          El cast reusa el modal con la forma parcial que aquí se consulta —
+          solo necesita folio + productos (mismo patrón que CamSARecepcionPage). */}
+      <SkusContratoModal
+        contrato={
+          (verSkus
+            ? (pendientes.find((c) => c.id === verSkus) ?? null)
+            : null) as unknown as Parameters<typeof SkusContratoModal>[0]['contrato']
+        }
+        onClose={() => setVerSkus(null)}
       />
     </div>
   );

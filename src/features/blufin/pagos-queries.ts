@@ -564,6 +564,15 @@ export type ContratoConPendiente = {
   contenedor: string | null;
   factura_pdf_path: string | null;
   factura_drive_pdf_id: string | null;
+  /** Renglones del contrato — para mostrar de qué es el contenedor en Pendientes
+   *  y alimentar el `SkusContratoModal` al picar el folio (igual que Llegadas). */
+  productos: {
+    descripcion: string | null;
+    marca: string | null;
+    talla: string | null;
+    kg: number | null;
+    cajas: number | null;
+  }[];
 };
 
 export async function fetchContratosConPendiente(
@@ -572,11 +581,13 @@ export async function fetchContratosConPendiente(
   const { data, error } = await supabase
     .from('blufin_contratos')
     .select(
-      'id, folio, fecha, anticipo_usd, anticipo_fecha, anticipo_pagado, saldo_usd, saldo_fecha, saldo_pagado, total_usd, total_kg, status, contenedor, factura_pdf_path, factura_drive_pdf_id',
+      'id, folio, fecha, anticipo_usd, anticipo_fecha, anticipo_pagado, saldo_usd, saldo_fecha, saldo_pagado, total_usd, total_kg, status, contenedor, factura_pdf_path, factura_drive_pdf_id, productos:blufin_contrato_productos(*)',
     )
     .eq('empresa_id', empresaId)
     .or('anticipo_pagado.is.false,saldo_pagado.is.false')
     .order('fecha', { ascending: false });
   if (error) throw error;
-  return (data ?? []) as ContratoConPendiente[];
+  // `as unknown as` igual que fetchContratos: los tipos manuales de database.ts no
+  // declaran la relación con blufin_contrato_productos, así que el embed no se infiere.
+  return (data ?? []) as unknown as ContratoConPendiente[];
 }
