@@ -15,6 +15,7 @@ import { fmtUSD } from '@/lib/format';
 import {
   fetchContratosConPendiente,
   fetchForwardsActivos,
+  fetchSaldosPorContrato,
   reassignForward,
 } from '@/features/blufin/pagos-queries';
 import type { BlufinForwardEnriquecido } from '@/types/database';
@@ -44,25 +45,53 @@ export function AsignarForwardModal({ open, onClose, forward }: Props) {
     queryFn: () => fetchForwardsActivos(empresaId),
     enabled: open,
   });
+  // Misma queryKey que la página → normalmente es cache hit, sin red extra.
+  const { data: saldos } = useQuery({
+    queryKey: ['blufin_saldos', empresaId],
+    queryFn: () => fetchSaldosPorContrato(empresaId),
+    enabled: open,
+  });
 
   useEffect(() => {
     if (open) setSeleccion('');
   }, [open, forward?.id]);
 
-  // Destinos: (contrato, tipo) pendiente sin forward activo para ese tipo
+  // Destinos: (contrato, tipo) pendiente sin forward activo para ese tipo.
+  // El monto que se muestra es el RESTANTE REAL (total − pagado − NCs), no el
+  // anticipo/saldo programado: es contra ese número que se aplica el forward.
   const destinos = useMemo<Destino[]>(() => {
     const conForward = new Set(forwardsActivos.map((f) => `${f.contrato_id}|${f.asociado_a}`));
     const out: Destino[] = [];
     for (const c of pendientes) {
+      const s = saldos?.get(c.id);
+      const restante = Math.max(
+        0,
+        Number(c.total_usd ?? 0) - (s?.pagado ?? 0) - (s?.ncAplicado ?? 0),
+      );
       if (!c.anticipo_pagado && c.anticipo_usd && !conForward.has(`${c.id}|anticipo`)) {
-        out.push({ contratoId: c.id, folio: c.folio, tipo: 'anticipo', monto: Number(c.anticipo_usd) });
+        out.push({
+          contratoId: c.id,
+          folio: c.folio,
+          tipo: 'anticipo',
+          monto: Math.min(Number(c.anticipo_usd), restante || Number(c.anticipo_usd)),
+        });
       }
       if (!c.saldo_pagado && c.saldo_usd && !conForward.has(`${c.id}|saldo`)) {
-        out.push({ contratoId: c.id, folio: c.folio, tipo: 'saldo', monto: Number(c.saldo_usd) });
+        out.push({
+          contratoId: c.id,
+          folio: c.folio,
+          tipo: 'saldo',
+          monto: restante || Number(c.saldo_usd),
+        });
       }
     }
     return out;
-  }, [pendientes, forwardsActivos]);
+  }, [pendientes, forwardsActivos, saldos]);
+
+  // Qué va a pasar con el destino elegido (previsualización, sin escribir nada).
+  const elegido = destinos.find((d) => `${d.contratoId}|${d.tipo}` === seleccion);
+  const montoFwd = Number(forward?.monto_usd ?? 0);
+  const diferencia = elegido ? montoFwd - elegido.monto : 0;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -171,6 +200,34 @@ export function AsignarForwardModal({ open, onClose, forward }: Props) {
                   placeholder="Escribe el número de contrato…"
                   className="field-input"
                 />
+              )}
+
+              {elegido && Math.abs(diferencia) > 0.01 && (
+                <div
+                  className="text-sm"
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: 'color-mix(in srgb, var(--amber-500) 8%, white)',
+                    border: '1px solid color-mix(in srgb, var(--amber-500) 30%, white)',
+                    borderRadius: 'var(--r-sm)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {diferencia > 0 ? (
+                    <>
+                      El forward <strong>excede</strong> lo pendiente de {elegido.folio} — al
+                      ejecutarlo se pagarán {fmtUSD(elegido.monto)} y quedarán{' '}
+                      <strong>{fmtUSD(diferencia)}</strong> de remanente para otro contenedor.
+                    </>
+                  ) : (
+                    <>
+                      El forward <strong>no alcanza</strong> lo pendiente de {elegido.folio} — al
+                      ejecutarlo se registrará como <strong>abono</strong> y quedarán{' '}
+                      {fmtUSD(-diferencia)} por pagar.
+                    </>
+                  )}
+                </div>
               )}
             </div>
 

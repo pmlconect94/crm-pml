@@ -176,7 +176,13 @@ export async function fetchCostosData(empresaId: string): Promise<CostosData> {
     monto_usd: Number(p.monto_usd),
     tc: Number(p.tc),
   }));
-  const forwardsLite = forwards.map((f) => ({ contrato_id: f.contrato_id, tc_forward: f.tc_forward }));
+  // Solo los forwards que de hecho cubren a este contenedor. Un 'Remanente' (lo
+  // que sobró al ejecutarlo contra un saldo menor), un 'Liberado' o uno usado
+  // fuera de Blufin siguen apuntando al contrato de origen, pero su TC ya no es
+  // el de ese contenedor.
+  const forwardsLite = forwards
+    .filter((f) => f.status === 'Pendiente' || f.status === 'Ejecutado')
+    .map((f) => ({ contrato_id: f.contrato_id, tc_forward: f.tc_forward }));
 
   for (const c of contratos) {
     const liquidado = c.saldo_pagado === true;

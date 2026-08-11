@@ -63,6 +63,31 @@ export async function recalcFlagsContrato(contratoId: string): Promise<void> {
 const EPS = 0.01;
 
 /**
+ * Vocabulario de `blufin_forwards.status`. La columna es `text` libre (sin CHECK
+ * en BD), así que ESTA es la única fuente de verdad.
+ *
+ *  - `Pendiente`  cerrado con el banco y asignado a un contenedor; se puede ejecutar.
+ *  - `Ejecutado`  ya se convirtió en pago; no se toca.
+ *  - `Remanente`  sobró al ejecutarlo contra un saldo menor. Sigue vivo con el banco
+ *                 y se puede asignar a otro contenedor.
+ *  - `Liberado`   el contenedor se pagó spot, así que dejó de estar asignado.
+ *  - `Usado en …` se aplicó fuera de Blufin (Camanchaca SA / Neptuno).
+ */
+export const FORWARDS_ASIGNABLES = new Set(['Pendiente', 'Liberado', 'Remanente']);
+
+/** Motivo por el que un forward NO se puede mover (null = sí se puede). */
+function porQueNoSeAsigna(status: string | null, folio?: string | null): string | null {
+  if (FORWARDS_ASIGNABLES.has(status ?? '')) return null;
+  if (status === 'Ejecutado') {
+    return `Este forward ya se ejecutó y generó un pago${folio ? ` en ${folio}` : ''}. Para moverlo, primero elimina ese pago desde Realizados.`;
+  }
+  if (status?.startsWith('Usado en')) {
+    return `Este forward está marcado como "${status}".`;
+  }
+  return `No se puede mover un forward en estado "${status ?? '—'}".`;
+}
+
+/**
  * Estado de pago de un contrato: targets de anticipo/saldo/total y lo
  * acumulado por tipo. Una sola lectura, reutilizable para validar y liberar.
  */
@@ -125,6 +150,22 @@ function cubiertos(e: EstadoPago) {
   const contratoSaldado = (saldoCubierto && anticipoCubierto) || totalCubierto;
   return { saldoCubierto, anticipoCubierto, contratoSaldado };
 }
+
+/**
+ * Lo que REALMENTE falta por pagar de un tipo: total − pagado − NCs. Es la misma
+ * convención que ya usan Pendientes y PagoModal, para que el monto que se paga
+ * al ejecutar un forward sea el mismo que el usuario ve en pantalla.
+ * Pagar el "saldo" liquida el contrato, así que su faltante es el del contrato
+ * completo; el del anticipo va topado por el propio anticipo.
+ */
+function faltantePorTipo(e: EstadoPago, tipo: 'anticipo' | 'saldo'): number {
+  const target = e.total_usd > 0 ? e.total_usd : e.anticipo_usd + e.saldo_usd;
+  const faltanteContrato = Math.max(0, target - e.acumTotal - e.ncAplicado);
+  if (tipo === 'saldo') return faltanteContrato;
+  return Math.min(Math.max(0, e.anticipo_usd - e.acumAnticipo), faltanteContrato);
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Suma de pagos + NCs aplicadas por contrato (para mostrar el saldo restante). */
 export type SaldoContrato = { pagado: number; ncAplicado: number };
@@ -257,32 +298,62 @@ export async function deletePago(id: string): Promise<void> {
  * Eliminar un forward.
  */
 export async function deleteForward(id: string): Promise<void> {
+  // Un forward Ejecutado ya generó un pago: borrarlo lo dejaría huérfano y el
+  // contrato seguiría con su flag puesto (el delete debe ser simétrico al create).
+  const { data: actual, error: fErr } = await supabase
+    .from('blufin_forwards')
+    .select('status, contrato:blufin_contratos(folio)')
+    .eq('id', id)
+    .single();
+  if (fErr) throw fErr;
+  if (actual.status === 'Ejecutado') {
+    const folio = (actual as { contrato?: { folio?: string } | null })?.contrato?.folio;
+    throw new Error(
+      `Este forward ya generó un pago${folio ? ` en ${folio}` : ''}. Elimina primero ese pago desde Realizados.`,
+    );
+  }
+
   const { error } = await supabase.from('blufin_forwards').delete().eq('id', id);
   if (error) throw error;
 }
 
-/**
- * Ejecutar un forward — lo convierte en pago real:
- *   1. Inserta blufin_pagos con TC pactado del forward, tipo = asociado_a,
- *      banco = forward.banco_id, fecha = forward.fecha_entrega, referencia
- *      identifica que vino de forward
- *   2. Cambia el forward.status = 'Ejecutado'
- *   3. Recalcula flag anticipo_pagado / saldo_pagado del contrato
- */
-export async function executeForward(id: string): Promise<void> {
-  // 1) Leer forward
-  const { data: forward, error: rErr } = await supabase
+/** Qué va a pasar al ejecutar un forward. Lo consumen el modal de confirmación
+ *  y `executeForward`, para que la previsualización no pueda mentir. */
+export type PlanForward = {
+  folio: string;
+  contratoId: string;
+  asociadoA: 'anticipo' | 'saldo';
+  montoForward: number;
+  tcForward: number;
+  montoMxnForward: number;
+  /** Lo que realmente falta por pagar del destino (total − pagado − NCs). */
+  faltante: number;
+  /** Lo que se va a pagar = min(forward, faltante). */
+  aplicar: number;
+  /** Lo que sobra y queda vivo con el banco. */
+  remanente: number;
+  /** El forward no alcanza a cubrir el faltante → se registra como abono. */
+  esAbono: boolean;
+  /** El forward excede el faltante → quedará un Remanente asignable. */
+  excede: boolean;
+};
+
+async function leerForwardEjecutable(id: string) {
+  const { data: forward, error } = await supabase
     .from('blufin_forwards')
-    .select('contrato_id, asociado_a, monto_usd, tc_forward, fecha_entrega, banco_id, status')
+    .select('contrato_id, asociado_a, monto_usd, tc_forward, monto_mxn, fecha_entrega, banco_id, status')
     .eq('id', id)
     .single();
-  if (rErr) throw rErr;
+  if (error) throw error;
 
   if (forward.status === 'Ejecutado') {
     throw new Error('Este forward ya fue ejecutado');
   }
   if (forward.status === 'Liberado') {
-    throw new Error('Este forward fue liberado (el contenedor ya se pagó spot) — ya no se ejecuta.');
+    throw new Error('Este forward fue liberado (el contenedor ya se pagó spot) — asígnalo a un contenedor antes de ejecutarlo.');
+  }
+  if (forward.status === 'Remanente') {
+    throw new Error('Este forward es un remanente sin asignar — asígnalo a un contenedor antes de ejecutarlo.');
   }
   if (forward.status !== 'Pendiente') {
     throw new Error(`No se puede ejecutar un forward en estado "${forward.status}".`);
@@ -290,45 +361,164 @@ export async function executeForward(id: string): Promise<void> {
   if (!forward.contrato_id || !forward.asociado_a || forward.monto_usd == null || forward.tc_forward == null) {
     throw new Error('Forward incompleto — no se puede ejecutar');
   }
+  return forward;
+}
+
+/**
+ * Calcula (sin escribir nada) qué pasaría al ejecutar el forward.
+ */
+export async function planForward(id: string): Promise<PlanForward> {
+  const forward = await leerForwardEjecutable(id);
+  const contratoId = forward.contrato_id as string;
+  const asociadoA = forward.asociado_a as 'anticipo' | 'saldo';
+
+  const { data: c } = await supabase
+    .from('blufin_contratos')
+    .select('folio')
+    .eq('id', contratoId)
+    .single();
+
+  const estado = await leerEstadoPago(contratoId);
+  if (!estado) throw new Error('No se pudo leer el estado de pago del contrato.');
 
   // Defensa contra doble pago: si el tipo ya quedó cubierto (p. ej. se pagó
   // spot), ejecutar el forward duplicaría el pago.
-  const estado = await leerEstadoPago(forward.contrato_id);
-  if (estado) {
-    const { saldoCubierto, anticipoCubierto } = cubiertos(estado);
-    const yaCubierto = forward.asociado_a === 'anticipo' ? anticipoCubierto : saldoCubierto;
-    if (yaCubierto) {
-      throw new Error(
-        `El ${forward.asociado_a} de este contrato ya está cubierto — el forward ya no aplica. Libéralo o elimínalo.`,
-      );
-    }
+  const { saldoCubierto, anticipoCubierto } = cubiertos(estado);
+  const yaCubierto = asociadoA === 'anticipo' ? anticipoCubierto : saldoCubierto;
+  if (yaCubierto) {
+    throw new Error(
+      `El ${asociadoA} de este contrato ya está cubierto — el forward ya no aplica. Muévelo a otro contenedor o elimínalo.`,
+    );
   }
 
-  // 2) Insertar pago con referencia que identifica que vino de forward
+  const montoForward = r2(Number(forward.monto_usd));
+  const tcForward = Number(forward.tc_forward);
+  const montoMxnForward = forward.monto_mxn != null ? Number(forward.monto_mxn) : r2(montoForward * tcForward);
+  const faltante = r2(faltantePorTipo(estado, asociadoA));
+  if (faltante <= EPS) {
+    throw new Error(
+      `Este contrato ya no tiene ${asociadoA} pendiente — el forward ya no aplica. Muévelo a otro contenedor o elimínalo.`,
+    );
+  }
+  const aplicar = r2(Math.min(montoForward, faltante));
+  const remanente = r2(Math.max(0, montoForward - aplicar));
+
+  return {
+    folio: c?.folio ?? '—',
+    contratoId,
+    asociadoA,
+    montoForward,
+    tcForward,
+    montoMxnForward,
+    faltante,
+    aplicar,
+    remanente,
+    esAbono: aplicar < faltante - EPS,
+    excede: remanente > EPS,
+  };
+}
+
+/**
+ * Ejecutar un forward — lo convierte en pago real por `min(forward, faltante)`:
+ *   1. Inserta blufin_pagos con el TC pactado. Si no alcanza a cubrir el
+ *      faltante, el pago va como 'abono' (no marca el saldo como cubierto).
+ *   2. Si sobró, el forward NO se cierra: se encoge al remanente y queda
+ *      'Remanente', vivo con el banco y asignable a otro contenedor. Si se
+ *      consumió completo, pasa a 'Ejecutado'.
+ *   3. Recalcula flags anticipo_pagado / saldo_pagado del contrato.
+ *
+ * No hay transacción, así que la referencia del pago lleva `fwd:<id>` y sirve de
+ * clave de idempotencia: si el insert pasó y el update falló, reintentar RETOMA
+ * en vez de duplicar el pago.
+ */
+export async function executeForward(id: string): Promise<PlanForward> {
+  const forward = await leerForwardEjecutable(id);
+  const plan = await planForward(id);
+
   const fechaPago = forward.fecha_entrega ?? new Date().toISOString().slice(0, 10);
-  const monto_mxn = Number(forward.monto_usd) * Number(forward.tc_forward);
+  const marca = `fwd:${id.slice(0, 8)}`;
+  const referencia =
+    `FORWARD ${plan.excede || plan.esAbono ? `${plan.montoForward.toFixed(2)} · aplicado ${plan.aplicar.toFixed(2)}` : 'ejecutado'}` +
+    `${plan.excede ? ` · remanente ${plan.remanente.toFixed(2)}` : ''} · ${fechaPago} · ${marca}`;
 
-  const { error: pagoErr } = await supabase.from('blufin_pagos').insert({
-    contrato_id: forward.contrato_id,
-    tipo: forward.asociado_a,
-    monto_usd: Number(forward.monto_usd),
-    tc: Number(forward.tc_forward),
-    monto_mxn,
-    fecha: fechaPago,
-    banco_id: forward.banco_id,
-    referencia: `FORWARD ejecutado ${fechaPago}`,
-  });
-  if (pagoErr) throw pagoErr;
+  // ¿Ya existe el pago de este forward? (reintento tras un fallo a medias)
+  const { data: previos, error: prevErr } = await supabase
+    .from('blufin_pagos')
+    .select('id')
+    .eq('contrato_id', plan.contratoId)
+    .like('referencia', `%${marca}%`);
+  if (prevErr) throw prevErr;
 
-  // 3) Cambiar status del forward
+  if (!previos?.length) {
+    const { error: pagoErr } = await supabase.from('blufin_pagos').insert({
+      contrato_id: plan.contratoId,
+      // Si no cubre el faltante va como 'abono': así no marca el saldo como
+      // cubierto (acumSaldo solo suma pagos tipo 'saldo'), pero sí cuenta para
+      // el total, que es lo que liquida el contrato cuando llegue el resto.
+      tipo: plan.esAbono ? 'abono' : plan.asociadoA,
+      monto_usd: plan.aplicar,
+      tc: plan.tcForward,
+      monto_mxn: r2(plan.aplicar * plan.tcForward),
+      fecha: fechaPago,
+      banco_id: forward.banco_id,
+      referencia,
+    });
+    if (pagoErr) throw pagoErr;
+  }
+
+  // El MXN del remanente por RESTA, no multiplicando: con redondeo a centavos
+  // round(a·tc) + round(b·tc) puede diferir de round((a+b)·tc), y lo comprometido
+  // con el banco no debe cambiar al partir el forward.
+  const patch = plan.excede
+    ? {
+        status: 'Remanente',
+        monto_usd: plan.remanente,
+        monto_mxn: r2(plan.montoMxnForward - r2(plan.aplicar * plan.tcForward)),
+      }
+    : { status: 'Ejecutado' };
+
   const { error: updErr } = await supabase
     .from('blufin_forwards')
-    .update({ status: 'Ejecutado' })
-    .eq('id', id);
+    .update(patch)
+    .eq('id', id)
+    .eq('status', 'Pendiente'); // evita que un doble clic aplique dos veces
   if (updErr) throw updErr;
 
-  // 4) Recalcular flags del contrato
-  await recalcFlagsContrato(forward.contrato_id);
+  await recalcFlagsContrato(plan.contratoId);
+  return plan;
+}
+
+/**
+ * Marcar un forward como usado FUERA de Blufin (Camanchaca SA / Neptuno). Solo
+ * lo saca del circuito de Blufin y deja registro; el pago se captura en el
+ * módulo que corresponda — todavía no hay cruce automático entre módulos.
+ */
+export async function marcarForwardUsadoFuera(
+  id: string,
+  destino: 'Camanchaca SA' | 'Neptuno',
+): Promise<void> {
+  const { data: actual, error: fErr } = await supabase
+    .from('blufin_forwards')
+    .select('status')
+    .eq('id', id)
+    .single();
+  if (fErr) throw fErr;
+  const motivo = porQueNoSeAsigna(actual.status);
+  if (motivo) throw new Error(motivo);
+
+  // Solo cambia el status: `contrato_id` se conserva como referencia de dónde se
+  // cerró. Dejarlo en NULL lo haría DESAPARECER de la lista, porque fetchForwards
+  // trae el contrato con `!inner`.
+  const { data: hechos, error } = await supabase
+    .from('blufin_forwards')
+    .update({ status: `Usado en ${destino}` })
+    .eq('id', id)
+    .in('status', [...FORWARDS_ASIGNABLES])
+    .select('id');
+  if (error) throw error;
+  if (!hechos?.length) {
+    throw new Error('El forward cambió de estado — vuelve a cargar la página.');
+  }
 }
 
 /**
@@ -402,16 +592,32 @@ export async function createForward(payload: BlufinForwardInsert): Promise<void>
 }
 
 /**
- * Reasignar un forward Liberado a otro contenedor: como ya está pactado con el
- * banco y de todos modos se tiene que pagar, se vuelve a poner Pendiente
- * apuntando al nuevo contrato + tipo. Valida que el destino no esté ya cubierto
- * ni tenga otro forward Pendiente para ese tipo.
+ * Mover un forward a otro contenedor: como ya está pactado con el banco y de
+ * todos modos se tiene que pagar, queda Pendiente apuntando al nuevo contrato +
+ * tipo. Aplica a los tres status asignables (ver FORWARDS_ASIGNABLES):
+ *   - `Pendiente`  se cerró para un contenedor pero se usó en otro.
+ *   - `Remanente`  sobró al ejecutarlo y se aplica a otro.
+ *   - `Liberado`   el contenedor original se pagó spot.
+ * Valida que el destino no esté ya cubierto ni tenga otro forward Pendiente.
  */
 export async function reassignForward(
   forwardId: string,
   contratoId: string,
   asociadoA: 'anticipo' | 'saldo',
 ): Promise<void> {
+  // El forward debe poder moverse. CRÍTICO con uno ya Ejecutado: mover su
+  // contrato_id dejaría el pago huérfano en el contenedor viejo y un forward
+  // ejecutable en el nuevo (doble pago).
+  const { data: actual, error: fErr } = await supabase
+    .from('blufin_forwards')
+    .select('status, contrato:blufin_contratos(folio)')
+    .eq('id', forwardId)
+    .single();
+  if (fErr) throw fErr;
+  const folioActual = (actual as { contrato?: { folio?: string } | null })?.contrato?.folio ?? null;
+  const motivo = porQueNoSeAsigna(actual.status, folioActual);
+  if (motivo) throw new Error(motivo);
+
   // El tipo destino no debe estar ya cubierto
   const estado = await leerEstadoPago(contratoId);
   if (estado) {
@@ -433,11 +639,18 @@ export async function reassignForward(
     throw new Error(`Ese contrato ya tiene un forward pendiente para ${asociadoA}.`);
   }
 
-  const { error } = await supabase
+  // El `.in('status', …)` cierra la carrera entre dos pestañas: si mientras
+  // tanto alguien lo ejecutó, el UPDATE no encuentra fila y no pisa nada.
+  const { data: movidos, error } = await supabase
     .from('blufin_forwards')
     .update({ contrato_id: contratoId, asociado_a: asociadoA, status: 'Pendiente' })
-    .eq('id', forwardId);
+    .eq('id', forwardId)
+    .in('status', [...FORWARDS_ASIGNABLES])
+    .select('id');
   if (error) throw error;
+  if (!movidos?.length) {
+    throw new Error('El forward cambió de estado mientras lo movías — vuelve a cargar la página.');
+  }
 }
 
 /**

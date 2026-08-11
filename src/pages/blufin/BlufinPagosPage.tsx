@@ -15,7 +15,8 @@ import {
   fetchSaldosPorContrato,
   deletePago,
   deleteForward,
-  executeForward,
+  marcarForwardUsadoFuera,
+  FORWARDS_ASIGNABLES,
   type ContratoConPendiente,
   type ForwardActivo,
   type SaldoContrato,
@@ -25,6 +26,7 @@ import { resolveFacturaPdf } from '@/features/blufin/import-queries';
 import { PagoModal } from '@/features/blufin/PagoModal';
 import { ForwardModal } from '@/features/blufin/ForwardModal';
 import { AsignarForwardModal } from '@/features/blufin/AsignarForwardModal';
+import { EjecutarForwardModal } from '@/features/blufin/EjecutarForwardModal';
 import { PdfViewerModal, type PdfTarget } from '@/features/blufin/PdfViewerModal';
 import { SkusContratoModal } from '@/features/blufin/SkusContratoModal';
 import type { BlufinPagoEnriquecido, BlufinForwardEnriquecido } from '@/types/database';
@@ -93,6 +95,7 @@ export function BlufinPagosPage() {
     | null
   >(null);
   const [asignarTarget, setAsignarTarget] = useState<BlufinForwardEnriquecido | null>(null);
+  const [ejecutarTarget, setEjecutarTarget] = useState<BlufinForwardEnriquecido | null>(null);
   const qc = useQueryClient();
 
   const deletePagoMut = useMutation({
@@ -142,19 +145,36 @@ export function BlufinPagosPage() {
     queryFn: () => fetchForwardsActivos(empresaId),
   });
 
-  const executeForwardMut = useMutation({
-    mutationFn: (id: string) => executeForward(id),
-    onSuccess: () => {
-      toast.success('Forward ejecutado y registrado como pago');
+  // Marcar un forward como usado fuera de Blufin (Camanchaca SA / Neptuno).
+  const usadoFueraMut = useMutation({
+    mutationFn: ({ id, destino }: { id: string; destino: 'Camanchaca SA' | 'Neptuno' }) =>
+      marcarForwardUsadoFuera(id, destino),
+    onSuccess: (_r, v) => {
+      toast.success(
+        `Marcado como usado en ${v.destino}. Registra el pago en ese módulo — el CRM todavía no cruza forwards entre proveedores.`,
+        { duration: 7000 },
+      );
       qc.invalidateQueries({ queryKey: ['blufin_forwards'] });
       qc.invalidateQueries({ queryKey: ['blufin_forwards_activos'] });
-      qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
-      qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
-      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Lo que realmente falta por pagar de cada contrato (total − pagado − NCs).
+  // Alimenta el aviso "excede / abono" de la pestaña Forwards; es la misma
+  // fórmula que usa Pendientes y que aplica `executeForward`.
+  const faltantePorContrato = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of pendientes) {
+      const s = saldos?.get(c.id);
+      m.set(
+        c.id,
+        Math.max(0, Number(c.total_usd ?? 0) - (s?.pagado ?? 0) - (s?.ncAplicado ?? 0)),
+      );
+    }
+    return m;
+  }, [pendientes, saldos]);
 
   const kpis = useMemo(() => {
     const totalUsd = pagos.reduce((s, p) => s + Number(p.monto_usd ?? 0), 0);
@@ -299,10 +319,10 @@ export function BlufinPagosPage() {
               description: `${f.contrato?.folio ?? '—'} · ${f.asociado_a} · ${fmtUSD(f.monto_usd)} @ ${Number(f.tc_forward ?? 0).toFixed(4)}`,
             })
           }
-          onExecute={(f) => executeForwardMut.mutate(f.id)}
+          onExecute={(f) => setEjecutarTarget(f)}
           onAsignar={(f) => setAsignarTarget(f)}
-          executingId={executeForwardMut.variables ?? null}
-          isExecuting={executeForwardMut.isPending}
+          onUsadoFuera={(f, destino) => usadoFueraMut.mutate({ id: f.id, destino })}
+          faltantePorContrato={faltantePorContrato}
         />
       )}
 
@@ -310,6 +330,12 @@ export function BlufinPagosPage() {
         open={!!asignarTarget}
         onClose={() => setAsignarTarget(null)}
         forward={asignarTarget}
+      />
+
+      <EjecutarForwardModal
+        open={!!ejecutarTarget}
+        onClose={() => setEjecutarTarget(null)}
+        forward={ejecutarTarget}
       />
 
       <PagoModal
@@ -1163,6 +1189,48 @@ function RealizadosView({
 
 /* ─── Forwards ────────────────────────────────────────────────────── */
 
+/** Metadata visual por status. Tabla en vez de ternarios encadenados para que un
+ *  status nuevo (o legacy) no rompa la fila: cae al fallback gris con su texto. */
+const FWD_STATUS_META: Record<string, { bg: string; color: string; label: string; title: string }> = {
+  Pendiente: {
+    bg: 'color-mix(in srgb, var(--amber-500) 12%, white)',
+    color: '#92400E',
+    label: 'Pendiente',
+    title: 'Cerrado con el banco y asignado a este contenedor. Se puede ejecutar.',
+  },
+  Ejecutado: {
+    bg: 'color-mix(in srgb, var(--green-500) 12%, white)',
+    color: '#065F46',
+    label: 'Ejecutado',
+    title: 'Ya se convirtió en pago.',
+  },
+  Remanente: {
+    bg: 'color-mix(in srgb, var(--blue-500) 12%, white)',
+    color: '#1E40AF',
+    label: 'Remanente',
+    title: 'Sobró al ejecutarlo contra un saldo menor. Sigue vivo con el banco: asígnalo a otro contenedor.',
+  },
+  Liberado: {
+    bg: 'var(--ink-100)',
+    color: 'var(--ink-700)',
+    label: 'Liberado',
+    title: 'El contenedor se pagó spot, así que este forward dejó de estar asignado.',
+  },
+};
+
+function metaStatus(status: string | null) {
+  return (
+    FWD_STATUS_META[status ?? ''] ?? {
+      bg: 'var(--ink-100)',
+      color: 'var(--ink-700)',
+      label: status ?? '—',
+      title: status?.startsWith('Usado en')
+        ? 'Se aplicó fuera de Blufin. El pago se captura en el módulo de ese proveedor.'
+        : '',
+    }
+  );
+}
+
 function ForwardsView({
   forwards,
   isLoading,
@@ -1170,8 +1238,8 @@ function ForwardsView({
   onDelete,
   onExecute,
   onAsignar,
-  executingId,
-  isExecuting,
+  onUsadoFuera,
+  faltantePorContrato,
 }: {
   forwards: BlufinForwardEnriquecido[];
   isLoading: boolean;
@@ -1179,8 +1247,9 @@ function ForwardsView({
   onDelete: (f: BlufinForwardEnriquecido) => void;
   onExecute: (f: BlufinForwardEnriquecido) => void;
   onAsignar: (f: BlufinForwardEnriquecido) => void;
-  executingId: string | null;
-  isExecuting: boolean;
+  onUsadoFuera: (f: BlufinForwardEnriquecido, destino: 'Camanchaca SA' | 'Neptuno') => void;
+  /** contratoId → lo que realmente falta por pagar (total − pagado − NCs). */
+  faltantePorContrato: Map<string, number>;
 }) {
   if (isLoading) return <SkeletonList rows={3} />;
 
@@ -1222,6 +1291,16 @@ function ForwardsView({
         <tbody>
           {forwards.map((f) => {
             const dias = diasDesde(f.fecha_entrega);
+            const meta = metaStatus(f.status);
+            const asignable = FORWARDS_ASIGNABLES.has(f.status ?? '');
+            // Aviso temprano: ¿el forward cuadra con lo que de verdad se debe?
+            // (aproximación de lista; el número fino lo calcula el modal)
+            const faltante =
+              f.status === 'Pendiente' && f.contrato_id
+                ? (faltantePorContrato.get(f.contrato_id) ?? null)
+                : null;
+            const desajuste =
+              faltante !== null && faltante > 0.01 ? Number(f.monto_usd ?? 0) - faltante : null;
             return (
               <tr key={f.id}>
                 <td className="mono text-sm fw-600">{f.contrato?.folio ?? '—'}</td>
@@ -1230,6 +1309,21 @@ function ForwardsView({
                 </td>
                 <td style={{ textAlign: 'right' }} className="mono fw-600">
                   {fmtUSD(f.monto_usd)}
+                  {desajuste !== null && Math.abs(desajuste) > 0.01 && (
+                    <div
+                      className="text-xs fw-600"
+                      style={{ color: 'var(--amber-500)', marginTop: 2 }}
+                      title={
+                        desajuste > 0
+                          ? 'Al ejecutarlo se pagará solo el saldo y el resto quedará como remanente asignable.'
+                          : 'Al ejecutarlo se registrará como abono; el contenedor quedará con saldo.'
+                      }
+                    >
+                      {desajuste > 0
+                        ? `excede ${fmtUSD(desajuste)}`
+                        : `abono · falta ${fmtUSD(-desajuste)}`}
+                    </div>
+                  )}
                 </td>
                 <td
                   style={{ textAlign: 'right', color: 'var(--amber-500)' }}
@@ -1264,19 +1358,13 @@ function ForwardsView({
                   <BancoTag nombre={f.banco?.nombre} />
                 </td>
                 <td>
-                  {f.status === 'Pendiente' ? (
-                    <span className="badge badge-amber">Pendiente</span>
-                  ) : f.status === 'Ejecutado' ? (
-                    <span className="badge badge-green">Ejecutado</span>
-                  ) : (
-                    <span
-                      className="badge"
-                      style={{ background: 'var(--ink-100)', color: 'var(--ink-600)' }}
-                      title="Cerrado con el banco pero ya no asignado al contenedor: se pagó spot. El forward sigue vigente con el banco; no genera pago para este contrato."
-                    >
-                      Liberado
-                    </span>
-                  )}
+                  <span
+                    className="badge"
+                    style={{ background: meta.bg, color: meta.color }}
+                    title={meta.title}
+                  >
+                    {meta.label}
+                  </span>
                 </td>
                 <td>
                   <div className="hstack" style={{ gap: 4, justifyContent: 'flex-end' }}>
@@ -1284,28 +1372,43 @@ function ForwardsView({
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => onExecute(f)}
-                        disabled={isExecuting && executingId === f.id}
                         title="Convertir el forward en pago real (al TC pactado)"
                       >
-                        {isExecuting && executingId === f.id ? (
-                          <>
-                            <div className="spinner" style={{ width: 11, height: 11 }} />
-                          </>
-                        ) : (
-                          <>
-                            <Icon name="check" size={11} /> Ejecutar
-                          </>
-                        )}
+                        <Icon name="check" size={11} /> Ejecutar
                       </button>
                     )}
-                    {f.status === 'Liberado' && (
+                    {asignable && (
                       <button
                         className="btn btn-outline btn-sm"
                         onClick={() => onAsignar(f)}
-                        title="Reasignar este forward (ya pactado) a otro contenedor pendiente"
+                        title="Mover este forward (ya pactado con el banco) a otro contenedor"
                       >
                         <Icon name="arrow-right" size={11} /> Asignar
                       </button>
+                    )}
+                    {asignable && (
+                      <select
+                        className="field-input"
+                        style={{ width: 108, padding: '3px 6px', fontSize: 11 }}
+                        value=""
+                        title="Marcar que este forward se usó fuera de Blufin"
+                        onChange={(e) => {
+                          const d = e.target.value as 'Camanchaca SA' | 'Neptuno' | '';
+                          if (!d) return;
+                          if (
+                            confirm(
+                              `¿Marcar este forward como usado en ${d}? Saldrá del circuito de Blufin; el pago se captura en ese módulo.`,
+                            )
+                          ) {
+                            onUsadoFuera(f, d);
+                          }
+                          e.target.value = '';
+                        }}
+                      >
+                        <option value="">Usado fuera…</option>
+                        <option value="Camanchaca SA">Salmón (Camanchaca)</option>
+                        <option value="Neptuno">Neptuno</option>
+                      </select>
                     )}
                     <button
                       className="btn btn-ghost btn-sm"
