@@ -15,8 +15,10 @@ import {
   fetchSaldosPorContrato,
   deletePago,
   deleteForward,
-  marcarForwardUsadoFuera,
+  moverForwardAModulo,
+  MODULO_LABEL,
   FORWARDS_ASIGNABLES,
+  type ModuloDestino,
   type ContratoConPendiente,
   type ForwardActivo,
   type SaldoContrato,
@@ -145,18 +147,20 @@ export function BlufinPagosPage() {
     queryFn: () => fetchForwardsActivos(empresaId),
   });
 
-  // Marcar un forward como usado fuera de Blufin (Camanchaca SA / Neptuno).
-  const usadoFueraMut = useMutation({
-    mutationFn: ({ id, destino }: { id: string; destino: 'Camanchaca SA' | 'Neptuno' }) =>
-      marcarForwardUsadoFuera(id, destino),
+  // Mover el forward a otro módulo: aparece allá "por asignar".
+  const moverMut = useMutation({
+    mutationFn: ({ id, destino }: { id: string; destino: ModuloDestino }) =>
+      moverForwardAModulo(id, destino),
     onSuccess: (_r, v) => {
       toast.success(
-        `Marcado como usado en ${v.destino}. Registra el pago en ese módulo — el CRM todavía no cruza forwards entre proveedores.`,
+        `Forward movido a ${MODULO_LABEL[v.destino]} — allá aparece en Forwards como "Por asignar".`,
         { duration: 7000 },
       );
       qc.invalidateQueries({ queryKey: ['blufin_forwards'] });
       qc.invalidateQueries({ queryKey: ['blufin_forwards_activos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['cam_forwards_sa'] });
+      qc.invalidateQueries({ queryKey: ['nep_forwards'] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -321,7 +325,7 @@ export function BlufinPagosPage() {
           }
           onExecute={(f) => setEjecutarTarget(f)}
           onAsignar={(f) => setAsignarTarget(f)}
-          onUsadoFuera={(f, destino) => usadoFueraMut.mutate({ id: f.id, destino })}
+          onMover={(f, destino) => moverMut.mutate({ id: f.id, destino })}
           faltantePorContrato={faltantePorContrato}
         />
       )}
@@ -1224,8 +1228,8 @@ function metaStatus(status: string | null) {
       bg: 'var(--ink-100)',
       color: 'var(--ink-700)',
       label: status ?? '—',
-      title: status?.startsWith('Usado en')
-        ? 'Se aplicó fuera de Blufin. El pago se captura en el módulo de ese proveedor.'
+      title: status?.startsWith('Movido a')
+        ? 'Este forward se movió a otro módulo: allá aparece en Forwards por asignar. Aquí queda como historial.'
         : '',
     }
   );
@@ -1238,7 +1242,7 @@ function ForwardsView({
   onDelete,
   onExecute,
   onAsignar,
-  onUsadoFuera,
+  onMover,
   faltantePorContrato,
 }: {
   forwards: BlufinForwardEnriquecido[];
@@ -1247,7 +1251,7 @@ function ForwardsView({
   onDelete: (f: BlufinForwardEnriquecido) => void;
   onExecute: (f: BlufinForwardEnriquecido) => void;
   onAsignar: (f: BlufinForwardEnriquecido) => void;
-  onUsadoFuera: (f: BlufinForwardEnriquecido, destino: 'Camanchaca SA' | 'Neptuno') => void;
+  onMover: (f: BlufinForwardEnriquecido, destino: ModuloDestino) => void;
   /** contratoId → lo que realmente falta por pagar (total − pagado − NCs). */
   faltantePorContrato: Map<string, number>;
 }) {
@@ -1389,25 +1393,27 @@ function ForwardsView({
                     {asignable && (
                       <select
                         className="field-input"
-                        style={{ width: 108, padding: '3px 6px', fontSize: 11 }}
+                        style={{ width: 104, padding: '3px 6px', fontSize: 11 }}
                         value=""
-                        title="Marcar que este forward se usó fuera de Blufin"
+                        title="Mover este forward a otro módulo — aparecerá allá por asignar"
                         onChange={(e) => {
-                          const d = e.target.value as 'Camanchaca SA' | 'Neptuno' | '';
+                          const d = e.target.value as ModuloDestino | '';
                           if (!d) return;
                           if (
                             confirm(
-                              `¿Marcar este forward como usado en ${d}? Saldrá del circuito de Blufin; el pago se captura en ese módulo.`,
+                              `¿Mover este forward a ${MODULO_LABEL[d]}?\n\n` +
+                                `Se creará allá como "Por asignar" con el mismo monto, TC, banco y fechas. ` +
+                                `En Blufin queda como historial (ya no se podrá ejecutar ni asignar aquí).`,
                             )
                           ) {
-                            onUsadoFuera(f, d);
+                            onMover(f, d);
                           }
                           e.target.value = '';
                         }}
                       >
-                        <option value="">Usado fuera…</option>
-                        <option value="Camanchaca SA">Salmón (Camanchaca)</option>
-                        <option value="Neptuno">Neptuno</option>
+                        <option value="">Mover FW…</option>
+                        <option value="camanchaca_sa">a Camanchaca (Salmón)</option>
+                        <option value="neptuno">a Neptuno</option>
                       </select>
                     )}
                     <button

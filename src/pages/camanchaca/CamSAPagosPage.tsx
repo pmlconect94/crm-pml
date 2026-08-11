@@ -24,6 +24,7 @@ import { fetchContenedoresConPendienteSA } from '@/features/camanchaca/sa-querie
 import { fetchCostosDataSA, type ContenedorCostoSA } from '@/features/camanchaca/sa-costos-queries';
 import { CamSAPagoModal } from '@/features/camanchaca/CamSAPagoModal';
 import { CamSAForwardModal } from '@/features/camanchaca/CamSAForwardModal';
+import { CamSAAsignarForwardModal } from '@/features/camanchaca/CamSAAsignarForwardModal';
 import { CamSACostoImportacionModal } from '@/features/camanchaca/CamSACostoImportacionModal';
 
 type View = 'pagos' | 'forwards' | 'importacion' | 'comparacion';
@@ -55,6 +56,7 @@ export function CamSAPagosPage() {
   const [view, setView] = useState<View>('pagos');
   const [pagoOpen, setPagoOpen] = useState(false);
   const [forwardOpen, setForwardOpen] = useState(false);
+  const [asignarTarget, setAsignarTarget] = useState<CamForwardSAEnriquecido | null>(null);
   const [costoOpen, setCostoOpen] = useState(false);
   const [prefillContenedor, setPrefillContenedor] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<
@@ -210,6 +212,7 @@ export function CamSAPagosPage() {
           isLoading={loadingForwards}
           onNew={() => setForwardOpen(true)}
           onExecute={(f) => executeMut.mutate(f.id)}
+          onAsignar={(f) => setAsignarTarget(f)}
           executingId={executeMut.variables ?? null}
           isExecuting={executeMut.isPending}
           onDelete={(f) =>
@@ -239,6 +242,12 @@ export function CamSAPagosPage() {
 
       <CamSAPagoModal open={pagoOpen} onClose={() => setPagoOpen(false)} prefillContenedorId={prefillContenedor} />
       <CamSAForwardModal open={forwardOpen} onClose={() => setForwardOpen(false)} />
+
+      <CamSAAsignarForwardModal
+        open={!!asignarTarget}
+        onClose={() => setAsignarTarget(null)}
+        forward={asignarTarget}
+      />
       <CamSACostoImportacionModal open={costoOpen} onClose={() => setCostoOpen(false)} />
 
       <DeleteConfirmModal
@@ -376,6 +385,7 @@ function ForwardsView({
   isLoading,
   onNew,
   onExecute,
+  onAsignar,
   onDelete,
   executingId,
   isExecuting,
@@ -384,6 +394,7 @@ function ForwardsView({
   isLoading: boolean;
   onNew: () => void;
   onExecute: (f: CamForwardSAEnriquecido) => void;
+  onAsignar: (f: CamForwardSAEnriquecido) => void;
   onDelete: (f: CamForwardSAEnriquecido) => void;
   executingId: string | null;
   isExecuting: boolean;
@@ -426,7 +437,25 @@ function ForwardsView({
             const dias = diasDesde(f.fecha_entrega);
             return (
               <tr key={f.id}>
-                <td className="mono text-sm fw-600">{f.contenedor?.folio_interno ?? '—'}</td>
+                <td className="mono text-sm fw-600">
+                  {f.contenedor?.folio_interno ?? (
+                    <span
+                      className="badge badge-blue"
+                      title={
+                        f.origen_modulo === 'blufin'
+                          ? `Movido desde Blufin${f.origen_ref ? ` (${f.origen_ref})` : ''}. Asígnalo a un contenedor.`
+                          : 'Sin contenedor asignado.'
+                      }
+                    >
+                      Por asignar
+                    </span>
+                  )}
+                  {f.origen_modulo === 'blufin' && (
+                    <div className="text-xs muted" style={{ marginTop: 2 }}>
+                      de Blufin{f.origen_ref ? ` · ${f.origen_ref}` : ''}
+                    </div>
+                  )}
+                </td>
                 <td style={{ textAlign: 'right' }} className="mono fw-600">{fmtUSD(f.monto_usd)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--amber-500)' }} className="mono fw-700">{Number(f.tc_forward).toFixed(4)}</td>
                 <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-600">{fmtMXN(f.monto_mxn)}</td>
@@ -453,7 +482,16 @@ function ForwardsView({
                 </td>
                 <td>
                   <div className="hstack" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                    {f.status === 'Pendiente' && (
+                    {!f.contenedor_id && f.status !== 'Ejecutado' && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => onAsignar(f)}
+                        title="Asignar este forward a un contenedor"
+                      >
+                        <Icon name="arrow-right" size={11} /> Asignar
+                      </button>
+                    )}
+                    {f.status === 'Pendiente' && f.contenedor_id && (
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => onExecute(f)}

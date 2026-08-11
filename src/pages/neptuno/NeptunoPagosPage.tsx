@@ -1,6 +1,9 @@
 /**
- * Pagos Neptuno (USD). Sin forwards. Sub-tabs Pendientes / Realizados.
+ * Pagos Neptuno (USD). Sub-tabs Pendientes / Realizados / Forwards.
  * Pendientes: facturas con saldo agrupadas por semana de su vencimiento.
+ * Forwards (2026-08-11): dólares pactados con el banco. Pueden llegar movidos
+ * desde otro módulo (Blufin) y entonces aparecen "Por asignar" hasta que se
+ * eligen la factura a la que se aplican.
  */
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,9 +22,16 @@ import {
   type SaldoFactura,
 } from '@/features/neptuno/queries';
 import { fetchPagos, deletePago, type NepPagoEnriquecido } from '@/features/neptuno/pagos-queries';
+import {
+  fetchForwardsNep,
+  executeForwardNep,
+  deleteForwardNep,
+  type NepForwardEnriquecido,
+} from '@/features/neptuno/forwards-queries';
 import { PagoModal } from '@/features/neptuno/PagoModal';
+import { NepAsignarForwardModal } from '@/features/neptuno/AsignarForwardModal';
 
-type View = 'pendientes' | 'realizados';
+type View = 'pendientes' | 'realizados' | 'forwards';
 
 function TipoPill({ tipo }: { tipo: string }) {
   const meta: Record<string, { bg: string; text: string }> = {
@@ -74,7 +84,10 @@ export function NeptunoPagosPage() {
   const [view, setView] = useState<View>('pendientes');
   const [modalOpen, setModalOpen] = useState(false);
   const [prefill, setPrefill] = useState<{ facturaId?: string }>({});
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; description: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { kind: 'pago' | 'forward'; id: string; description: string } | null
+  >(null);
+  const [asignarTarget, setAsignarTarget] = useState<NepForwardEnriquecido | null>(null);
 
   const { data: pagos = [], isLoading: loadingPagos } = useQuery({
     queryKey: ['neptuno_pagos', empresaId],
@@ -91,6 +104,40 @@ export function NeptunoPagosPage() {
   const { data: cat } = useQuery({
     queryKey: ['neptuno_catalogos', empresaId],
     queryFn: () => fetchCatalogos(empresaId),
+  });
+  const { data: forwards = [], isLoading: loadingForwards } = useQuery({
+    queryKey: ['nep_forwards', empresaId],
+    queryFn: () => fetchForwardsNep(empresaId),
+  });
+
+  const invalidarForwards = () => {
+    qc.invalidateQueries({ queryKey: ['nep_forwards'] });
+    qc.invalidateQueries({ queryKey: ['neptuno_pagos'] });
+    qc.invalidateQueries({ queryKey: ['neptuno_facturas'] });
+    qc.invalidateQueries({ queryKey: ['neptuno_facturas_pendientes'] });
+    qc.invalidateQueries({ queryKey: ['neptuno_saldos'] });
+  };
+
+  const executeForwardMut = useMutation({
+    mutationFn: (id: string) => executeForwardNep(id),
+    onSuccess: (r) => {
+      toast.success(
+        r.remanente > 0
+          ? `Pagado ${fmtUSD(r.aplicar)} · quedan ${fmtUSD(r.remanente)} en forward por asignar`
+          : 'Forward ejecutado y registrado como pago',
+      );
+      invalidarForwards();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteForwardMut = useMutation({
+    mutationFn: (id: string) => deleteForwardNep(id),
+    onSuccess: () => {
+      toast.success('Forward eliminado');
+      invalidarForwards();
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const deletePagoMut = useMutation({
@@ -160,10 +207,16 @@ export function NeptunoPagosPage() {
       />
 
       <div className="tabs" style={{ marginBottom: 12 }}>
-        {(['pendientes', 'realizados'] as const).map((v) => (
+        {(['pendientes', 'realizados', 'forwards'] as const).map((v) => (
           <button key={v} className={`tab ${view === v ? 'active' : ''}`} onClick={() => setView(v)}>
-            {v === 'pendientes' ? <Icon name="alert" size={13} /> : <Icon name="check" size={13} />}
-            {v === 'pendientes' ? 'Pendientes' : 'Realizados'}
+            {v === 'pendientes' ? (
+              <Icon name="alert" size={13} />
+            ) : v === 'realizados' ? (
+              <Icon name="check" size={13} />
+            ) : (
+              <Icon name="calendar" size={13} />
+            )}
+            {v === 'pendientes' ? 'Pendientes' : v === 'realizados' ? 'Realizados' : 'Forwards'}
             {v === 'pendientes' && pendientes.length > 0 && (
               <span
                 style={{
@@ -183,22 +236,41 @@ export function NeptunoPagosPage() {
         ))}
       </div>
 
-      {view === 'pendientes' ? (
+      {view === 'pendientes' && (
         <PendientesView
           pendientes={pendientes}
           saldos={saldos}
           isLoading={loadingPendientes}
           onPay={openModal}
         />
-      ) : (
+      )}
+      {view === 'realizados' && (
         <RealizadosView
           pagos={pagos}
           bancos={cat?.bancos ?? []}
           isLoading={loadingPagos}
           onDelete={(p) =>
             setDeleteTarget({
+              kind: 'pago',
               id: p.id,
               description: `${p.factura?.factura_num ?? '—'} · ${p.tipo} · ${fmtUSD(p.monto_usd)} · ${fmtFechaCorta(p.fecha)}`,
+            })
+          }
+        />
+      )}
+      {view === 'forwards' && (
+        <ForwardsView
+          forwards={forwards}
+          isLoading={loadingForwards}
+          onExecute={(f) => executeForwardMut.mutate(f.id)}
+          onAsignar={(f) => setAsignarTarget(f)}
+          executingId={executeForwardMut.variables ?? null}
+          isExecuting={executeForwardMut.isPending}
+          onDelete={(f) =>
+            setDeleteTarget({
+              kind: 'forward',
+              id: f.id,
+              description: `${f.factura?.factura_num ?? 'Por asignar'} · ${fmtUSD(f.monto_usd)} @ ${Number(f.tc_forward).toFixed(4)}`,
             })
           }
         />
@@ -210,15 +282,26 @@ export function NeptunoPagosPage() {
         prefillFacturaId={prefill.facturaId ?? null}
       />
 
+      <NepAsignarForwardModal
+        open={!!asignarTarget}
+        onClose={() => setAsignarTarget(null)}
+        forward={asignarTarget}
+      />
+
       <DeleteConfirmModal
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        what="este pago"
+        what={deleteTarget?.kind === 'forward' ? 'este forward' : 'este pago'}
         itemDescription={deleteTarget?.description}
-        consequences="El saldo de la factura se recalcula. Si vuelve a quedar descubierto, su status regresa a Pendiente/Parcial."
+        consequences={
+          deleteTarget?.kind === 'forward'
+            ? 'El compromiso con el banco sigue vigente — esto solo lo quita del CRM.'
+            : 'El saldo de la factura se recalcula. Si vuelve a quedar descubierto, su status regresa a Pendiente/Parcial.'
+        }
         onConfirm={async () => {
           if (!deleteTarget) return;
-          await deletePagoMut.mutateAsync(deleteTarget.id);
+          if (deleteTarget.kind === 'forward') await deleteForwardMut.mutateAsync(deleteTarget.id);
+          else await deletePagoMut.mutateAsync(deleteTarget.id);
           setDeleteTarget(null);
         }}
       />
@@ -687,6 +770,170 @@ function RealizadosView({
         )}
       </div>
     </>
+  );
+}
+
+/* ─── Forwards ────────────────────────────────────────────────────── */
+
+function ForwardsView({
+  forwards,
+  isLoading,
+  onExecute,
+  onAsignar,
+  onDelete,
+  executingId,
+  isExecuting,
+}: {
+  forwards: NepForwardEnriquecido[];
+  isLoading: boolean;
+  onExecute: (f: NepForwardEnriquecido) => void;
+  onAsignar: (f: NepForwardEnriquecido) => void;
+  onDelete: (f: NepForwardEnriquecido) => void;
+  executingId: string | null;
+  isExecuting: boolean;
+}) {
+  if (isLoading) return <SkeletonList rows={3} />;
+
+  if (forwards.length === 0) {
+    return (
+      <div className="card">
+        <div className="empty">
+          <Icon name="calendar" size={36} />
+          <div className="empty-title">Sin forwards cambiarios</div>
+          <p className="muted">
+            Aquí aparecen los dólares pactados con un banco para pagar facturas de Neptuno,
+            incluidos los que se muevan desde otro módulo.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Factura</th>
+            <th style={{ textAlign: 'right' }}>USD</th>
+            <th style={{ textAlign: 'right' }}>TC pactado</th>
+            <th style={{ textAlign: 'right' }}>MXN</th>
+            <th>Cerrado</th>
+            <th>Se ejecuta</th>
+            <th>Banco</th>
+            <th>Status</th>
+            <th style={{ width: 150 }}>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {forwards.map((f) => {
+            const dias = diasDesde(f.fecha_entrega);
+            const sinAsignar = !f.factura_id;
+            return (
+              <tr key={f.id}>
+                <td className="mono text-sm fw-600">
+                  {f.factura?.factura_num ?? (
+                    <span
+                      className="badge badge-blue"
+                      title={
+                        f.origen_modulo === 'blufin'
+                          ? `Movido desde Blufin${f.origen_ref ? ` (${f.origen_ref})` : ''}. Asígnalo a una factura.`
+                          : 'Sin factura asignada.'
+                      }
+                    >
+                      Por asignar
+                    </span>
+                  )}
+                  {f.origen_modulo === 'blufin' && (
+                    <div className="text-xs muted" style={{ marginTop: 2 }}>
+                      de Blufin{f.origen_ref ? ` · ${f.origen_ref}` : ''}
+                    </div>
+                  )}
+                </td>
+                <td style={{ textAlign: 'right' }} className="mono fw-600">
+                  {fmtUSD(f.monto_usd)}
+                </td>
+                <td style={{ textAlign: 'right', color: 'var(--amber-500)' }} className="mono fw-700">
+                  {Number(f.tc_forward).toFixed(4)}
+                </td>
+                <td style={{ textAlign: 'right', color: 'var(--blue-500)' }} className="mono fw-600">
+                  {fmtMXN(f.monto_mxn)}
+                </td>
+                <td className="text-sm">{fmtFechaCorta(f.fecha_cierre)}</td>
+                <td>
+                  <div className="fw-600 text-sm">{fmtFechaCorta(f.fecha_entrega)}</div>
+                  {f.status === 'Pendiente' && dias !== null && (
+                    <div
+                      className="text-xs"
+                      style={{
+                        color: dias <= 3 ? 'var(--amber-500)' : 'var(--ink-500)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {dias < 0 ? `vencido ${-dias}d` : dias === 0 ? 'hoy' : `en ${dias}d`}
+                    </div>
+                  )}
+                </td>
+                <td>
+                  <BancoTag nombre={f.banco?.nombre} />
+                </td>
+                <td>
+                  {f.status === 'Ejecutado' ? (
+                    <span className="badge badge-green">Ejecutado</span>
+                  ) : f.status === 'Remanente' ? (
+                    <span
+                      className="badge badge-blue"
+                      title="Sobró al ejecutarlo contra una factura menor. Sigue vivo con el banco: asígnalo a otra factura."
+                    >
+                      Remanente
+                    </span>
+                  ) : (
+                    <span className="badge badge-amber">Pendiente</span>
+                  )}
+                </td>
+                <td>
+                  <div className="hstack" style={{ gap: 4, justifyContent: 'flex-end' }}>
+                    {sinAsignar && f.status !== 'Ejecutado' && (
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={() => onAsignar(f)}
+                        title="Asignar este forward a una factura"
+                      >
+                        <Icon name="arrow-right" size={11} /> Asignar
+                      </button>
+                    )}
+                    {f.status === 'Pendiente' && !sinAsignar && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => onExecute(f)}
+                        disabled={isExecuting && executingId === f.id}
+                        title="Convertir el forward en pago real (al TC pactado)"
+                      >
+                        {isExecuting && executingId === f.id ? (
+                          <div className="spinner" style={{ width: 11, height: 11 }} />
+                        ) : (
+                          <>
+                            <Icon name="check" size={11} /> Ejecutar
+                          </>
+                        )}
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => onDelete(f)}
+                      title="Eliminar forward"
+                      style={{ padding: 6, color: 'var(--red-500)' }}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

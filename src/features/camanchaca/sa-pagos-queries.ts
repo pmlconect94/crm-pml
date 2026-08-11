@@ -130,18 +130,47 @@ export type CamForwardSAEnriquecido = CamForwardSA & {
   banco?: { nombre: string } | null;
 };
 
+/**
+ * Forwards de la empresa. El filtro va por `cam_forwards_sa.empresa_id` (columna
+ * propia desde la migración 20260811130000) y el contenedor se trae SIN `!inner`:
+ * un forward por asignar (movido desde otro módulo) no tiene contenedor y con el
+ * inner join desaparecía de la pantalla.
+ */
 export async function fetchForwardsSA(empresaId: string): Promise<CamForwardSAEnriquecido[]> {
   const { data, error } = await supabase
     .from('cam_forwards_sa')
     .select(
-      'id, contenedor_id, monto_usd, tc_forward, monto_mxn, fecha_cierre, fecha_entrega, banco_id, status, capturado_por, created_at, ' +
-        'contenedor:cam_contenedores_sa!inner(folio_interno, empresa_id), ' +
+      'id, empresa_id, contenedor_id, monto_usd, tc_forward, monto_mxn, fecha_cierre, fecha_entrega, banco_id, status, origen_modulo, origen_ref, capturado_por, created_at, ' +
+        'contenedor:cam_contenedores_sa(folio_interno, empresa_id), ' +
         'banco:bancos(nombre)',
     )
-    .eq('contenedor.empresa_id', empresaId)
+    .eq('empresa_id', empresaId)
     .order('fecha_entrega', { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as CamForwardSAEnriquecido[];
+}
+
+/**
+ * Asignar a un contenedor un forward que llegó "por asignar" (movido de otro
+ * módulo). Valida que el contenedor no tenga ya otro Pendiente.
+ */
+export async function asignarForwardSA(id: string, contenedorId: string): Promise<void> {
+  const { data: existentes, error: chkErr } = await supabase
+    .from('cam_forwards_sa')
+    .select('id, status')
+    .eq('contenedor_id', contenedorId);
+  if (chkErr) throw chkErr;
+  if ((existentes ?? []).some((f) => f.status === 'Pendiente')) {
+    throw new Error('Ese contenedor ya tiene un forward pendiente.');
+  }
+  const { data: hechos, error } = await supabase
+    .from('cam_forwards_sa')
+    .update({ contenedor_id: contenedorId, status: 'Pendiente' })
+    .eq('id', id)
+    .neq('status', 'Ejecutado')
+    .select('id');
+  if (error) throw error;
+  if (!hechos?.length) throw new Error('El forward ya fue ejecutado — no se puede reasignar.');
 }
 
 export async function createForwardSA(payload: CamForwardSAInsert): Promise<void> {
@@ -155,8 +184,16 @@ export async function createForwardSA(payload: CamForwardSAInsert): Promise<void
   if ((existentes ?? []).some((f) => f.status === 'Pendiente')) {
     throw new Error('Este contenedor ya tiene un forward pendiente. Ejecútalo o elimínalo antes de crear otro.');
   }
+  // La empresa se guarda en el forward (ya no se deriva del contenedor al leer).
+  const { data: cont } = await supabase
+    .from('cam_contenedores_sa')
+    .select('empresa_id')
+    .eq('id', payload.contenedor_id)
+    .single();
   const monto_mxn = (payload.monto_usd ?? 0) * (payload.tc_forward ?? 0);
-  const { error } = await supabase.from('cam_forwards_sa').insert({ ...payload, monto_mxn });
+  const { error } = await supabase
+    .from('cam_forwards_sa')
+    .insert({ ...payload, monto_mxn, empresa_id: cont?.empresa_id ?? 'pml' });
   if (error) throw error;
 }
 

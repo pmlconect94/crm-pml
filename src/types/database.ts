@@ -690,10 +690,21 @@ export type Database = {
         Update: { tipo?: string; monto_usd?: number; tc?: number; monto_mxn?: number | null; fecha?: string; banco_id?: number | null; referencia?: string | null };
         Relationships: Empty;
       };
+      // contenedor_id NULL = forward "por asignar" (típicamente movido desde otro
+      // módulo). empresa_id es propio: antes se derivaba del contenedor, y sin él
+      // un forward sin asignar quedaba invisible.
       cam_forwards_sa: {
-        Row: { id: string; contenedor_id: string | null; monto_usd: number; tc_forward: number; monto_mxn: number | null; fecha_cierre: string | null; fecha_entrega: string | null; banco_id: number | null; status: string | null; capturado_por: string | null; created_at: string | null };
-        Insert: { id?: string; contenedor_id?: string | null; monto_usd: number; tc_forward: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; capturado_por?: string | null };
-        Update: { monto_usd?: number; tc_forward?: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; contenedor_id?: string | null };
+        Row: { id: string; empresa_id: string | null; contenedor_id: string | null; monto_usd: number; tc_forward: number; monto_mxn: number | null; fecha_cierre: string | null; fecha_entrega: string | null; banco_id: number | null; status: string | null; origen_modulo: string | null; origen_ref: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; contenedor_id?: string | null; monto_usd: number; tc_forward: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; origen_modulo?: string | null; origen_ref?: string | null; capturado_por?: string | null };
+        Update: { empresa_id?: string | null; monto_usd?: number; tc_forward?: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; contenedor_id?: string | null };
+        Relationships: Empty;
+      };
+      // Forwards de Neptuno. Cuelgan de la FACTURA (en Neptuno la factura ES el
+      // identificador); factura_id NULL = por asignar.
+      nep_forwards: {
+        Row: { id: string; empresa_id: string | null; factura_id: string | null; monto_usd: number; tc_forward: number; monto_mxn: number | null; fecha_cierre: string | null; fecha_entrega: string | null; banco_id: number | null; status: string | null; origen_modulo: string | null; origen_ref: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; factura_id?: string | null; monto_usd: number; tc_forward: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null; origen_modulo?: string | null; origen_ref?: string | null; capturado_por?: string | null };
+        Update: { empresa_id?: string | null; factura_id?: string | null; monto_usd?: number; tc_forward?: number; monto_mxn?: number | null; fecha_cierre?: string | null; fecha_entrega?: string | null; banco_id?: number | null; status?: string | null };
         Relationships: Empty;
       };
       cam_costo_importacion: {
@@ -1221,6 +1232,8 @@ export type CamPagoSA = Database['crm']['Tables']['cam_pagos_sa']['Row'];
 export type CamPagoSAInsert = Database['crm']['Tables']['cam_pagos_sa']['Insert'];
 export type CamForwardSA = Database['crm']['Tables']['cam_forwards_sa']['Row'];
 export type CamForwardSAInsert = Database['crm']['Tables']['cam_forwards_sa']['Insert'];
+export type NepForward = Database['crm']['Tables']['nep_forwards']['Row'];
+export type NepForwardInsert = Database['crm']['Tables']['nep_forwards']['Insert'];
 export type CamCostoImportacion = Database['crm']['Tables']['cam_costo_importacion']['Row'];
 export type CamCostoImportacionInsert = Database['crm']['Tables']['cam_costo_importacion']['Insert'];
 export type CamRecepcionSA = Database['crm']['Tables']['cam_recepcion_sa']['Row'];

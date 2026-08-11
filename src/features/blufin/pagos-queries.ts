@@ -488,36 +488,74 @@ export async function executeForward(id: string): Promise<PlanForward> {
   return plan;
 }
 
+export type ModuloDestino = 'camanchaca_sa' | 'neptuno';
+
+export const MODULO_LABEL: Record<ModuloDestino, string> = {
+  camanchaca_sa: 'Camanchaca (Salmón)',
+  neptuno: 'Neptuno',
+};
+
 /**
- * Marcar un forward como usado FUERA de Blufin (Camanchaca SA / Neptuno). Solo
- * lo saca del circuito de Blufin y deja registro; el pago se captura en el
- * módulo que corresponda — todavía no hay cruce automático entre módulos.
+ * MOVER un forward a otro módulo. El dinero está pactado con el banco y no es
+ * propiedad de Blufin: si se terminó usando en Camanchaca o Neptuno, se crea
+ * allá un forward **por asignar** (sin contenedor/factura) con el mismo monto,
+ * TC, banco y fechas, y el de Blufin queda como historial
+ * (`Movido a …`: ya no es ejecutable ni asignable, pero se ve de dónde salió).
+ *
+ * No hay transacción: primero se inserta en el destino y solo si eso sale bien
+ * se marca el origen. Si el segundo paso falla, el peor caso es un forward
+ * duplicado visible en los dos lados — evidente y corregible, en vez de dinero
+ * que desaparece de ambos.
  */
-export async function marcarForwardUsadoFuera(
-  id: string,
-  destino: 'Camanchaca SA' | 'Neptuno',
-): Promise<void> {
-  const { data: actual, error: fErr } = await supabase
+export async function moverForwardAModulo(id: string, destino: ModuloDestino): Promise<void> {
+  const { data: f, error: fErr } = await supabase
     .from('blufin_forwards')
-    .select('status')
+    .select(
+      'monto_usd, tc_forward, monto_mxn, fecha_cierre, fecha_entrega, banco_id, status, contrato:blufin_contratos(folio, empresa_id)',
+    )
     .eq('id', id)
     .single();
   if (fErr) throw fErr;
-  const motivo = porQueNoSeAsigna(actual.status);
-  if (motivo) throw new Error(motivo);
 
-  // Solo cambia el status: `contrato_id` se conserva como referencia de dónde se
-  // cerró. Dejarlo en NULL lo haría DESAPARECER de la lista, porque fetchForwards
-  // trae el contrato con `!inner`.
+  const rel = (f as { contrato?: { folio?: string; empresa_id?: string } | null }).contrato;
+  const motivo = porQueNoSeAsigna(f.status, rel?.folio ?? null);
+  if (motivo) throw new Error(motivo);
+  if (f.monto_usd == null || f.tc_forward == null) {
+    throw new Error('Forward incompleto — no se puede mover.');
+  }
+
+  const comun = {
+    empresa_id: rel?.empresa_id ?? 'pml',
+    monto_usd: Number(f.monto_usd),
+    tc_forward: Number(f.tc_forward),
+    monto_mxn: f.monto_mxn != null ? Number(f.monto_mxn) : r2(Number(f.monto_usd) * Number(f.tc_forward)),
+    fecha_cierre: f.fecha_cierre,
+    fecha_entrega: f.fecha_entrega,
+    banco_id: f.banco_id,
+    status: 'Pendiente',
+    origen_modulo: 'blufin',
+    origen_ref: rel?.folio ?? null,
+  };
+
+  // 1) Crear el forward "por asignar" en el módulo destino
+  const { error: insErr } =
+    destino === 'camanchaca_sa'
+      ? await supabase.from('cam_forwards_sa').insert({ ...comun, contenedor_id: null })
+      : await supabase.from('nep_forwards').insert({ ...comun, factura_id: null });
+  if (insErr) throw insErr;
+
+  // 2) Dejar el de Blufin como historial
   const { data: hechos, error } = await supabase
     .from('blufin_forwards')
-    .update({ status: `Usado en ${destino}` })
+    .update({ status: `Movido a ${MODULO_LABEL[destino]}` })
     .eq('id', id)
     .in('status', [...FORWARDS_ASIGNABLES])
     .select('id');
   if (error) throw error;
   if (!hechos?.length) {
-    throw new Error('El forward cambió de estado — vuelve a cargar la página.');
+    throw new Error(
+      'Se creó el forward en el módulo destino, pero el de Blufin cambió de estado y no se marcó como movido. Revísalo para no dejarlo duplicado.',
+    );
   }
 }
 
