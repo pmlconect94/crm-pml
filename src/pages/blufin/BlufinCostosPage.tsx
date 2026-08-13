@@ -782,7 +782,8 @@ function InventarioView({ skus, tcEstimado }: { skus: SkuCosto[]; tcEstimado: nu
 
 const TC_ORIGEN_LABEL: Record<string, string> = {
   pagos: 'Promedio ponderado de pagos reales',
-  forward: 'TC del forward cambiario',
+  forward: 'TC del forward cambiario — el precio ya está asegurado con el banco',
+  mixto: 'Pagos ya hechos + forward que cubre el resto — el costo ya no se mueve',
   ponderado: 'TC ponderado del contrato',
   ninguno: 'Sin TC disponible (falta pago, forward o TC del día)',
 };

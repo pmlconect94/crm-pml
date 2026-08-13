@@ -12,6 +12,7 @@ import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
 import { fetchContratoDetalle } from '@/features/blufin/queries';
 import { getImportPdfUrl, resolveFacturaPdf } from '@/features/blufin/import-queries';
 import { PdfViewerModal, type PdfTarget } from '@/features/blufin/PdfViewerModal';
+import { tcContrato, explicaTc } from '@/features/blufin/tc-contrato';
 import { getTcDelDiaInfo } from '@/lib/tc';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
@@ -72,16 +73,19 @@ export function ContratoDetalleModal({
       ? Math.max(0, Number(c.total_usd ?? 0) - (data?.pagado ?? 0) - (data?.ncAplicado ?? 0))
       : 0;
 
-  // Precios en pesos: si el contrato está liquidado usamos el TC REAL (promedio
-  // ponderado de los pagos); si no, el TC del día como ESTIMADO (§6 / §14.2).
-  const pagosArr = data?.pagos ?? [];
-  const sumUsdPagos = pagosArr.reduce((s, p) => s + p.monto_usd, 0);
-  const tcReal =
-    sumUsdPagos > 0 ? pagosArr.reduce((s, p) => s + p.tc * p.monto_usd, 0) / sumUsdPagos : null;
-  const liquidado = !!c && restante <= 0.01;
-  const usaTcReal = liquidado && tcReal != null;
-  const tcMxn = usaTcReal ? tcReal : tcInfo?.tc ?? null;
-  const tcEstimado = !usaTcReal;
+  // Precios en pesos: el TC sale de mezclar lo ya pagado (a su TC real) con lo
+  // asegurado por forwards (al TC pactado) y, solo para lo que sigue expuesto,
+  // el TC del día. Ver `tc-contrato.ts` para el porqué.
+  const tcCalc = tcContrato({
+    totalUsd: Number(c?.total_usd ?? totUsd),
+    ncAplicadoUsd: data?.ncAplicado ?? 0,
+    pagos: data?.pagos ?? [],
+    forwardsPendientes: (data?.forwards ?? []).filter((f) => f.status === 'Pendiente'),
+    tcDia: tcInfo?.tc ?? null,
+    tcPonderado: c?.tc_ponderado ?? null,
+  });
+  const tcMxn = tcCalc.tc;
+  const tcEstimado = tcCalc.estimado;
   const totMxn = tcMxn != null ? totUsd * tcMxn : null;
   const colMxn = tcEstimado ? '#92400E' : 'var(--ink-900)';
 
@@ -304,10 +308,14 @@ export function ContratoDetalleModal({
                       <div className="text-xs" style={{ color: 'var(--ink-600)', textAlign: 'right' }}>
                         TC <span className="mono fw-700">{tcMxn.toFixed(4)}</span>
                         <div style={{ marginTop: 2 }}>
-                          {usaTcReal
-                            ? 'promedio ponderado de pagos · liquidado'
-                            : `TC del día${tcInfo?.fecha ? ` ${fmtFechaCorta(tcInfo.fecha)}` : ''} · estimado hasta liquidar`}
+                          {explicaTc(tcCalc, tcInfo?.fecha ? fmtFechaCorta(tcInfo.fecha) : null)}
                         </div>
+                        {tcCalc.usdForward > 0.01 && (
+                          <div style={{ marginTop: 2 }}>
+                            {fmtUSD(tcCalc.usdForward)} asegurados con forward
+                            {tcCalc.usdExpuesto > 0.01 && <> · {fmtUSD(tcCalc.usdExpuesto)} aún sin asegurar</>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ) : (

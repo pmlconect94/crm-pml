@@ -1,9 +1,10 @@
 import { fetchContratos } from '@/features/blufin/queries';
-import { fetchPagos, fetchForwards } from '@/features/blufin/pagos-queries';
+import { fetchPagos, fetchForwards, fetchSaldosPorContrato } from '@/features/blufin/pagos-queries';
 import { fetchSkusBlufin } from '@/features/blufin/productos-queries';
+import { tcContrato } from '@/features/blufin/tc-contrato';
 
 /** Origen del TC efectivo de un contenedor (orden de prioridad §14 regla 2). */
-export type TcOrigen = 'pagos' | 'forward' | 'ponderado' | 'ninguno';
+export type TcOrigen = 'pagos' | 'forward' | 'mixto' | 'ponderado' | 'ninguno';
 
 export type FuenteCosto = {
   contrato_id: string;
@@ -121,37 +122,52 @@ export function calcularPromedio(
 }
 
 /**
- * TC efectivo REAL de un contenedor. Decisión del usuario 2026-07-07: el TC solo
- * es OFICIAL cuando el contenedor está pagado por completo (saldo liquidado). Si
- * solo se pagó el anticipo (o nada), el TC del contenedor todavía NO está definido
- * — antes se tomaba el TC del anticipo, lo cual daba un costo MXN engañoso. Ahora
- * se devuelve `null` para que la página use el TC del día estimado (en ámbar),
- * tanto en Inventario como en Por contenedor.
+ * TC efectivo REAL de un contenedor — el que ya NO se puede mover.
  *
- * Cuando SÍ está liquidado: pagos ponderados → forward → tc_ponderado → null.
+ * Decisión del usuario 2026-07-07: no basta con tener un pago (el anticipo) para
+ * dar por bueno su TC; mientras quede saldo, el costo en pesos sigue expuesto y
+ * hay que estimarlo con el TC del día (en ámbar).
+ *
+ * Afinado 2026-08-13: un **forward pendiente también cierra el precio**. Si los
+ * pagos hechos más los forwards cubren todo lo que falta, el contenedor ya no
+ * está expuesto al tipo de cambio aunque el saldo no se haya pagado todavía —
+ * eso es justo para lo que se contrata un forward. En ese caso el TC oficial es
+ * el promedio ponderado de pagos + forwards.
+ *
+ * Se sigue devolviendo `null` (→ TC del día en ámbar) mientras quede cualquier
+ * dólar sin asegurar: media cobertura no es un costo cerrado.
  */
 function tcEfectivo(
   contratoId: string,
   liquidado: boolean,
+  totalUsd: number,
+  ncAplicadoUsd: number,
   pagos: { contrato_id: string | null; monto_usd: number; tc: number }[],
-  forwards: { contrato_id: string | null; tc_forward: number | null }[],
+  forwardsPendientes: { contrato_id: string | null; monto_usd: number | null; tc_forward: number | null }[],
+  forwardsTodos: { contrato_id: string | null; tc_forward: number | null }[],
   tcPonderado: number | null,
 ): { tc: number | null; origen: TcOrigen } {
-  // Sin liquidar por completo → no hay TC oficial (se estima con el TC del día).
-  if (!liquidado) return { tc: null, origen: 'ninguno' };
-
   const ps = pagos.filter((p) => p.contrato_id === contratoId);
-  if (ps.length > 0) {
-    const sumMonto = ps.reduce((s, p) => s + Number(p.monto_usd), 0);
-    if (sumMonto > 0) {
-      const sumProd = ps.reduce((s, p) => s + Number(p.tc) * Number(p.monto_usd), 0);
-      return { tc: sumProd / sumMonto, origen: 'pagos' };
-    }
+
+  const r = tcContrato({
+    totalUsd,
+    ncAplicadoUsd,
+    pagos: ps,
+    forwardsPendientes: forwardsPendientes.filter((f) => f.contrato_id === contratoId),
+    tcDia: null, // aquí no se estima: si falta algo por asegurar, no hay TC oficial
+    tcPonderado: null,
+  });
+  if (!r.estimado && r.tc != null) {
+    return { tc: r.tc, origen: r.origen === 'mixto' ? 'mixto' : r.origen === 'forward' ? 'forward' : 'pagos' };
   }
-  // Liquidado pero sin pagos con TC (raro: flag puesto a mano) → forward → ponderado.
-  const fwd = forwards.find((f) => f.contrato_id === contratoId && f.tc_forward != null);
-  if (fwd?.tc_forward != null) return { tc: Number(fwd.tc_forward), origen: 'forward' };
-  if (tcPonderado != null) return { tc: Number(tcPonderado), origen: 'ponderado' };
+
+  // Marcado como liquidado pero sin pagos que lo sustenten (raro: flag puesto a
+  // mano en la importación histórica) → forward → tc_ponderado del contrato.
+  if (liquidado) {
+    const fwd = forwardsTodos.find((f) => f.contrato_id === contratoId && f.tc_forward != null);
+    if (fwd?.tc_forward != null) return { tc: Number(fwd.tc_forward), origen: 'forward' };
+    if (tcPonderado != null) return { tc: Number(tcPonderado), origen: 'ponderado' };
+  }
   return { tc: null, origen: 'ninguno' };
 }
 
@@ -160,11 +176,15 @@ function tcEfectivo(
  * cada uno. Reutiliza los fetch existentes para no duplicar queries.
  */
 export async function fetchCostosData(empresaId: string): Promise<CostosData> {
-  const [contratos, pagos, forwards, catalogo] = await Promise.all([
+  // `saldos` solo se usa por el `ncAplicado`: una nota de crédito perdona dólares
+  // que nunca se van a cambiar a pesos, así que sin ella un contenedor cerrado
+  // con pagos + NC + forward se vería como si le faltara cobertura.
+  const [contratos, pagos, forwards, catalogo, saldos] = await Promise.all([
     fetchContratos(empresaId),
     fetchPagos(empresaId),
     fetchForwards(empresaId),
     fetchSkusBlufin(empresaId),
+    fetchSaldosPorContrato(empresaId),
   ]);
 
   const skuById = new Map(catalogo.map((s) => [s.id, s]));
@@ -183,10 +203,25 @@ export async function fetchCostosData(empresaId: string): Promise<CostosData> {
   const forwardsLite = forwards
     .filter((f) => f.status === 'Pendiente' || f.status === 'Ejecutado')
     .map((f) => ({ contrato_id: f.contrato_id, tc_forward: f.tc_forward }));
+  // Para medir cobertura solo cuentan los PENDIENTES: al ejecutar un forward se
+  // inserta un pago, así que sumar también los 'Ejecutado' contaría dos veces
+  // los mismos dólares.
+  const forwardsPendientes = forwards
+    .filter((f) => f.status === 'Pendiente')
+    .map((f) => ({ contrato_id: f.contrato_id, monto_usd: f.monto_usd, tc_forward: f.tc_forward }));
 
   for (const c of contratos) {
     const liquidado = c.saldo_pagado === true;
-    const { tc, origen } = tcEfectivo(c.id, liquidado, pagosLite, forwardsLite, c.tc_ponderado);
+    const { tc, origen } = tcEfectivo(
+      c.id,
+      liquidado,
+      Number(c.total_usd ?? 0),
+      saldos.get(c.id)?.ncAplicado ?? 0,
+      pagosLite,
+      forwardsPendientes,
+      forwardsLite,
+      c.tc_ponderado,
+    );
     const llego = !!c.llegada_real;
 
     const contLineas: ContenedorCosto['lineas'] = [];
