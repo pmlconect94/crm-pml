@@ -8,7 +8,16 @@ import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { FacturaDetalleModal } from '@/features/contabilidad/FacturaDetalleModal';
-import { fetchFacturas, fetchUltimaSincronizacion, FACTURAS_PAGE_SIZE, type FacturasFiltros } from '@/features/contabilidad/facturas-queries';
+import {
+  fetchFacturas,
+  fetchUltimaSincronizacion,
+  fetchAlertasEstatus,
+  estatusMeta,
+  esEfosSospechoso,
+  FACTURAS_PAGE_SIZE,
+  type FacturasFiltros,
+  type AlertasEstatus,
+} from '@/features/contabilidad/facturas-queries';
 import { exportFacturasDetallado } from '@/features/contabilidad/facturas-export';
 import { TIPO_COMPROBANTE_FILTROS, METODO_PAGO_FILTROS, FORMA_PAGO_FILTROS, formaPagoCorto } from '@/features/contabilidad/catalogos-sat';
 import { useAuth } from '@/lib/auth';
@@ -21,6 +30,85 @@ import type { ContFactura } from '@/types/database';
 const REFETCH_ULTIMA_SYNC_MS = 5 * 60 * 1000;
 
 const TIPO_BADGE: Record<string, string> = { I: 'badge-blue', E: 'badge-amber', T: 'badge-violet', P: 'badge-gray' };
+
+const ESTATUS_FILTROS: { label: string; value: FacturasFiltros['estatus'] }[] = [
+  { label: 'Todas', value: undefined },
+  { label: 'Vigentes', value: 'vigente' },
+  { label: 'Canceladas', value: 'cancelado' },
+];
+
+/**
+ * Aviso de facturas que ya no son lo que parecen. Solo aparece cuando hay algo
+ * que ver — si todo está vigente y ningún proveedor está en EFOS, no ocupa ni un
+ * pixel. Se pinta arriba de los filtros porque es lo primero que un contador
+ * necesita saber al abrir la pantalla, no algo que deba ir a buscar.
+ */
+function AvisoEstatus({
+  alertas,
+  onVerCanceladas,
+  onVerEfos,
+}: {
+  alertas: AlertasEstatus;
+  onVerCanceladas: () => void;
+  onVerEfos: () => void;
+}) {
+  const { canceladas, canceladasConPago, efos, sinVerificar } = alertas;
+  if (!canceladas && !efos) return null;
+
+  return (
+    <div
+      className="card"
+      style={{
+        marginBottom: 8,
+        padding: '9px 12px',
+        background: 'color-mix(in srgb, var(--red-500) 6%, white)',
+        border: '1px solid color-mix(in srgb, var(--red-500) 28%, white)',
+      }}
+    >
+      <div className="hstack" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <Icon name="alert" size={15} style={{ color: 'var(--red-500)', flexShrink: 0 }} />
+
+        {canceladas > 0 && (
+          <div className="hstack" style={{ gap: 8 }}>
+            <span className="text-sm">
+              <span className="fw-700">{canceladas}</span> factura{canceladas === 1 ? '' : 's'} que el proveedor{' '}
+              <span className="fw-700">canceló</span> después de recibirla
+              {canceladasConPago > 0 && (
+                <>
+                  {' '}
+                  — <span className="fw-700" style={{ color: 'var(--red-500)' }}>{canceladasConPago} con pago registrado</span>
+                </>
+              )}
+            </span>
+            <button className="btn btn-sm" onClick={onVerCanceladas} style={{ padding: '3px 10px', fontSize: 11.5 }}>
+              Ver
+            </button>
+          </div>
+        )}
+
+        {canceladas > 0 && efos > 0 && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink-200)' }} />}
+
+        {efos > 0 && (
+          <div className="hstack" style={{ gap: 8 }}>
+            <span className="text-sm">
+              <span className="fw-700">{efos}</span> con observación <span className="fw-700">EFOS</span> del SAT — verificar el RFC en
+              el listado del art. 69-B antes de deducirlas
+            </span>
+            <button className="btn btn-sm" onClick={onVerEfos} style={{ padding: '3px 10px', fontSize: 11.5 }}>
+              Ver
+            </button>
+          </div>
+        )}
+
+        {sinVerificar > 0 && (
+          <span className="text-xs muted" style={{ marginLeft: 'auto' }}>
+            Faltan {sinVerificar.toLocaleString('es-MX')} por verificar con el SAT
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -48,13 +136,14 @@ export function ContabilidadFacturasPage() {
   const [tipoComprobante, setTipoComprobante] = useState<string | undefined>(undefined);
   const [metodoPago, setMetodoPago] = useState<string | undefined>(undefined);
   const [formaPago, setFormaPago] = useState<string | undefined>(undefined);
+  const [estatus, setEstatus] = useState<FacturasFiltros['estatus']>(undefined);
   const [page, setPage] = useState(0);
   const [detalleUuid, setDetalleUuid] = useState<string | null>(null);
   const [exportando, setExportando] = useState(false);
 
   const filtros: FacturasFiltros = useMemo(
-    () => ({ q: q.trim() || undefined, desde: desde || undefined, hasta: hasta || undefined, tipoComprobante, metodoPago, formaPago }),
-    [q, desde, hasta, tipoComprobante, metodoPago, formaPago],
+    () => ({ q: q.trim() || undefined, desde: desde || undefined, hasta: hasta || undefined, tipoComprobante, metodoPago, formaPago, estatus }),
+    [q, desde, hasta, tipoComprobante, metodoPago, formaPago, estatus],
   );
 
   const { data, isLoading, isFetching } = useQuery({
@@ -69,10 +158,18 @@ export function ContabilidadFacturasPage() {
     refetchInterval: REFETCH_ULTIMA_SYNC_MS,
   });
 
+  // El verificador de estatus corre en el mismo workflow que el sincronizador,
+  // así que basta con refrescar al mismo ritmo.
+  const { data: alertas } = useQuery({
+    queryKey: ['cont_alertas_estatus', empresaId],
+    queryFn: () => fetchAlertasEstatus(empresaId),
+    refetchInterval: REFETCH_ULTIMA_SYNC_MS,
+  });
+
   const facturas = data?.facturas ?? [];
   const total = data?.count ?? 0;
   const totalPaginas = Math.max(1, Math.ceil(total / FACTURAS_PAGE_SIZE));
-  const hayFiltros = !!(q || desde || hasta || tipoComprobante || metodoPago || formaPago);
+  const hayFiltros = !!(q || desde || hasta || tipoComprobante || metodoPago || formaPago || estatus);
 
   const cambiarFiltro = <T,>(setter: (v: T) => void) => (v: T) => {
     setter(v);
@@ -117,6 +214,14 @@ export function ContabilidadFacturasPage() {
           </button>
         </div>
       </PageEnter>
+
+      {alertas && (
+        <AvisoEstatus
+          alertas={alertas}
+          onVerCanceladas={() => cambiarFiltro(setEstatus)('cancelado')}
+          onVerEfos={() => cambiarFiltro(setEstatus)('efos')}
+        />
+      )}
 
       {/* Filtros + tabla: una sola tarjeta, sin separación entre ambos bloques */}
       <div className="card" style={{ opacity: isFetching && !isLoading ? 0.7 : 1, transition: 'opacity 180ms var(--ease-soft)' }}>
@@ -173,6 +278,7 @@ export function ContabilidadFacturasPage() {
                   setTipoComprobante(undefined);
                   setMetodoPago(undefined);
                   setFormaPago(undefined);
+                  setEstatus(undefined);
                   setPage(0);
                 }}
               >
@@ -212,6 +318,21 @@ export function ContabilidadFacturasPage() {
                 </option>
               ))}
             </select>
+            <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--ink-200)' }} />
+            <div className="hstack" style={{ gap: 4 }}>
+              {ESTATUS_FILTROS.map((e) => (
+                <Chip key={e.label} active={estatus === e.value} onClick={() => cambiarFiltro(setEstatus)(e.value)}>
+                  {e.label}
+                </Chip>
+              ))}
+              {/* El chip de EFOS solo aparece si de verdad hay alguna: un filtro
+                  que siempre devuelve cero es ruido, no una herramienta. */}
+              {(alertas?.efos ?? 0) > 0 && (
+                <Chip active={estatus === 'efos'} onClick={() => cambiarFiltro(setEstatus)('efos')}>
+                  EFOS
+                </Chip>
+              )}
+            </div>
           </div>
         </div>
 
@@ -274,9 +395,27 @@ export function ContabilidadFacturasPage() {
                       {fmtPorMoneda(f.total, f.moneda)}
                     </td>
                     <td>
-                      <span className={`badge ${f.estatus_sat === 'vigente' ? 'badge-green' : 'badge-red'}`}>
-                        {f.estatus_sat === 'vigente' ? 'Vigente' : 'Cancelado'}
-                      </span>
+                      {(() => {
+                        const meta = estatusMeta(f);
+                        return (
+                          <span
+                            className="hstack"
+                            style={{ gap: 5 }}
+                            title={
+                              meta.verificado
+                                ? `Verificado con el SAT el ${fmtFechaHoraTS(f.estatus_verificado_at!)}${f.estatus_cancelacion ? ` · ${f.estatus_cancelacion}` : ''}`
+                                : 'Todavía no se ha verificado con el SAT'
+                            }
+                          >
+                            <span className={`badge ${meta.badge}`}>{meta.label}</span>
+                            {esEfosSospechoso(f.validacion_efos) && (
+                              <span className="badge badge-red" title={`Emisor en el listado 69-B: ${f.validacion_efos}`}>
+                                EFOS
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}

@@ -10,7 +10,7 @@ import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 import { fmtPorMoneda, fmtFechaHoraTS } from '@/lib/format';
-import { fetchFacturaDetalle, getFacturaXmlUrl } from '@/features/contabilidad/facturas-queries';
+import { fetchFacturaDetalle, getFacturaXmlUrl, estatusMeta, esEfosSospechoso } from '@/features/contabilidad/facturas-queries';
 import { formaPagoLabel, formaPagoCorto, tipoComprobanteLabel } from '@/features/contabilidad/catalogos-sat';
 
 // Función serverless de Vercel (api/pdf.py) — genera el PDF al vuelo, no hay
@@ -179,13 +179,19 @@ export function FacturaDetalleModal({ uuid, onClose }: { uuid: string | null; on
                       <span className="mono fw-700" style={{ fontSize: 13 }}>
                         {f.uuid}
                       </span>
-                      <span className={`badge ${f.estatus_sat === 'vigente' ? 'badge-green' : 'badge-red'}`}>
-                        {f.estatus_sat === 'vigente' ? 'Vigente' : 'Cancelado'}
-                      </span>
+                      {(() => {
+                        const meta = estatusMeta(f);
+                        return <span className={`badge ${meta.badge}`}>{meta.label}</span>;
+                      })()}
+                      {esEfosSospechoso(f.validacion_efos) && <span className="badge badge-red">EFOS</span>}
                     </div>
                     <div className="text-xs muted">
                       {f.tipo_comprobante ? `Comprobante ${f.tipo_comprobante}` : 'CFDI'} · recibida de{' '}
                       {f.emisor_nombre ?? f.emisor_rfc}
+                      {' · '}
+                      {f.estatus_verificado_at
+                        ? `estatus verificado con el SAT el ${fmtFechaHoraTS(f.estatus_verificado_at)}`
+                        : 'estatus aún no verificado con el SAT'}
                     </div>
                   </div>
                   <div className="hstack" style={{ gap: 8, flexShrink: 0 }}>
@@ -215,6 +221,41 @@ export function FacturaDetalleModal({ uuid, onClose }: { uuid: string | null; on
                     </button>
                   </div>
                 </div>
+
+                {/* Aviso de cancelación / EFOS. Va pegado al header, antes que
+                    cualquier otro dato: si esta factura ya no sirve fiscalmente,
+                    eso manda sobre todo lo demás que diga la ficha. */}
+                {(f.estatus_sat === 'cancelado' || esEfosSospechoso(f.validacion_efos)) && (
+                  <div
+                    style={{
+                      margin: '14px 22px 0',
+                      padding: '10px 12px',
+                      borderRadius: 'var(--r-sm)',
+                      background: 'color-mix(in srgb, var(--red-500) 6%, white)',
+                      border: '1px solid color-mix(in srgb, var(--red-500) 28%, white)',
+                    }}
+                  >
+                    <div className="hstack" style={{ gap: 9, alignItems: 'flex-start' }}>
+                      <Icon name="alert" size={15} style={{ color: 'var(--red-500)', flexShrink: 0, marginTop: 1 }} />
+                      <div className="text-sm" style={{ lineHeight: 1.55 }}>
+                        {f.estatus_sat === 'cancelado' && (
+                          <div>
+                            <span className="fw-700">El proveedor canceló esta factura ante el SAT.</span>{' '}
+                            {f.estatus_cancelacion ? `${f.estatus_cancelacion}.` : ''} Si ya se pagó o se usó para deducir, hay que
+                            pedirle la factura de reemplazo.
+                          </div>
+                        )}
+                        {esEfosSospechoso(f.validacion_efos) && (
+                          <div style={{ marginTop: f.estatus_sat === 'cancelado' ? 6 : 0 }}>
+                            <span className="fw-700">El SAT devolvió una observación de EFOS sobre el emisor.</span> Verifica el RFC{' '}
+                            <span className="mono">{f.emisor_rfc}</span> en el listado del artículo 69-B antes de deducir esta factura.
+                            Respuesta del SAT: <span className="mono">ValidacionEFOS={f.validacion_efos}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Emisor / Receptor — visualmente distintos: el receptor SIEMPRE es PML */}
                 <div

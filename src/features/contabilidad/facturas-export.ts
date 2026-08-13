@@ -7,7 +7,7 @@
 import { supabase } from '@/lib/supabase';
 import { downloadXlsx, type XlsxCell } from '@/lib/excel';
 import type { ContFactura, ContConceptoConImpuestos } from '@/types/database';
-import type { FacturasFiltros } from '@/features/contabilidad/facturas-queries';
+import { queryFacturasFiltradas, esEfosSospechoso, type FacturasFiltros } from '@/features/contabilidad/facturas-queries';
 import { formaPagoLabel, tipoComprobanteLabel } from '@/features/contabilidad/catalogos-sat';
 
 const CHUNK = 150; // uuids por consulta .in() — evita URLs kilométricas con miles de facturas
@@ -21,26 +21,19 @@ function chunk<T>(arr: T[], size: number): T[][] {
 const num = (n: number | null | undefined): XlsxCell => (n == null ? '' : Number(n));
 const txt = (s: string | null | undefined): XlsxCell => s ?? '';
 
-/** Trae TODAS las facturas que matchean los filtros (sin paginar) — misma lógica
- *  de filtros que fetchFacturas, pero en bloques de 1000 (tope de PostgREST)
- *  hasta agotar resultados. */
+/** Trae TODAS las facturas que matchean los filtros (sin paginar) — reusa la
+ *  MISMA cadena de filtros que la lista (`queryFacturasFiltradas`), en bloques
+ *  de 1000 (tope de PostgREST) hasta agotar resultados. Antes los filtros
+ *  estaban duplicados aquí y agregar uno nuevo solo en la lista hacía que el
+ *  Excel exportara de más, en silencio. */
 async function fetchTodasLasFacturas(empresaId: string, filtros: FacturasFiltros): Promise<ContFactura[]> {
   const PAGE = 1000;
   const out: ContFactura[] = [];
   for (let page = 0; ; page++) {
-    let query = supabase.from('cont_facturas').select('*').eq('tipo', 'recibida').eq('empresa_id', empresaId);
-    if (filtros.desde) query = query.gte('fecha_emision', `${filtros.desde}T00:00:00`);
-    if (filtros.hasta) query = query.lte('fecha_emision', `${filtros.hasta}T23:59:59`);
-    if (filtros.tipoComprobante) query = query.eq('tipo_comprobante', filtros.tipoComprobante);
-    if (filtros.metodoPago) query = query.eq('metodo_pago', filtros.metodoPago);
-    if (filtros.formaPago) query = query.eq('forma_pago', filtros.formaPago);
-    const q = filtros.q?.trim();
-    if (q) {
-      const term = q.replace(/[%,()]/g, ' ').trim();
-      if (term) query = query.or(`emisor_nombre.ilike.%${term}%,emisor_rfc.ilike.%${term}%`);
-    }
     const from = page * PAGE;
-    const { data, error } = await query.order('fecha_emision', { ascending: false }).range(from, from + PAGE - 1);
+    const { data, error } = await queryFacturasFiltradas(empresaId, filtros)
+      .order('fecha_emision', { ascending: false })
+      .range(from, from + PAGE - 1);
     if (error) throw error;
     out.push(...((data ?? []) as ContFactura[]));
     if (!data || data.length < PAGE) break;
@@ -111,7 +104,8 @@ function impuestosDe(c: ContConceptoConImpuestos): Record<string, number> {
 const HEADER = [
   'UUID', 'Serie', 'Folio', 'Tipo comprobante', 'Fecha emisión', 'Fecha timbrado',
   'Emisor RFC', 'Emisor', 'Receptor RFC', 'Receptor',
-  'Método de pago', 'Forma de pago', 'Moneda', 'Tipo de cambio', 'Estatus SAT',
+  'Método de pago', 'Forma de pago', 'Moneda', 'Tipo de cambio',
+  'Estatus SAT', 'Verificado el', 'Detalle cancelación', 'Emisor en EFOS',
   '# línea', 'Clave SAT', 'Descripción SAT', 'Descripción', 'Cantidad', 'Unidad',
   'Precio unitario', 'Importe línea', 'Descuento línea',
   'IVA trasladado', 'IEPS trasladado', 'ISR retenido', 'IVA retenido',
@@ -144,7 +138,12 @@ export async function exportFacturasDetallado(empresaId: string, filtros: Factur
       formaPagoLabel(f.forma_pago),
       txt(f.moneda),
       num(f.tipo_cambio),
-      f.estatus_sat === 'vigente' ? 'Vigente' : 'Cancelado',
+      // Sin verificar se marca aparte: decir "Vigente" a secas de algo que
+      // todavía no se le ha preguntado al SAT sería afirmar de más.
+      f.estatus_sat === 'cancelado' ? 'Cancelado' : f.estatus_verificado_at ? 'Vigente' : 'Vigente (sin verificar)',
+      f.estatus_verificado_at ? f.estatus_verificado_at.slice(0, 10) : '',
+      txt(f.estatus_cancelacion),
+      esEfosSospechoso(f.validacion_efos) ? `Revisar 69-B (ValidacionEFOS=${f.validacion_efos})` : '',
     ];
     const saldo = saldoPorFactura.get(f.uuid);
     const filaTotales: XlsxCell[] = [

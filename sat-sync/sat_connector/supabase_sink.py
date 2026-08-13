@@ -10,6 +10,11 @@ from .config import Config
 SCHEMA = "crm"
 BUCKET = "cont-facturas"
 
+# Cuantos UUID caben en un solo `uuid=in.(...)`. Cada UUID son ~37 caracteres;
+# con 100 la URL queda en ~3.8 KB, comodamente por debajo del limite de 8 KB
+# que tienen nginx/PostgREST por default.
+UUIDS_POR_PATCH = 100
+
 
 class SupabaseSink:
     """Escribe en el proyecto Supabase de CRM PML (schema `crm`) usando la misma
@@ -154,6 +159,55 @@ class SupabaseSink:
                 headers=self._headers(write=True, prefer="return=minimal"),
             )
             doc_resp.raise_for_status()
+
+    # ---- verificacion de estatus (cancelaciones) ---------------------------
+
+    def facturas_por_verificar(self, *, limite: int, revisadas_antes_de: str) -> list[dict]:
+        """Las facturas mas 'rancias' de esta empresa: primero las que nunca se
+        han consultado con el SAT (`estatus_verificado_at is null`) y despues las
+        revisadas hace mas de `revisadas_antes_de`. Ese orden hace que el padron
+        entero rote solo, sin llevar cursores ni marcas de lote.
+
+        Se pagina de mil en mil porque PostgREST tiene un tope duro de 1000 filas
+        por respuesta (`db-max-rows` de Supabase) y lo aplica EN SILENCIO: pedir
+        `limit=11000` devuelve 1000 sin error ni aviso, asi que un barrido
+        completo se quedaba corto sin que nada fallara."""
+        PAGINA = 1000
+        filas: list[dict] = []
+        while len(filas) < limite:
+            faltan = min(PAGINA, limite - len(filas))
+            resp = self.session.get(
+                f"{self.base_url}/rest/v1/cont_facturas",
+                params={
+                    "select": "uuid,emisor_rfc,emisor_nombre,receptor_rfc,total,serie,folio,fecha_emision,estatus_sat",
+                    "empresa_id": f"eq.{self.empresa_id}",
+                    "or": f"(estatus_verificado_at.is.null,estatus_verificado_at.lt.{revisadas_antes_de})",
+                    "order": "estatus_verificado_at.asc.nullsfirst,fecha_emision.desc",
+                    "limit": str(faltan),
+                    "offset": str(len(filas)),
+                },
+                headers=self._headers(),
+            )
+            resp.raise_for_status()
+            lote = resp.json()
+            filas.extend(lote)
+            if len(lote) < faltan:
+                break  # ya no hay mas facturas que cumplan el filtro
+        return filas
+
+    def marcar_estatus(self, uuids: list[str], patch: dict) -> None:
+        """Aplica el MISMO patch a muchas facturas de un golpe. El verificador
+        agrupa por resultado identico, asi que un lote de 1500 facturas suele
+        resolverse en ~15 PATCH en vez de 1500."""
+        for i in range(0, len(uuids), UUIDS_POR_PATCH):
+            lote = uuids[i:i + UUIDS_POR_PATCH]
+            resp = self.session.patch(
+                f"{self.base_url}/rest/v1/cont_facturas",
+                params={"uuid": f"in.({','.join(lote)})"},
+                json=patch,
+                headers=self._headers(write=True, prefer="return=minimal"),
+            )
+            resp.raise_for_status()
 
     # ---- solicitudes --------------------------------------------------------
 

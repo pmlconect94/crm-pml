@@ -65,3 +65,22 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           EMPRESA_ID: ${{ matrix.empresa.id }}
         run: python run_sync.py --dias 5 --tipo recibidas
+
+      # Verifica contra el SAT si las facturas YA descargadas siguen vigentes.
+      # El sync de arriba solo pide comprobantes vigentes, asi que sin este paso
+      # una factura cancelada por el proveedor DESPUES de descargarla se queda
+      # marcada vigente para siempre (y una cancelada que ya se pago o dedujo es
+      # un problema fiscal, no un detalle).
+      #
+      # No usa e.firma: es el servicio publico del QR. Se le pasan las variables
+      # de Supabase y ya. `if: always()` para que un fallo del SAT en la descarga
+      # masiva no se lleve tambien la verificacion, que es independiente.
+      #
+      # 1500 x 3 corridas al dia = todo el padron (~15 mil) rota cada 2-3 dias.
+      - name: Verificar cancelaciones y EFOS (${{ matrix.empresa.id }})
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EMPRESA_ID: ${{ matrix.empresa.id }}
+        run: python run_estatus.py --max 1500 --workers 5

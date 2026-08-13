@@ -25,7 +25,83 @@ export type FacturasFiltros = {
    *  (en los P vive en el complemento, `cont_pagos.forma_pago`), así que
    *  filtrar por forma de pago los deja fuera. */
   formaPago?: string;
+  /** Qué revisar. `efos` no es un estatus del CFDI sino una marca del EMISOR
+   *  (aparece en el listado del 69-B), pero se agrupa aquí porque responde a la
+   *  misma pregunta operativa: "¿qué facturas tengo que mirar?". */
+  estatus?: 'vigente' | 'cancelado' | 'efos';
 };
+
+/**
+ * Códigos de `ValidacionEFOS` que significan "el emisor NO está en el listado
+ * del art. 69-B". El SAT no publica la tabla de este campo, así que la lista
+ * sale de la práctica: `200` es la respuesta normal y `201` también es limpia
+ * (se comprobó con datos reales — entre los emisores que contestan 201 están
+ * Teléfonos de México y una concesionaria de casetas; la librería de referencia
+ * phpcfdi/sat-estado-cfdi mapea 200 y 201 a "fuera del listado").
+ *
+ * Es lista BLANCA a propósito: se marca lo que NO esté aquí. Al revés —marcar
+ * solo el código conocido de "sí está en la lista"— un código desconocido pero
+ * grave pasaría desapercibido.
+ */
+export const EFOS_LIMPIOS = ['200', '201'];
+export const esEfosSospechoso = (v: string | null | undefined): boolean => !!v && !EFOS_LIMPIOS.includes(v);
+
+/**
+ * Cómo pintar el estatus de una factura. Distingue tres casos, no dos: una
+ * factura sin verificar NO es lo mismo que una verificada y vigente. Todas
+ * nacen "vigente" (el sincronizador solo pide comprobantes vigentes al SAT), así
+ * que pintarlas de verde antes de haber preguntado sería afirmar algo que
+ * todavía no se sabe.
+ */
+export function estatusMeta(f: { estatus_sat: string; estatus_verificado_at?: string | null }): {
+  label: string;
+  badge: string;
+  verificado: boolean;
+} {
+  if (f.estatus_sat === 'cancelado') return { label: 'Cancelado', badge: 'badge-red', verificado: true };
+  if (!f.estatus_verificado_at) return { label: 'Vigente', badge: 'badge-gray', verificado: false };
+  return { label: 'Vigente', badge: 'badge-green', verificado: true };
+}
+
+/**
+ * Query de facturas con TODOS los filtros ya aplicados.
+ *
+ * Vive en una sola función a propósito: la cadena de filtros se usa en dos
+ * lugares —la lista paginada y el export a Excel— y antes estaba duplicada.
+ * Agregar un filtro en uno y olvidarlo en el otro hacía que el Excel exportara
+ * de más sin que nada fallara ni se viera raro.
+ */
+export function queryFacturasFiltradas(
+  empresaId: string,
+  filtros: FacturasFiltros,
+  opciones?: { contar?: boolean },
+) {
+  let query = supabase
+    .from('cont_facturas')
+    .select('*', opciones?.contar ? { count: 'exact' } : undefined)
+    .eq('tipo', 'recibida')
+    .eq('empresa_id', empresaId);
+
+  if (filtros.desde) query = query.gte('fecha_emision', `${filtros.desde}T00:00:00`);
+  if (filtros.hasta) query = query.lte('fecha_emision', `${filtros.hasta}T23:59:59`);
+  if (filtros.tipoComprobante) query = query.eq('tipo_comprobante', filtros.tipoComprobante);
+  if (filtros.metodoPago) query = query.eq('metodo_pago', filtros.metodoPago);
+  if (filtros.formaPago) query = query.eq('forma_pago', filtros.formaPago);
+  // `not.in` deja fuera los NULL (en SQL `null not in (…)` no es verdadero), que
+  // es justo lo que se quiere: una factura sin verificar todavía no es sospechosa.
+  if (filtros.estatus === 'efos') query = query.not('validacion_efos', 'in', `(${EFOS_LIMPIOS.join(',')})`);
+  else if (filtros.estatus) query = query.eq('estatus_sat', filtros.estatus);
+
+  const q = filtros.q?.trim();
+  if (q) {
+    // `,` y `()` rompen el parseo del string de `.or()` de PostgREST — se descartan del
+    // término buscado (razones sociales/RFC casi nunca los necesitan para encontrarse).
+    const term = q.replace(/[%,()]/g, ' ').trim();
+    if (term) query = query.or(`emisor_nombre.ilike.%${term}%,emisor_rfc.ilike.%${term}%`);
+  }
+
+  return query;
+}
 
 export type FacturasPagina = {
   facturas: ContFactura[];
@@ -46,26 +122,7 @@ export async function fetchFacturas(
   filtros: FacturasFiltros = {},
   page = 0,
 ): Promise<FacturasPagina> {
-  let query = supabase
-    .from('cont_facturas')
-    .select('*', { count: 'exact' })
-    .eq('tipo', 'recibida')
-    .eq('empresa_id', empresaId);
-
-  if (filtros.desde) query = query.gte('fecha_emision', `${filtros.desde}T00:00:00`);
-  if (filtros.hasta) query = query.lte('fecha_emision', `${filtros.hasta}T23:59:59`);
-  if (filtros.tipoComprobante) query = query.eq('tipo_comprobante', filtros.tipoComprobante);
-  if (filtros.metodoPago) query = query.eq('metodo_pago', filtros.metodoPago);
-  if (filtros.formaPago) query = query.eq('forma_pago', filtros.formaPago);
-
-  const q = filtros.q?.trim();
-  if (q) {
-    // `,` y `()` rompen el parseo del string de `.or()` de PostgREST — se descartan del
-    // término buscado (razones sociales/RFC casi nunca los necesitan para encontrarse).
-    const term = q.replace(/[%,()]/g, ' ').trim();
-    if (term) query = query.or(`emisor_nombre.ilike.%${term}%,emisor_rfc.ilike.%${term}%`);
-  }
-
+  const query = queryFacturasFiltradas(empresaId, filtros, { contar: true });
   const from = page * FACTURAS_PAGE_SIZE;
   const { data, error, count } = await query
     .order('fecha_emision', { ascending: false })
@@ -186,6 +243,71 @@ export async function getFacturaXmlUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 3600);
   if (error) throw error;
   return data.signedUrl;
+}
+
+export type AlertasEstatus = {
+  /** Facturas que el proveedor canceló DESPUÉS de que las descargamos. */
+  canceladas: number;
+  /** De esas, las que además traen un complemento de pago que las liquida: ese
+   *  dinero ya salió contra una factura que fiscalmente ya no existe. Es la
+   *  cifra que de verdad urge revisar. */
+  canceladasConPago: number;
+  /** Facturas donde el SAT devolvió una observación de EFOS sobre el emisor. */
+  efos: number;
+  /** Cuántas nunca se le han preguntado al SAT. Mientras esto no sea 0,
+   *  "0 canceladas" no quiere decir "todo limpio" — quiere decir "todavía no sé". */
+  sinVerificar: number;
+  ultimaVerificacion: string | null;
+};
+
+/**
+ * Resumen para el aviso de la parte de arriba de la lista. Son cuatro consultas
+ * de solo conteo (`head: true`) + una para cruzar canceladas contra pagos: no
+ * traen filas, así que corren igual de rápido con 15 mil facturas que con 100.
+ */
+export async function fetchAlertasEstatus(empresaId: string): Promise<AlertasEstatus> {
+  const base = () =>
+    supabase.from('cont_facturas').select('uuid', { count: 'exact', head: true }).eq('tipo', 'recibida').eq('empresa_id', empresaId);
+
+  const [canceladasRes, efosRes, sinVerificarRes, ultimaRes, uuidsRes] = await Promise.all([
+    base().eq('estatus_sat', 'cancelado'),
+    base().not('validacion_efos', 'in', `(${EFOS_LIMPIOS.join(',')})`),
+    base().is('estatus_verificado_at', null),
+    supabase
+      .from('cont_facturas')
+      .select('estatus_verificado_at')
+      .eq('empresa_id', empresaId)
+      .not('estatus_verificado_at', 'is', null)
+      .order('estatus_verificado_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from('cont_facturas').select('uuid').eq('tipo', 'recibida').eq('empresa_id', empresaId).eq('estatus_sat', 'cancelado'),
+  ]);
+
+  for (const r of [canceladasRes, efosRes, sinVerificarRes, ultimaRes, uuidsRes]) {
+    if (r.error) throw r.error;
+  }
+
+  // Cruce canceladas ↔ complementos de pago. Se hace en bloques porque un `.in()`
+  // con cientos de UUID arma una URL kilométrica.
+  const uuidsCancelados = (uuidsRes.data ?? []).map((f) => f.uuid);
+  const pagados = new Set<string>();
+  for (let i = 0; i < uuidsCancelados.length; i += 150) {
+    const { data, error } = await supabase
+      .from('cont_pagos_documentos')
+      .select('id_documento')
+      .in('id_documento', uuidsCancelados.slice(i, i + 150));
+    if (error) throw error;
+    for (const d of data ?? []) pagados.add(d.id_documento);
+  }
+
+  return {
+    canceladas: canceladasRes.count ?? 0,
+    canceladasConPago: pagados.size,
+    efos: efosRes.count ?? 0,
+    sinVerificar: sinVerificarRes.count ?? 0,
+    ultimaVerificacion: ultimaRes.data?.estatus_verificado_at ?? null,
+  };
 }
 
 /**

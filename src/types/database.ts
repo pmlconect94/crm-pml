@@ -818,7 +818,14 @@ export type Database = {
           sello_cfdi: string | null;
           sello_sat: string | null;
           rfc_prov_certif: string | null;
-          estatus_sat: string; // 'vigente' | 'cancelado'
+          estatus_sat: string; // 'vigente' | 'cancelado' — solo lo mueve la verificación contra el SAT
+          // Resultado de la última consulta al servicio público del SAT (el del QR).
+          // Null = esa factura todavía no se ha verificado nunca.
+          estatus_codigo: string | null;
+          estatus_cancelacion: string | null; // 'Cancelado sin aceptación', 'En proceso'…
+          es_cancelable: string | null;
+          validacion_efos: string | null; // '200' = emisor NO está en el listado del 69-B
+          estatus_verificado_at: string | null;
           xml_storage_path: string; // path en el bucket privado 'cont-facturas'
           id_solicitud: string | null;
           created_at: string;
@@ -860,6 +867,11 @@ export type Database = {
           sello_sat?: string | null;
           rfc_prov_certif?: string | null;
           estatus_sat?: string;
+          estatus_codigo?: string | null;
+          estatus_cancelacion?: string | null;
+          es_cancelable?: string | null;
+          validacion_efos?: string | null;
+          estatus_verificado_at?: string | null;
           xml_storage_path: string;
           id_solicitud?: string | null;
         };
@@ -898,6 +910,11 @@ export type Database = {
           sello_sat?: string | null;
           rfc_prov_certif?: string | null;
           estatus_sat?: string;
+          estatus_codigo?: string | null;
+          estatus_cancelacion?: string | null;
+          es_cancelable?: string | null;
+          validacion_efos?: string | null;
+          estatus_verificado_at?: string | null;
           xml_storage_path?: string;
           id_solicitud?: string | null;
         };

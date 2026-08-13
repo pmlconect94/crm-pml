@@ -23,7 +23,11 @@ class Config:
     empresa_id: str
 
 
-def load_config() -> Config:
+def load_config(*, requiere_efirma: bool = True) -> Config:
+    """`requiere_efirma=False` para los comandos que solo hablan con el servicio
+    PUBLICO del SAT (verificar estatus de un CFDI) y con Supabase: ahi no hay
+    descarga masiva, asi que exigir certificado/llave/contraseña dejaria el
+    comando inutilizable fuera del workflow sin ninguna razon."""
     rfc = os.environ.get("SAT_RFC", "").strip().upper()
     cert_path = Path(os.environ.get("SAT_EFIRMA_CERT_PATH", "credentials/efirma.cer"))
     key_path = Path(os.environ.get("SAT_EFIRMA_KEY_PATH", "credentials/efirma.key"))
@@ -38,14 +42,15 @@ def load_config() -> Config:
         key_path = BASE_DIR / key_path
 
     missing = []
-    if not rfc:
-        missing.append("SAT_RFC")
-    if not password:
-        missing.append("SAT_EFIRMA_PASSWORD")
-    if not cert_path.exists():
-        missing.append(f"archivo de certificado ({cert_path})")
-    if not key_path.exists():
-        missing.append(f"archivo de llave privada ({key_path})")
+    if requiere_efirma:
+        if not rfc:
+            missing.append("SAT_RFC")
+        if not password:
+            missing.append("SAT_EFIRMA_PASSWORD")
+        if not cert_path.exists():
+            missing.append(f"archivo de certificado ({cert_path})")
+        if not key_path.exists():
+            missing.append(f"archivo de llave privada ({key_path})")
     if not supabase_url:
         missing.append("SUPABASE_URL")
     if not supabase_service_key:
