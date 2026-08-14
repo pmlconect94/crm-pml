@@ -144,7 +144,17 @@ export function NominaDetallePage() {
     });
     setDescPermMap(perMap); setDescPermDet(perDet);
 
-    const fechaIni = new Date(sem.fecha_inicio + 'T12:00:00');
+    // Se compara contra el FIN del periodo, no contra el inicio: lo que importa es
+    // si para el día de pago ya pasó la espera del préstamo.
+    //
+    // Comparando contra el inicio, un préstamo cuya espera se cumplía DENTRO del
+    // periodo se saltaba el periodo completo. En semanal casi no se notaba (los
+    // préstamos se fechan en lunes, así que inicio y fin daban lo mismo), pero en
+    // QUINCENAL —15 días de ventana— cualquier préstamo que caía a media quincena
+    // se brincaba entera y se cobraba hasta la siguiente: un mes de retraso.
+    // Caso real 2026-08-14: los préstamos del 27-jul no se descontaron en la
+    // quincena del 1-15 ago porque su primer descuento caía el 3-ago.
+    const fechaFinPeriodo = new Date(sem.fecha_fin + 'T12:00:00');
     const dMap: any = {};
     // SOLO préstamos de empleados que están en ESTA nómina (misma empresa + esquema). Si no se
     // filtra, se mezclan préstamos de las dos empresas y al guardar se descuentan saldos ajenos.
@@ -155,7 +165,7 @@ export function NominaDetallePage() {
       const fp = new Date(p.fecha_prestamo + 'T12:00:00');
       const espera = p.tipo === 'semanal' ? 7 : 15;
       const primera = new Date(fp); primera.setDate(fp.getDate() + espera);
-      return fechaIni >= primera;
+      return fechaFinPeriodo >= primera;
     });
     // Préstamos con el descuento OMITIDO esta semana (switch en la pestaña Préstamos).
     const omitSet = new Set((omitRes.data || []).map((o: any) => o.prestamo_id));

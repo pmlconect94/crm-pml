@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { supabase, dbNomina } from '@/lib/nomina/db';
+import { supabase, dbNomina, avisarNoGuardado } from '@/lib/nomina/db';
 import { useAuth } from '@/lib/nomina/auth';
 import { useEmpresa } from '@/lib/nomina/empresas';
 import { fmt, fmtFecha, fmtFechaHora, fmtPeriodo, MESES } from '@/lib/nomina/format';
@@ -37,14 +37,17 @@ export function PrestamosPage() {
 
   useEffect(() => { fetchP(); fetchE(); }, [empresa]);
   async function fetchP() { const { data } = await dbNomina.from('prestamos').select('*, empleado:empleado_id!inner(nombre,area,empresa)').eq('empleado.empresa', empresa).order('created_at', { ascending: false }); setPrestamos(data || []); }
-  async function fetchE() { const { data } = await dbNomina.from('empleados').select('id,nombre,id_banco').eq('activo', true).eq('empresa', empresa).order('id_banco', { ascending: true, nullsFirst: false }); setEmpleados(data || []); }
+  async function fetchE() { const { data } = await dbNomina.from('empleados').select('id,nombre,id_banco,esquema_pago').eq('activo', true).eq('empresa', empresa).order('id_banco', { ascending: true, nullsFirst: false }); setEmpleados(data || []); }
 
   async function guardar() {
     const monto = parseFloat(form.monto);
     const descN = parseFloat(form.desc_nomina);
     if (!form.empleado_id || !(monto > 0) || !form.fecha_prestamo) return;
     if (!(descN > 0)) { toast.error('Captura el descuento por nómina'); return; }
-    await dbNomina.from('prestamos').insert({ empleado_id: form.empleado_id, monto, saldo: monto, descuento_nomina: descN, fecha_prestamo: form.fecha_prestamo, tipo: form.tipo, activo: true });
+    // supabase-js NO lanza excepción cuando la RLS rechaza: hay que revisar
+    // `error` a mano o el préstamo "se guarda" sin guardarse (§18.8).
+    const { error } = await dbNomina.from('prestamos').insert({ empleado_id: form.empleado_id, monto, saldo: monto, descuento_nomina: descN, fecha_prestamo: form.fecha_prestamo, tipo: form.tipo, activo: true });
+    if (error) { avisarNoGuardado(error); return; }
     toast.success('Préstamo registrado');
     setModal(false); setForm({ empleado_id: '', monto: '', desc_nomina: '', fecha_prestamo: '', tipo: 'semanal' }); fetchP();
   }
@@ -73,9 +76,13 @@ export function PrestamosPage() {
     setAbonoP(null); setAbonoMonto(''); fetchP();
   }
 
+  // La espera depende del tipo (7 días semanal / 15 quincenal), igual que en el
+  // cálculo de la nómina. Antes siempre sumaba 7, así que a un préstamo quincenal
+  // le prometía un primer descuento que no era.
   function primerDesc(fecha: string) {
     if (!fecha) return '';
-    const d = new Date(fecha + 'T12:00:00'); d.setDate(d.getDate() + 7);
+    const d = new Date(fecha + 'T12:00:00');
+    d.setDate(d.getDate() + (form.tipo === 'semanal' ? 7 : 15));
     return `${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)}`;
   }
 
@@ -192,7 +199,10 @@ export function PrestamosPage() {
             <div className="modal-header"><h3 className="modal-title">Nuevo préstamo</h3><button className="btn btn-ghost btn-sm" onClick={() => setModal(false)}><Icon name="x" size={16} /></button></div>
             <div className="modal-body">
               <div className="form-grid">
-                <div><label className="field-label">Empleado</label><select className="field-input" value={form.empleado_id} onChange={(e) => setForm((f: any) => ({ ...f, empleado_id: e.target.value }))}><option value="">— Selecciona —</option>{empleados.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                {/* Al elegir empleado el tipo se pone solo según cómo se le paga.
+                    Antes quedaba siempre en "Semanal" (el default del form) y a un
+                    empleado quincenal se le capturaba el préstamo como semanal. */}
+                <div><label className="field-label">Empleado</label><select className="field-input" value={form.empleado_id} onChange={(e) => { const emp = empleados.find((x) => x.id === e.target.value); setForm((f: any) => ({ ...f, empleado_id: e.target.value, tipo: emp?.esquema_pago === 'Quincenal' ? 'quincenal' : 'semanal' })); }}><option value="">— Selecciona —</option>{empleados.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
               </div>
               <div className="form-grid form-grid-2" style={{ marginTop: 14 }}>
                 <div><label className="field-label">Monto del préstamo</label><input className="field-input mono" type="number" value={form.monto} onChange={(e) => setForm((f: any) => ({ ...f, monto: e.target.value }))} /></div>

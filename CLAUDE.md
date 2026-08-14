@@ -1957,3 +1957,65 @@ captura. `bonoChoferSolo()` existe solo para ese desglose visual.
 `acompanante_id`. Ahora ese campo queda en 0. Los viajes históricos conservan el valor fantasma; es
 inofensivo (nunca se pagó), pero explica por qué la columna "Inc. acomp." de viajes viejos sin
 acompañante no está vacía.
+
+### 18.11 Cuándo empieza a descontarse un préstamo ✅ 2026-08-14
+
+Un préstamo no se descuenta de inmediato: hay una **espera** de 7 días (`tipo='semanal'`) o 15
+(`quincenal`) desde `fecha_prestamo`. La regla vive en **un solo lugar**,
+`NominaDetallePage.cargar()` (el filtro `activos`), y el préstamo entra a la nómina si para el
+**FIN del periodo** ya se cumplió la espera.
+
+> **🐛 Bug corregido 2026-08-14 (los préstamos no se descontaban en las QUINCENAS).** El filtro
+> comparaba la espera contra `fecha_inicio` del periodo en vez de `fecha_fin`. Efecto: un préstamo
+> cuya espera se cumplía **a media quincena** se brincaba la quincena **entera** y se cobraba hasta
+> la siguiente — un mes de retraso.
+>
+> **Por qué solo se notó en quincenal:** los préstamos se capturan con fecha de **lunes** (20 de 21
+> activos lo están), que es justo el inicio de la semana, así que en semanal `fecha_inicio` y
+> `fecha_fin` daban el mismo resultado y el bug era invisible. En quincenal la ventana es de 15 días
+> y la fecha del préstamo casi nunca coincide con el día 1 o el 16, así que fallaba casi siempre.
+> Evidencia: la semana PML del 3-ago descontó **12 préstamos**; las quincenas del 1-15 ago iban en
+> **0**.
+>
+> **Arreglo:** `fechaFinPeriodo >= primera`. Verificado contra los datos: recupera 4 descuentos en
+> las quincenas abiertas (Luis Antonio $119 en Marlin; Abaroa $330 y Ana Silvia $200 + $250 en PML)
+> y **no cambia ni una sola nómina semanal**.
+>
+> **Lección:** ante un "no se está descontando", revisar **primero la fecha del préstamo contra el
+> periodo**, antes de sospechar del cálculo. Query de auditoría (préstamos que deberían entrar a una
+> nómina abierta y no lo hacían con la regla vieja):
+> ```sql
+> select s.tipo, s.empresa, e.nombre, p.fecha_prestamo, p.descuento_nomina
+> from nomina.semanas s
+> join nomina.nominas n on n.semana_id=s.id
+> join nomina.empleados e on e.id=n.empleado_id
+> join nomina.prestamos p on p.empleado_id=e.id and p.activo and p.saldo>0
+> where s.status='abierta'
+>   and s.fecha_inicio <  p.fecha_prestamo + (case when p.tipo='semanal' then 7 else 15 end)
+>   and s.fecha_fin    >= p.fecha_prestamo + (case when p.tipo='semanal' then 7 else 15 end);
+> ```
+
+**De pilón, dos trampas de captura que se cerraron el mismo día:**
+- El `tipo` del préstamo se quedaba siempre en **"Semanal"** (default del form) aunque el empleado
+  fuera quincenal — 3 préstamos activos quedaron así (Ana Silvia ×2, Abaroa). Ahora el tipo **se
+  pone solo** al elegir empleado, según su `esquema_pago`. Ojo: `tipo` NO decide en qué nómina se
+  descuenta (eso lo decide el `esquema_pago` del empleado), **solo la espera** de 7 vs 15 días.
+- El preview **"Primer descuento aprox."** sumaba siempre 7 días, así que a un préstamo quincenal le
+  prometía una fecha que no era. Ahora respeta el tipo.
+- El insert de un préstamo nuevo no revisaba `error` — mismo hoyo de §18.8 (la RLS rechaza sin
+  lanzar excepción). Ahora usa `avisarNoGuardado`.
+
+⚠️ **`activo=false` con saldo > 0 = préstamo archivado a medias.** Un préstamo archivado desaparece
+de la nómina aunque siga debiendo (el fetch filtra `.eq('activo', true)`). Al auditar esto el
+2026-08-14 salieron **5 préstamos archivados con $32,849.70 sin cobrar**. Uno es legítimo (el
+duplicado de Brandon Martínez: se capturó dos veces el mismo $25,000 y se archivó el sobrante; el
+bueno sigue activo con 3 descuentos). Los otros hay que revisarlos caso por caso — **archivar es una
+acción manual con confirmación, no hay ningún camino en el código que lo haga solo** (`guardar()`
+solo pone `activo=false` cuando el saldo llega a 0, y en ese caso deja su renglón en
+`prestamo_descuentos`). Query:
+```sql
+select e.nombre, p.monto, p.saldo, p.fecha_prestamo,
+       (select count(*) from nomina.prestamo_descuentos d where d.prestamo_id=p.id) descuentos
+from nomina.prestamos p join nomina.empleados e on e.id=p.empleado_id
+where p.activo = false and p.saldo > 0 order by p.saldo desc;
+```
