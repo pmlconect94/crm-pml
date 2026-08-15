@@ -2007,12 +2007,21 @@ Un préstamo no se descuenta de inmediato: hay una **espera** de 7 días (`tipo=
 
 ⚠️ **`activo=false` con saldo > 0 = préstamo archivado a medias.** Un préstamo archivado desaparece
 de la nómina aunque siga debiendo (el fetch filtra `.eq('activo', true)`). Al auditar esto el
-2026-08-14 salieron **5 préstamos archivados con $32,849.70 sin cobrar**. Uno es legítimo (el
-duplicado de Brandon Martínez: se capturó dos veces el mismo $25,000 y se archivó el sobrante; el
-bueno sigue activo con 3 descuentos). Los otros hay que revisarlos caso por caso — **archivar es una
-acción manual con confirmación, no hay ningún camino en el código que lo haga solo** (`guardar()`
-solo pone `activo=false` cuando el saldo llega a 0, y en ese caso deja su renglón en
-`prestamo_descuentos`). Query:
+2026-08-14 salieron **5 préstamos archivados con $32,849.70 sin cobrar**, y al revisarlos con el
+usuario los 3 grandes resultaron correctos, solo mal representados:
+- **Brandon Martínez $25,000** — duplicado: se capturó dos veces y se archivó el sobrante; el bueno
+  sigue activo con 3 descuentos.
+- **Francisco Aceves $2,000** y **Alejandro Abaroa $1,049.70** (quincenales) — ya se habían pagado
+  fuera de nómina. Se cerraron como se debe (2026-08-14): `saldo=0`, `activo=false` **y un renglón
+  en `prestamo_descuentos` con `semana_id`/`nomina_id` NULL**, que es justo lo que deja el botón
+  "Abono fuera de nómina". Archivar dejando el saldo intacto dice "ya no lo persigo pero sigue
+  debiendo"; saldo en 0 dice "ya no debe". No es lo mismo y el reporte de saldos lo nota.
+
+**Archivar es una acción manual con confirmación, no hay ningún camino en el código que lo haga
+solo** (`guardar()` solo pone `activo=false` cuando el saldo llega a 0, y en ese caso deja su
+renglón en `prestamo_descuentos`), así que un archivado con saldo es siempre una decisión humana —
+pero conviene auditarlo porque un préstamo archivado **desaparece de la nómina aunque siga debiendo**.
+Query:
 ```sql
 select e.nombre, p.monto, p.saldo, p.fecha_prestamo,
        (select count(*) from nomina.prestamo_descuentos d where d.prestamo_id=p.id) descuentos
