@@ -3,10 +3,30 @@ import { fmt, fmtFecha } from '@/lib/nomina/format';
 export function TabPrestamosResumen({ prestamos, descMap, omitidos, canEdit, onToggleOmitir }: any) {
   const omitSet: Set<string> = omitidos instanceof Set ? omitidos : new Set();
   const total = Object.values(descMap as Record<string, number>).reduce((s, v) => s + v, 0);
+  // La tabla lista TODOS los préstamos elegibles del periodo, no solo los que se
+  // cobran: los omitidos siguen aquí (en gris, con el switch apagado) para poder
+  // reactivarlos. Sin decirlo, un préstamo omitido "se sigue viendo" en la nómina
+  // y parece que no se guardó la omisión.
+  const nOmitidos = prestamos.filter((p: any) => omitSet.has(p.id)).length;
+  const nConDescuento = prestamos.length - nOmitidos;
   return (
     <div>
       <div className="hstack" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-        <h3 className="card-title">Préstamos con descuento esta nómina</h3>
+        <div>
+          <h3 className="card-title">Préstamos de esta nómina</h3>
+          {prestamos.length > 0 && (
+            <div className="text-xs muted" style={{ marginTop: 2 }}>
+              {nConDescuento} con descuento
+              {nOmitidos > 0 && (
+                <>
+                  {' · '}
+                  <strong>{nOmitidos} omitido{nOmitidos === 1 ? '' : 's'}</strong> — se saltan este periodo y vuelven
+                  a descontarse en el siguiente
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <div className="kpi" style={{ minWidth: 200 }}><span className="kpi-label">Total descuento</span><span className="kpi-value blue">{fmt(total)}</span></div>
       </div>
       {prestamos.length === 0 ? (
