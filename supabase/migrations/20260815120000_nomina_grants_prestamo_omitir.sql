@@ -1,0 +1,14 @@
+-- `nomina.prestamo_omitir` se creó SIN permisos para los roles de la API. Era la
+-- única tabla del schema `nomina` así: todas sus hermanas tienen grants para
+-- anon/authenticated/service_role.
+--
+-- Consecuencia: el switch "Descontar esta semana" nunca funcionó. En Postgres el
+-- GRANT se revisa ANTES que la política de RLS, así que las políticas correctas
+-- que ya tenía la tabla (lec_/esc_) nunca llegaban a evaluarse — cualquier
+-- lectura o escritura moría con "permission denied".
+--
+-- Y era invisible: `NominaDetallePage.cargar()` hacía `(omitRes.data || [])`, así
+-- que el error se convertía en "no hay ningún préstamo omitido" y la nómina
+-- descontaba todo con normalidad. Un préstamo que alguien marcara como omitido
+-- se cobraba igual, sin aviso.
+grant all on table nomina.prestamo_omitir to anon, authenticated, service_role;

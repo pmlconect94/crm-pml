@@ -2028,3 +2028,40 @@ select e.nombre, p.monto, p.saldo, p.fecha_prestamo,
 from nomina.prestamos p join nomina.empleados e on e.id=p.empleado_id
 where p.activo = false and p.saldo > 0 order by p.saldo desc;
 ```
+
+> **🐛 Bug corregido 2026-08-15 (el switch "Descontar esta semana" NUNCA funcionó).** Al omitir unos
+> préstamos de la quincena PML del 1-15 ago, seguían apareciendo con su descuento. Causa:
+> **`nomina.prestamo_omitir` se creó sin GRANT** para `anon`/`authenticated`/`service_role` — la
+> **única** tabla del schema `nomina` sin permisos; todas sus hermanas los tienen. En Postgres el
+> **GRANT se revisa ANTES que la RLS**, así que las políticas correctas que la tabla sí tenía
+> (`lec_prest_omitir`, `esc_prest_omitir`) nunca llegaban a evaluarse: toda lectura/escritura moría
+> con `permission denied`. Migración `20260815120000`.
+>
+> **Por qué estuvo invisible desde que existe la tabla:** `cargar()` hacía `(omitRes.data || [])`, o
+> sea que el error se convertía en *"no hay ningún préstamo omitido"* y la nómina descontaba todo con
+> normalidad. La prueba está en los datos: **antes de agosto 2026 la tabla tenía 0 filas** — nadie
+> había podido insertar nunca. Es el mismo patrón de §18.8 pero **en una LECTURA**, que es peor: un
+> insert rechazado al menos deja al usuario viendo que su cambio no quedó; una lectura vacía se ve
+> idéntica a "no hay nada que omitir".
+>
+> **Arreglo doble:** (a) el grant; (b) `cargar()` ahora revisa el `error` de **las 11 lecturas** y, si
+> alguna falla, saca un toast rojo *"No se pudo cargar X — NO guardes esta nómina"* + `console.error`.
+> Sin (b) el siguiente permiso faltante vuelve a ser silencioso.
+>
+> **Lección:** al crear una tabla nueva en `nomina` (o en cualquier schema no-`public`), **el GRANT no
+> viene solo** — Supabase solo lo aplica por default a las tablas que existían cuando se configuró el
+> schema. Poner RLS sin GRANT da una tabla que se ve bien configurada y no sirve. Auditoría:
+> ```sql
+> select c.relname, coalesce(string_agg(distinct g.grantee, ', '), '(SIN PERMISOS)')
+> from pg_class c join pg_namespace n on n.oid=c.relnamespace
+> left join information_schema.role_table_grants g
+>   on g.table_schema=n.nspname and g.table_name=c.relname
+>   and g.grantee in ('anon','authenticated','service_role')
+> where n.nspname='nomina' and c.relkind='r' group by 1 order by 2, 1;
+> ```
+
+**Ojo con la pestaña Préstamos del detalle:** lista **TODOS** los préstamos elegibles del periodo,
+no solo los que se cobran — los omitidos siguen ahí en gris (switch apagado, guion en Descuento)
+justamente para poder reactivarlos. El encabezado decía "Préstamos con descuento esta nómina", lo
+que hacía parecer que un omitido se seguía cobrando; ahora dice "Préstamos de esta nómina" + el
+conteo "N con descuento · M omitidos".

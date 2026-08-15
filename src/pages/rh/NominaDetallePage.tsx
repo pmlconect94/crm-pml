@@ -90,6 +90,26 @@ export function NominaDetallePage() {
         .eq('activo', true).is('fecha_fin', null).neq('concepto', 'Infonavit')
         .lte('fecha_inicio', sem.fecha_fin),
     ]);
+    // supabase-js NO lanza cuando una lectura falla (falta de GRANT, RLS, red):
+    // devuelve { error } con `data` en null, y el `(res.data || [])` de más abajo
+    // lo convierte en "no hay nada" — la nómina calcula con datos incompletos y
+    // nadie se entera. Pasó exactamente con `prestamo_omitir`, que se creó sin
+    // permisos: los préstamos marcados como omitidos se seguían descontando.
+    const lecturas: [string, any][] = [
+      ['empleados', empRes], ['nóminas', nomRes], ['viajes', viajesRes], ['préstamos', prestRes],
+      ['descuento de producto', descRes], ['bonos', bonoRes], ['retroactivos', retroRes],
+      ['bonos permanentes', bpRes], ['bonos excluidos', bxRes], ['préstamos omitidos', omitRes],
+      ['descuentos permanentes', permRes],
+    ];
+    const fallos = lecturas.filter(([, r]) => r?.error);
+    if (fallos.length) {
+      console.error('Nómina: lecturas fallidas', fallos.map(([n, r]) => [n, r.error]));
+      toast.error(
+        `No se pudo cargar: ${fallos.map(([n]) => n).join(', ')}. Los cálculos pueden estar incompletos — NO guardes esta nómina.`,
+        { duration: 12000 },
+      );
+    }
+
     setEmpleados(empRes.data || []);
 
     // Asegura que TODO empleado activo de este esquema tenga su fila en `nominas`
