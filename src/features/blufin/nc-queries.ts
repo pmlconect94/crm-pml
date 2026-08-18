@@ -47,7 +47,7 @@ export async function fetchNotasCredito(empresaId: string): Promise<BlufinNotaCr
   const { data, error } = await supabase
     .from('blufin_notas_credito')
     .select(
-      '*, contrato_origen:blufin_contratos(folio), ' +
+      '*, contrato_origen:blufin_contratos(folio, productos:blufin_contrato_productos(descripcion, marca, talla)), ' +
         'aplicaciones:blufin_nc_aplicaciones(*, contrato_destino:blufin_contratos(folio))',
     )
     .eq('empresa_id', empresaId)

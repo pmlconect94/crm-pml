@@ -1178,7 +1178,11 @@ export type BlufinNcAplicacion = Database['crm']['Tables']['blufin_nc_aplicacion
 
 // NC + contrato origen y aplicaciones (con folio de contrato destino)
 export type BlufinNotaCreditoEnriquecida = BlufinNotaCredito & {
-  contrato_origen?: { folio: string } | null;
+  contrato_origen?: {
+    folio: string;
+    // De qué es el contenedor — para la letra chica junto al folio en la lista
+    productos?: { descripcion: string | null; marca: string | null; talla: string | null }[];
+  } | null;
   aplicaciones?: (BlufinNcAplicacion & { contrato_destino?: { folio: string } | null })[];
 };
 

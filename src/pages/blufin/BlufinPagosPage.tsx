@@ -23,6 +23,7 @@ import {
   type ForwardActivo,
   type SaldoContrato,
 } from '@/features/blufin/pagos-queries';
+import { resumenProductos } from '@/features/blufin/producto-resumen';
 import { fetchCatalogos } from '@/features/blufin/queries';
 import { resolveFacturaPdf } from '@/features/blufin/import-queries';
 import { PagoModal } from '@/features/blufin/PagoModal';
@@ -392,19 +393,6 @@ type PendItem = {
   /** Renglones completos, para el modal de SKUs al picar el folio. */
   productos: ContratoConPendiente['productos'];
 };
-
-/** "Basa Pangabay 100% 5/7 · 7/9 · +2 más" — una sola línea, se recorta con
- *  ellipsis en la fila para no crecer el alto ni mover las proporciones. */
-function resumenProductos(productos: ContratoConPendiente['productos']): string {
-  const p = productos?.[0];
-  if (!p) return '';
-  const base = (p.descripcion ?? '').replace('FROZEN ', '').trim() || (p.marca ?? '');
-  const partes = [base];
-  if (p.talla) partes.push(p.talla);
-  const extra = (productos?.length ?? 0) - 1;
-  if (extra > 0) partes.push(`+${extra} más`);
-  return partes.filter(Boolean).join(' · ');
-}
 
 type GrupoSemana = {
   key: string;

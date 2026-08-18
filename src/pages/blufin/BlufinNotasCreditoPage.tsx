@@ -16,6 +16,7 @@ import {
   type NcRazon,
 } from '@/features/blufin/nc-queries';
 import { NuevaNCModal } from '@/features/blufin/NuevaNCModal';
+import { resumenProductos } from '@/features/blufin/producto-resumen';
 import { CapturarMontoNCModal } from '@/features/blufin/CapturarMontoNCModal';
 import { AplicarNCModal } from '@/features/blufin/AplicarNCModal';
 import type { BlufinNotaCreditoEnriquecida } from '@/types/database';
@@ -219,7 +220,34 @@ export function BlufinNotasCreditoPage() {
                       <td>
                         <RazonPill razon={nc.razon} />
                       </td>
-                      <td className="mono text-sm fw-600">{nc.contrato_origen?.folio ?? '—'}</td>
+                      <td>
+                        {/* Folio + de qué es el contenedor en la misma línea: el resumen
+                            se recorta con ellipsis (minWidth:0) para que la fila no
+                            crezca ni se muevan las proporciones de la tabla. */}
+                        <div className="hstack" style={{ gap: 6, alignItems: 'baseline' }}>
+                          <span className="mono text-sm fw-600" style={{ flexShrink: 0 }}>
+                            {nc.contrato_origen?.folio ?? '—'}
+                          </span>
+                          {(() => {
+                            const resumen = resumenProductos(nc.contrato_origen?.productos);
+                            return resumen ? (
+                              <span
+                                className="text-xs muted"
+                                title={resumen}
+                                style={{
+                                  minWidth: 0,
+                                  maxWidth: 200,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {resumen}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
+                      </td>
                       <td className="text-sm">{fmtFechaCorta(nc.fecha ?? nc.created_at)}</td>
                       <td style={{ textAlign: 'right' }}>
                         {esSinMonto ? (
