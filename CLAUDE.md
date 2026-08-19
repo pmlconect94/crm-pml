@@ -1392,7 +1392,14 @@ Pendientes que NO bloquean operación (en orden de valor):
 - **Camanchaca MX** (MXN): compras (Intelisis obligatoria, vencimiento +30d), pagos parciales, NC MXN, central de costos MXN directo. Comparte el catálogo `proveedor='camanchaca'` con SA.
 - **Neptuno** (USD): la **factura ES el ID** (sin folio interno/planeación/naviera/recepción) — facturas con líneas SKU-first, pagos completo/abono, NC simplificada, central de costos (la factura es el inventario), calendario, productos.
 
-⚠️ **Construidos con 3 subagentes en paralelo calcando Blufin; build (`tsc -b && vite build`) en verde pero NO probados interactivamente** (login) — el usuario itera sobre el live. Catálogos arrancan vacíos (dar de alta SKUs en la pestaña Productos). Sin datos aún.
+⚠️ **Construidos con 3 subagentes en paralelo calcando Blufin; build (`tsc -b && vite build`) en verde pero NO probados interactivamente** (login) — el usuario itera sobre el live.
+
+**Camanchaca SA — DATOS REALES CARGADOS ✅ (2026-08-19, desde `SALMON.xlsx` del usuario):** **27 contenedores** (nov-2025 → jun-2026, **$5,812,202.55 USD**, todos Entregados y pagados) con 37 líneas de producto, 27 pagos completos con TC real, 52 costos de agencia aduanal ($3.77M MXN) y 27 recepciones con líneas. **Catálogo: 8 SKUs** parseados de las descripciones Intelisis (código 202001-202013, kg/caja y talla extraídos de la descripción; ojo: en Intelisis los códigos 202002 y 202004 tienen DOS descripciones distintas — el catálogo lleva la más usada y cada línea conserva su descripción real como snapshot). Detalles de la carga:
+- **Folios = numeración REAL del usuario** (`CAM-278` … `CAM-319`, incluye `CAM-280.2`), NO la secuencia `next_cam_folio()` — la secuencia sigue en 1 y no colisiona (arrancaría en CAM-001). `factura` = "N° FACTURA" del Excel (36639…, que en Intelisis es la "Referencia"); `oc_proveedor` = "N° REFERENCIA" (673395…, folios ~670k de Camanchaca). **Si el usuario dice que están al revés, se intercambian** — quedó anotado como duda razonable.
+- **Agencias con nombre real del SAT** (el seed era placeholder): id 1 = **LTP & ADAM AGENCIA ADUANAL** (LAA150317K91), id 2 = **MAFRA SERVICIOS ADUANEROS** (MSA190806G18), id 5 = COMEXTAA (histórica, dejó de facturar jun-2025 — el encabezado "FECHA PAGO COMEXTA" del Excel era etiqueta vieja). Verificado por fechas contra `cont_facturas`.
+- **2 errores de dedo del Excel corregidos al cargar**: facturas 36765/36766 llegada `2026-12-03` → `2025-12-03`; factura 36768 fecha de pago `2025-01-26` → `2026-01-26`.
+- Precio USD por línea asignado desde los grupos PRODUCTO 1/2/3 del Excel (match por Lonja/Posta + Premium/Reserva/Cafe cuando hay 2+ precios) y **verificado: Σ kg×precio == total factura en los 27**, cero descuadres también en pagos y kg contra la BD. Script: `cargar_camanchaca_sa.py` (scratchpad, one-shot).
+- **Camanchaca MX sigue SIN cargar** — las 193 facturas reales (2024-2026, $206M, RFC `CME2007173B2`) ya están en `cont_facturas` vía SAT con códigos de SKU y complementos de pago; falta que el usuario decida cuánta historia volcar al módulo (¿solo 2026: 34 facturas $56.6M?).
 
 ### Contabilidad ✅ (2026-07-09 → 07-13)
 
