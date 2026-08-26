@@ -68,6 +68,9 @@ export function ImportacionesPickerPage() {
             Selecciona un proveedor para ver contratos, pagos, recepciones y costos
           </p>
         </div>
+        <Link to="/app/importaciones/catalogos" className="btn btn-outline btn-sm" style={{ textDecoration: 'none', flexShrink: 0 }}>
+          <Icon name="settings" size={13} /> Catálogos
+        </Link>
       </PageEnter>
 
       {/* Bento asymmetric: principal grande + secundarios apilados */}

@@ -10,23 +10,28 @@ const hoyISO = () => {
 };
 
 /**
- * Status EFECTIVO del contenedor SA — se calcula, no se confía del campo guardado
- * (depende de la fecha de hoy: pasa de tránsito a Manzanillo conforme vence su ETA).
- * El campo `status` guardado solo se usa para detectar "Entregado" (= recepción
- * registrada; la invariante Entregado ⟺ recepción la mantiene createRecepcion).
+ * Status EFECTIVO del contenedor SA — se CALCULA siempre, nunca se captura ni se
+ * confía del campo guardado (depende de la fecha de hoy, así que un valor
+ * guardado envejece solo).
  *
- * Reglas (paralelas a Blufin, ETA == hoy ya cuenta como "en puerto"):
- *  - Entregado:      ya tiene recepción.
- *  - En Manzanillo:  tiene factura y su ETA Manzanillo ya llegó (hoy ≥ ETA).
- *  - En tránsito:    tiene factura y ETA Manzanillo futura (hoy < ETA).
- *  - Planeado:       aún sin factura (solo planeación o alta sin confirmar).
+ * Reglas (decisión del usuario 2026-08-19):
+ *  - Entregado:      la recepción ya registró la llegada (`llegada_real`).
+ *  - En Manzanillo:  hoy ya alcanzó su ETA Manzanillo (hoy ≥ ETA, el día del ETA cuenta).
+ *  - En tránsito:    ETA Manzanillo todavía en el futuro (hoy < ETA).
+ *  - Planeado:       aún sin factura ni ETA (solo planeación).
+ *
+ * Ojo: "Entregado" se toma de `llegada_real`, que es lo que escribe
+ * `createRecepcionSA` — NO del campo `status`. Antes se leía `status ===
+ * 'Entregado'`, que dependía de que alguien lo hubiera puesto a mano y podía
+ * mentir en las dos direcciones (marcar entregado sin recepción, o quedarse en
+ * tránsito con la mercancía ya en bodega).
  */
 export function statusContenedorSA(
-  c: Pick<CamContenedorSA, 'status' | 'factura' | 'eta_manzanillo'>,
+  c: Pick<CamContenedorSA, 'status' | 'factura' | 'eta_manzanillo'> & { llegada_real?: string | null },
   hoy: string = hoyISO(),
 ): StatusContenedorSA {
-  if (c.status === 'Entregado') return 'Entregado';
-  if (!c.factura) return 'Planeado';
+  if (c.llegada_real) return 'Entregado';
+  if (!c.factura && !c.eta_manzanillo) return 'Planeado';
   if (c.eta_manzanillo && c.eta_manzanillo <= hoy) return 'En Manzanillo';
   return 'En tránsito';
 }

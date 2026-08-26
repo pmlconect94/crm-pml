@@ -48,6 +48,10 @@ export type ContenedorCostoSA = {
   tc: number | null;
   tc_origen: TcOrigenSA;
   costoImportacionMxn: number;
+  /** FOB en pesos al TC firme. `null` = todavía expuesto al TC (se muestra "Pendiente"). */
+  sinImportacionMxn: number | null;
+  /** FOB + agencias aduanales. `null` por la misma razón que el anterior. */
+  conImportacionMxn: number | null;
   costosPorAgencia: { agencia: string; monto_mxn: number }[];
   lineas: { descripcion: string; kg: number; precio_usd: number; total_usd: number }[];
 };
@@ -118,21 +122,43 @@ export function calcularPromedioSA(
 }
 
 /** TC efectivo de un contenedor: pagos ponderados → forward → null (§7a). */
+/**
+ * TC firme de un contenedor: el que ya NO se puede mover.
+ *
+ * Regla del usuario (2026-08-19): el costo en pesos solo se muestra si el
+ * contenedor **ya se pagó** (TC real de los pagos) o **tiene un forward** (TC
+ * pactado con el banco). Mientras siga expuesto al tipo de cambio no se inventa
+ * un precio — la columna sale como "Pendiente".
+ *
+ * Un pago PARCIAL no basta: si falta dinero por cambiar, el costo todavía se
+ * mueve. Mismo criterio que Blufin (`tc-contrato.ts`).
+ */
 function tcEfectivoSA(
   contenedorId: string,
+  totalUsd: number,
   pagos: { contenedor_id: string | null; monto_usd: number; tc: number }[],
   forwards: { contenedor_id: string | null; tc_forward: number | null }[],
 ): { tc: number | null; origen: TcOrigenSA } {
   const ps = pagos.filter((p) => p.contenedor_id === contenedorId);
-  if (ps.length > 0) {
-    const sumMonto = ps.reduce((s, p) => s + Number(p.monto_usd), 0);
-    if (sumMonto > 0) {
-      const sumProd = ps.reduce((s, p) => s + Number(p.tc) * Number(p.monto_usd), 0);
-      return { tc: sumProd / sumMonto, origen: 'pagos' };
-    }
+  const pagado = ps.reduce((s, p) => s + Number(p.monto_usd), 0);
+  const liquidado = totalUsd > 0 && pagado >= totalUsd - 0.01;
+
+  if (liquidado && pagado > 0) {
+    const sumProd = ps.reduce((s, p) => s + Number(p.tc) * Number(p.monto_usd), 0);
+    return { tc: sumProd / pagado, origen: 'pagos' };
   }
+  // Sin liquidar: el forward asegura el precio del saldo, así que sirve igual.
   const fwd = forwards.find((f) => f.contenedor_id === contenedorId && f.tc_forward != null);
-  if (fwd?.tc_forward != null) return { tc: Number(fwd.tc_forward), origen: 'forward' };
+  if (fwd?.tc_forward != null) {
+    // Con parte ya pagada, el TC firme es la mezcla ponderada pagos + forward.
+    if (pagado > 0) {
+      const sumProd = ps.reduce((s, p) => s + Number(p.tc) * Number(p.monto_usd), 0);
+      const restante = Math.max(0, totalUsd - pagado);
+      const total = pagado + restante;
+      return { tc: (sumProd + restante * Number(fwd.tc_forward)) / total, origen: 'forward' };
+    }
+    return { tc: Number(fwd.tc_forward), origen: 'forward' };
+  }
   return { tc: null, origen: 'ninguno' };
 }
 
@@ -176,7 +202,7 @@ export async function fetchCostosDataSA(empresaId: string): Promise<CostosDataSA
   }
 
   for (const c of contenedores) {
-    const { tc, origen } = tcEfectivoSA(c.id, pagosLite, forwardsLite);
+    const { tc, origen } = tcEfectivoSA(c.id, Number(c.total_usd ?? 0), pagosLite, forwardsLite);
     const llego = !!c.llegada_real;
 
     const contLineas: ContenedorCostoSA['lineas'] = [];
@@ -249,6 +275,8 @@ export async function fetchCostosDataSA(empresaId: string): Promise<CostosDataSA
       tc,
       tc_origen: origen,
       costoImportacionMxn,
+      sinImportacionMxn: tc != null ? Number(c.total_usd ?? 0) * tc : null,
+      conImportacionMxn: tc != null ? Number(c.total_usd ?? 0) * tc + costoImportacionMxn : null,
       costosPorAgencia,
       lineas: contLineas,
     });

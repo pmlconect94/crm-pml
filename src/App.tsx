@@ -21,6 +21,7 @@ import { BlufinNotasCreditoPage } from '@/pages/blufin/BlufinNotasCreditoPage';
 import { BlufinFacturasPage } from '@/pages/blufin/BlufinFacturasPage';
 import { BlufinFacturaRevisarPage } from '@/pages/blufin/BlufinFacturaRevisarPage';
 // Camanchaca (SA + MX)
+import { ImportacionesCatalogosPage } from '@/pages/importaciones/ImportacionesCatalogosPage';
 import { CamanchacaLayout } from '@/pages/camanchaca/CamanchacaLayout';
 import { CamSAPlaneacionPage } from '@/pages/camanchaca/CamSAPlaneacionPage';
 import { CamSAContenedoresListPage } from '@/pages/camanchaca/CamSAContenedoresListPage';
@@ -71,6 +72,7 @@ export default function App() {
         {/* Importaciones */}
         <Route path="importaciones" element={<RequireDept dept="importaciones" soloEmpresa="pml" />}>
           <Route index element={<ImportacionesPickerPage />} />
+          <Route path="catalogos" element={<ImportacionesCatalogosPage />} />
 
           {/* Blufin */}
           <Route path="blufin" element={<BlufinLayout />}>

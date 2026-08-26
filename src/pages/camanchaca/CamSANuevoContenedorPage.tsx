@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { createContenedorSA, fetchCatalogosSA, fetchOrdenesPlaneadas, updateOrdenPlaneada, sugerirFolioSA } from '@/features/camanchaca/sa-queries';
-import { etaBodegaAutoSA, CAM_SA_STATUS_OPTS } from '@/features/camanchaca/sa-status';
+import { etaBodegaAutoSA } from '@/features/camanchaca/sa-status';
 import { useAuth } from '@/lib/auth';
 import { useDraft } from '@/lib/useDraft';
 import { fmtUSD, fmtKg } from '@/lib/format';
@@ -49,13 +49,11 @@ type ContenedorDraft = {
   factura: string;
   fechaFactura: string;
   fechaVencimiento: string;
-  status: string;
   etaManzanillo: string;
   etaBodegaOverride: string | null;
   naviera: string;
   contenedor: string;
   bodegaDestino: string;
-  presentacion: 'Paletizado' | 'Granel';
   observaciones: string;
   lineas: LineaProducto[];
 };
@@ -83,13 +81,11 @@ export function CamSANuevoContenedorPage() {
   const [factura, setFactura] = useState('');
   const [fechaFactura, setFechaFactura] = useState(hoyISO());
   const [fechaVencimiento, setFechaVencimiento] = useState('');
-  const [status, setStatus] = useState('En tránsito');
   const [etaManzanillo, setEtaManzanillo] = useState('');
   const [etaBodegaOverride, setEtaBodegaOverride] = useState<string | null>(null);
   const [naviera, setNaviera] = useState('');
   const [contenedor, setContenedor] = useState('');
   const [bodegaDestino, setBodegaDestino] = useState('');
-  const [presentacion, setPresentacion] = useState<'Paletizado' | 'Granel'>('Paletizado');
   const [observaciones, setObservaciones] = useState('');
   const [lineas, setLineas] = useState<LineaProducto[]>([emptyLinea()]);
 
@@ -118,17 +114,15 @@ export function CamSANuevoContenedorPage() {
       factura,
       fechaFactura,
       fechaVencimiento,
-      status,
       etaManzanillo,
       etaBodegaOverride,
       naviera,
       contenedor,
       bodegaDestino,
-      presentacion,
       observaciones,
       lineas,
     }),
-    [folioInterno, ocProveedor, factura, fechaFactura, fechaVencimiento, status, etaManzanillo, etaBodegaOverride, naviera, contenedor, bodegaDestino, presentacion, observaciones, lineas],
+    [folioInterno, ocProveedor, factura, fechaFactura, fechaVencimiento, etaManzanillo, etaBodegaOverride, naviera, contenedor, bodegaDestino, observaciones, lineas],
   );
   const applyDraft = (d: ContenedorDraft) => {
     setFolioInterno(d.folioInterno ?? '');
@@ -136,13 +130,11 @@ export function CamSANuevoContenedorPage() {
     setFactura(d.factura ?? '');
     setFechaFactura(d.fechaFactura ?? hoyISO());
     setFechaVencimiento(d.fechaVencimiento ?? '');
-    setStatus(d.status ?? 'En tránsito');
     setEtaManzanillo(d.etaManzanillo ?? '');
     setEtaBodegaOverride(d.etaBodegaOverride ?? null);
     setNaviera(d.naviera ?? '');
     setContenedor(d.contenedor ?? '');
     setBodegaDestino(d.bodegaDestino ?? '');
-    setPresentacion(d.presentacion ?? 'Paletizado');
     setObservaciones(d.observaciones ?? '');
     setLineas(d.lineas?.length ? d.lineas : [emptyLinea()]);
   };
@@ -154,13 +146,11 @@ export function CamSANuevoContenedorPage() {
     setFactura('');
     setFechaFactura(hoyISO());
     setFechaVencimiento('');
-    setStatus('En tránsito');
     setEtaManzanillo('');
     setEtaBodegaOverride(null);
     setNaviera('');
     setContenedor('');
     setBodegaDestino('');
-    setPresentacion('Paletizado');
     setObservaciones('');
     setLineas([emptyLinea()]);
   };
@@ -242,13 +232,11 @@ export function CamSANuevoContenedorPage() {
           factura: factura.trim(),
           fecha_factura: fechaFactura || null,
           fecha_vencimiento: fechaVencimiento || null,
-          status,
           eta_manzanillo: etaManzanillo || null,
           eta_bodega: etaBodega || null,
           naviera_id,
           naviera: naviera || null,
           contenedor: contenedor || null,
-          presentacion,
           bodega_destino: bodegaDestino || null,
           total_usd: totales.totalUsd,
           total_kg: totales.totalKg,
@@ -366,7 +354,7 @@ export function CamSANuevoContenedorPage() {
               placeholder="CAM-320"
             />
             <div className="text-xs muted" style={{ marginTop: 3 }}>
-              {folioSugerido ? `Sigue de tu numeración (${folioSugerido})` : 'Tu número de contenedor'}
+              Tu número de contenedor — puedes cambiarlo
             </div>
           </div>
           <div>
@@ -379,11 +367,13 @@ export function CamSANuevoContenedorPage() {
           </div>
           <div>
             <label className="field-label">Status</label>
-            <select className="field-input" value={status} onChange={(e) => setStatus(e.target.value)}>
-              {CAM_SA_STATUS_OPTS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            {/* Ya no se captura: sale de la ETA y de la recepción (ver sa-status.ts). */}
+            <div className="field-input" style={{ display: 'flex', alignItems: 'center', background: 'var(--ink-50)', color: 'var(--ink-500)' }}>
+              {etaManzanillo ? (etaManzanillo <= hoyISO() ? 'En Manzanillo' : 'En tránsito') : 'Planeado'}
+            </div>
+            <div className="text-xs muted" style={{ marginTop: 3 }}>
+              Automático: cambia solo al llegar la ETA y al registrar la recepción
+            </div>
           </div>
 
           <div>
@@ -438,13 +428,6 @@ export function CamSANuevoContenedorPage() {
             <input className="field-input mono" value={contenedor} onChange={(e) => setContenedor(e.target.value.toUpperCase())} placeholder="MSKU-1234567" />
           </div>
 
-          <div>
-            <label className="field-label">Presentación</label>
-            <select className="field-input" value={presentacion} onChange={(e) => setPresentacion(e.target.value as 'Paletizado' | 'Granel')}>
-              <option value="Paletizado">Paletizado</option>
-              <option value="Granel">Granel</option>
-            </select>
-          </div>
           <div>
             <label className="field-label">Bodega destino</label>
             <select className="field-input" value={bodegaDestino} onChange={(e) => setBodegaDestino(e.target.value)}>

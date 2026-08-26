@@ -39,9 +39,9 @@ export type Database = {
         Relationships: Empty;
       };
       navieras: {
-        Row: { id: number; nombre: string };
-        Insert: { id?: number; nombre: string };
-        Update: { id?: number; nombre?: string };
+        Row: { id: number; nombre: string; activo: boolean };
+        Insert: { id?: number; nombre: string; activo?: boolean };
+        Update: { id?: number; nombre?: string; activo?: boolean };
         Relationships: Empty;
       };
       agencias_importadoras: {
@@ -673,9 +673,9 @@ export type Database = {
         Relationships: Empty;
       };
       cam_contenedores_sa: {
-        Row: { id: string; empresa_id: string | null; folio_interno: string; orden_planeada_id: string | null; oc_proveedor: string | null; factura: string | null; fecha_factura: string | null; fecha_vencimiento: string | null; status: string; eta_manzanillo: string | null; eta_bodega: string | null; eta_bodega_confirmada: boolean; naviera_id: number | null; naviera: string | null; contenedor: string | null; lote: string | null; presentacion: string | null; bodega_destino: string | null; llegada_real: string | null; entrada_intelisis: string | null; total_usd: number | null; total_kg: number | null; observaciones: string | null; capturado_por: string | null; created_at: string | null };
-        Insert: { id?: string; empresa_id?: string | null; folio_interno?: string; orden_planeada_id?: string | null; oc_proveedor?: string | null; factura?: string | null; fecha_factura?: string | null; fecha_vencimiento?: string | null; status?: string; eta_manzanillo?: string | null; eta_bodega?: string | null; eta_bodega_confirmada?: boolean; naviera_id?: number | null; naviera?: string | null; contenedor?: string | null; lote?: string | null; presentacion?: string | null; bodega_destino?: string | null; llegada_real?: string | null; entrada_intelisis?: string | null; total_usd?: number | null; total_kg?: number | null; observaciones?: string | null; capturado_por?: string | null };
-        Update: { empresa_id?: string | null; oc_proveedor?: string | null; factura?: string | null; fecha_factura?: string | null; fecha_vencimiento?: string | null; status?: string; eta_manzanillo?: string | null; eta_bodega?: string | null; eta_bodega_confirmada?: boolean; naviera_id?: number | null; naviera?: string | null; contenedor?: string | null; lote?: string | null; presentacion?: string | null; bodega_destino?: string | null; llegada_real?: string | null; entrada_intelisis?: string | null; total_usd?: number | null; total_kg?: number | null; observaciones?: string | null };
+        Row: { id: string; empresa_id: string | null; folio_interno: string; orden_planeada_id: string | null; oc_proveedor: string | null; factura: string | null; fecha_factura: string | null; fecha_vencimiento: string | null; status: string; eta_manzanillo: string | null; eta_bodega: string | null; eta_bodega_confirmada: boolean; naviera_id: number | null; naviera: string | null; contenedor: string | null; lote: string | null; presentacion: string | null; bodega_destino: string | null; llegada_real: string | null; entrada_intelisis: string | null; total_usd: number | null; total_kg: number | null; observaciones: string | null; factura_pdf_path: string | null; capturado_por: string | null; created_at: string | null };
+        Insert: { id?: string; empresa_id?: string | null; folio_interno?: string; orden_planeada_id?: string | null; oc_proveedor?: string | null; factura?: string | null; fecha_factura?: string | null; fecha_vencimiento?: string | null; status?: string; eta_manzanillo?: string | null; eta_bodega?: string | null; eta_bodega_confirmada?: boolean; naviera_id?: number | null; naviera?: string | null; contenedor?: string | null; lote?: string | null; presentacion?: string | null; bodega_destino?: string | null; llegada_real?: string | null; entrada_intelisis?: string | null; total_usd?: number | null; total_kg?: number | null; observaciones?: string | null; factura_pdf_path?: string | null; capturado_por?: string | null };
+        Update: { empresa_id?: string | null; oc_proveedor?: string | null; factura?: string | null; fecha_factura?: string | null; fecha_vencimiento?: string | null; status?: string; eta_manzanillo?: string | null; eta_bodega?: string | null; eta_bodega_confirmada?: boolean; naviera_id?: number | null; naviera?: string | null; contenedor?: string | null; lote?: string | null; presentacion?: string | null; bodega_destino?: string | null; llegada_real?: string | null; entrada_intelisis?: string | null; total_usd?: number | null; total_kg?: number | null; observaciones?: string | null; factura_pdf_path?: string | null };
         Relationships: Empty;
       };
       cam_productos_sa: {

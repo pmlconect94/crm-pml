@@ -407,3 +407,49 @@ export async function deleteOrdenPlaneada(id: string): Promise<void> {
   const { error } = await supabase.from('cam_ordenes_planeadas').delete().eq('id', id);
   if (error) throw error;
 }
+
+/**
+ * PDF de la factura del proveedor. Vive en el bucket PRIVADO
+ * `documentos-importacion` bajo `camanchaca-sa/<folio>.pdf`, igual que los
+ * documentos de Blufin; se lee siempre con URL firmada (nunca público).
+ */
+const BUCKET_DOCS = 'documentos-importacion';
+
+export async function subirFacturaPdfSA(
+  contenedorId: string,
+  folio: string,
+  archivo: File,
+): Promise<string> {
+  // El folio puede traer '/' o espacios; se normaliza para no romper el path.
+  const slug = folio.replace(/[^A-Za-z0-9._-]+/g, '-');
+  const path = `camanchaca-sa/${slug}-${Date.now()}.pdf`;
+  const { error: upErr } = await supabase.storage
+    .from(BUCKET_DOCS)
+    .upload(path, archivo, { contentType: archivo.type || 'application/pdf', upsert: true });
+  if (upErr) throw upErr;
+
+  const { error } = await supabase
+    .from('cam_contenedores_sa')
+    .update({ factura_pdf_path: path })
+    .eq('id', contenedorId);
+  if (error) throw error;
+  return path;
+}
+
+/** URL firmada (1h) del PDF de la factura. */
+export async function urlFacturaPdfSA(path: string): Promise<string | null> {
+  const { data } = await supabase.storage.from(BUCKET_DOCS).createSignedUrl(path, 3600);
+  return data?.signedUrl ?? null;
+}
+
+/** Quita el PDF: borra el objeto y limpia la referencia. */
+export async function quitarFacturaPdfSA(contenedorId: string, path: string): Promise<void> {
+  // Primero la referencia: si el borrado del objeto falla, peor caso queda un
+  // archivo huérfano en Storage — nunca una ficha apuntando a un PDF que ya no está.
+  const { error } = await supabase
+    .from('cam_contenedores_sa')
+    .update({ factura_pdf_path: null })
+    .eq('id', contenedorId);
+  if (error) throw error;
+  await supabase.storage.from(BUCKET_DOCS).remove([path]);
+}

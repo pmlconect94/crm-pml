@@ -458,20 +458,25 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
               <th>Contenedor</th>
               <th>Status</th>
               <th style={{ textAlign: 'right' }}>FOB USD</th>
+              <th style={{ textAlign: 'right' }}>Costo sin importación</th>
               <th style={{ textAlign: 'right' }}>Importación</th>
-              <th style={{ textAlign: 'right' }}>Total internado</th>
+              <th style={{ textAlign: 'right' }}>Costo con importación</th>
               <th style={{ textAlign: 'right' }}>Costo MXN/kg</th>
             </tr>
           </thead>
           <tbody>
             {filtrados.map((c) => {
               const isExp = expanded.has(c.contenedor_id);
+              // Sin TC firme (ni pagado ni con forward) no hay precio en pesos:
+              // la columna dice "Pendiente" en vez de inventar uno.
+              const firme = c.tc != null;
               const tcUsado = c.tc ?? tcEstimado;
-              const estimado = c.tc == null && tcEstimado != null;
-              const fobMxn = tcUsado != null ? c.total_usd * tcUsado : null;
-              const totalMxn = fobMxn != null ? fobMxn + c.costoImportacionMxn : null;
+              const estimado = !firme && tcEstimado != null;
+              const fobMxn = firme ? c.sinImportacionMxn : null;
+              const totalMxn = tcUsado != null ? c.total_usd * tcUsado + c.costoImportacionMxn : null;
               const costoKg = totalMxn != null && c.total_kg > 0 ? totalMxn / c.total_kg : null;
               const colMxn = estimado ? '#92400E' : 'var(--blue-500)';
+              const pendiente = <span className="text-xs muted" style={{ fontStyle: 'italic' }}>Pendiente</span>;
               return (
                 <FragmentRow key={c.contenedor_id}>
                   <tr style={{ cursor: 'pointer' }} onClick={() => toggle(c.contenedor_id)}>
@@ -492,9 +497,22 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
                       )}
                     </td>
                     <td style={{ textAlign: 'right' }} className="mono fw-600">{fmtUSD(c.total_usd)}</td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-600">
+                      {fobMxn != null ? (
+                        <span style={{ color: 'var(--blue-500)' }} title={`TC ${c.tc?.toFixed(4)} — ${c.tc_origen === 'forward' ? 'forward' : 'pagos'}`}>
+                          {fmtMXN(fobMxn)}
+                        </span>
+                      ) : (
+                        pendiente
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right' }} className="mono">{c.costoImportacionMxn > 0 ? fmtMXN(c.costoImportacionMxn) : <span className="muted">—</span>}</td>
                     <td style={{ textAlign: 'right', color: colMxn }} className="mono fw-600">
-                      {totalMxn != null ? fmtMXN(totalMxn) : '—'}
+                      {c.conImportacionMxn != null
+                        ? fmtMXN(c.conImportacionMxn)
+                        : totalMxn != null
+                          ? <>{fmtMXN(totalMxn)}<span className="text-xs"> est.</span></>
+                          : pendiente}
                     </td>
                     <td style={{ textAlign: 'right', color: colMxn }} className="mono fw-700">
                       {costoKg != null ? (
@@ -509,7 +527,7 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
                   </tr>
                   {isExp && (
                     <tr>
-                      <td colSpan={7} style={{ padding: 0, background: 'var(--ink-50)' }}>
+                      <td colSpan={9} style={{ padding: 0, background: 'var(--ink-50)' }}>
                         <table className="tbl" style={{ margin: 0 }}>
                           <thead>
                             <tr>

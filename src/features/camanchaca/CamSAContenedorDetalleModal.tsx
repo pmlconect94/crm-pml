@@ -1,12 +1,19 @@
-import { type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
 import { SPRING } from '@/components/motion';
 import { CamSAStatusPill } from '@/features/camanchaca/CamSAStatusPill';
 import { statusContenedorSA } from '@/features/camanchaca/sa-status';
 import { fmtUSD, fmtMXN, fmtKg, fmtFechaCorta } from '@/lib/format';
-import { fetchContenedorSADetalle } from '@/features/camanchaca/sa-queries';
+import {
+  fetchContenedorSADetalle,
+  subirFacturaPdfSA,
+  urlFacturaPdfSA,
+  quitarFacturaPdfSA,
+} from '@/features/camanchaca/sa-queries';
+import { useAuth } from '@/lib/auth';
 import { useBackdropDismiss } from '@/lib/useBackdropDismiss';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -36,6 +43,45 @@ export function CamSAContenedorDetalleModal({
     enabled: !!contenedorId,
   });
   const backdrop = useBackdropDismiss(onClose);
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const puedeEditar = user?.rol === 'admin_total' || !!user?.capturar;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pdfCargando, setPdfCargando] = useState(false);
+
+  async function subirPdf(archivo: File | undefined, contenedorId: string, folio: string) {
+    if (!archivo) return;
+    setPdfCargando(true);
+    try {
+      await subirFacturaPdfSA(contenedorId, folio, archivo);
+      toast.success('Factura subida');
+      qc.invalidateQueries({ queryKey: ['cam_sa_contenedor_detalle'] });
+      qc.invalidateQueries({ queryKey: ['cam_sa_contenedores'] });
+    } catch (e) {
+      toast.error('No se pudo subir: ' + (e as Error).message);
+    } finally {
+      setPdfCargando(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function verPdf(path: string) {
+    const url = await urlFacturaPdfSA(path);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    else toast.error('No se encontró el archivo');
+  }
+
+  async function quitarPdf(contenedorId: string, path: string) {
+    if (!confirm('¿Quitar el PDF de la factura de este contenedor?')) return;
+    try {
+      await quitarFacturaPdfSA(contenedorId, path);
+      toast.success('PDF quitado');
+      qc.invalidateQueries({ queryKey: ['cam_sa_contenedor_detalle'] });
+      qc.invalidateQueries({ queryKey: ['cam_sa_contenedores'] });
+    } catch (e) {
+      toast.error('No se pudo quitar: ' + (e as Error).message);
+    }
+  }
 
   const c = data?.contenedor;
   const prods = c?.productos ?? [];
@@ -132,9 +178,47 @@ export function CamSAContenedorDetalleModal({
                       {c.lote ? ` · lote ${c.lote}` : ''}
                     </div>
                   </div>
-                  <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
-                    <Icon name="x" size={14} />
-                  </button>
+                  <div className="hstack" style={{ gap: 8, flexShrink: 0 }}>
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="application/pdf,image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => subirPdf(e.target.files?.[0], c.id, c.folio_interno)}
+                    />
+                    {c.factura_pdf_path ? (
+                      <>
+                        <button className="btn btn-outline btn-sm" onClick={() => verPdf(c.factura_pdf_path!)} title="Abrir el PDF de la factura">
+                          <Icon name="file-text" size={13} /> Factura
+                        </button>
+                        {puedeEditar && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => quitarPdf(c.id, c.factura_pdf_path!)}
+                            title="Quitar el PDF"
+                            style={{ padding: 6 }}
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      puedeEditar && (
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => fileRef.current?.click()}
+                          disabled={pdfCargando}
+                          title="Subir el PDF de la factura del proveedor"
+                        >
+                          {pdfCargando ? <div className="spinner" style={{ width: 12, height: 12 }} /> : <Icon name="upload" size={13} />}
+                          Subir factura
+                        </button>
+                      )
+                    )}
+                    <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar" style={{ padding: 6 }}>
+                      <Icon name="x" size={14} />
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ padding: '14px 22px 22px' }}>

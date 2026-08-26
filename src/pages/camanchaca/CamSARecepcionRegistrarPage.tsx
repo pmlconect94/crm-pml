@@ -48,7 +48,6 @@ export function CamSARecepcionRegistrarPage() {
 
   const [fecha, setFecha] = useState(hoyISO());
   const [bodegaId, setBodegaId] = useState<string>('');
-  const [presRecibida, setPresRecibida] = useState('');
   const [intelisis, setIntelisis] = useState('');
   const [lote, setLote] = useState('');
   const [obsGenerales, setObsGenerales] = useState('');
@@ -71,7 +70,6 @@ export function CamSARecepcionRegistrarPage() {
         };
       }),
     );
-    setPresRecibida(contenedor.presentacion ?? '');
     setLote(contenedor.lote ?? '');
   }, [contenedor]);
 
@@ -136,7 +134,7 @@ export function CamSARecepcionRegistrarPage() {
         bodega_id: bodega?.id ?? null,
         bodega_nombre: bodega?.nombre ?? null,
         entrada_intelisis: intelisis.trim() || null,
-        presentacion_recibida: presRecibida || null,
+        presentacion_recibida: null,
         observaciones: obsGenerales.trim() || null,
         lote: lote.trim() || null,
         lineas: lineas.map((l) => ({
@@ -206,11 +204,10 @@ export function CamSARecepcionRegistrarPage() {
           { label: 'ETA bodega', value: fmtFechaCorta(contenedor.eta_bodega) },
           { label: 'Total kg', value: fmtKg(contenedor.total_kg), mono: true },
           { label: 'Total USD', value: fmtUSD(contenedor.total_usd), mono: true },
-          { label: 'Presentación pactada', value: contenedor.presentacion ?? '—', blue: true },
         ].map((item) => (
           <div key={item.label}>
             <div className="text-xs muted">{item.label}</div>
-            <div className={`text-sm fw-600 ${item.mono ? 'mono' : ''}`} style={item.blue ? { color: 'var(--blue-500)' } : undefined}>
+            <div className={`text-sm fw-600 ${item.mono ? 'mono' : ''}`}>
               {item.value}
             </div>
           </div>
@@ -230,14 +227,6 @@ export function CamSARecepcionRegistrarPage() {
               {(cat?.bodegas ?? []).map((b) => (
                 <option key={b.id} value={String(b.id)}>{b.nombre}</option>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="field-label">Presentación recibida</label>
-            <select className="field-input" value={presRecibida} onChange={(e) => setPresRecibida(e.target.value)}>
-              <option value="">— Selecciona —</option>
-              <option value="Paletizado">Paletizado</option>
-              <option value="Granel">Granel</option>
             </select>
           </div>
           <div>
