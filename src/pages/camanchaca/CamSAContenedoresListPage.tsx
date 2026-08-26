@@ -45,7 +45,7 @@ export function CamSAContenedoresListPage() {
   const [search, setSearch] = useState('');
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CamContenedorSAConProductos | null>(null);
-  const [sort, setSort] = useState<{ by: SortCol; dir: 'asc' | 'desc' }>({ by: 'eta', dir: 'asc' });
+  const [sort, setSort] = useState<{ by: SortCol; dir: 'asc' | 'desc' }>({ by: 'eta', dir: 'desc' });
   const toggleSort = (by: SortCol) =>
     setSort((s) => (s.by === by ? { by, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { by, dir: 'asc' }));
 
@@ -68,7 +68,8 @@ export function CamSAContenedoresListPage() {
         const facturaMatch = (c.factura ?? '').toLowerCase().includes(s);
         const productoMatch = c.productos?.some((p) => (p.descripcion ?? '').toLowerCase().includes(s));
         const contMatch = (c.contenedor ?? '').toLowerCase().includes(s);
-        if (!folioMatch && !facturaMatch && !productoMatch && !contMatch) return false;
+        const ocMatch = (c.oc_proveedor ?? '').toLowerCase().includes(s);
+        if (!folioMatch && !facturaMatch && !productoMatch && !contMatch && !ocMatch) return false;
       }
       return true;
     });
@@ -81,7 +82,9 @@ export function CamSAContenedoresListPage() {
         case 'costo': return Number(c.total_usd ?? 0);
         case 'saldo': return saldoDe(c);
         case 'eta':
-        default: return c.eta_manzanillo || '9999-99-99';
+        // Sin ETA va al fondo en los dos sentidos: con '9999…' subiria al
+        // tope al ordenar descendente, que es justo lo que no se quiere.
+        default: return c.eta_manzanillo || '';
       }
     };
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -90,8 +93,8 @@ export function CamSAContenedoresListPage() {
       const kb = key(b);
       if (ka < kb) return -1 * dir;
       if (ka > kb) return 1 * dir;
-      const ea = a.eta_manzanillo || '9999-99-99';
-      const eb = b.eta_manzanillo || '9999-99-99';
+      const ea = a.eta_manzanillo || '';
+      const eb = b.eta_manzanillo || '';
       return ea < eb ? -1 : ea > eb ? 1 : 0;
     });
   }, [contenedores, filter, search, sort, saldos]);
@@ -283,6 +286,7 @@ export function CamSAContenedoresListPage() {
                       <div className="text-xs muted">
                         {c.factura ? `Factura ${c.factura}` : 'Sin factura'}
                         {c.fecha_factura ? ` · ${fmtFechaCorta(c.fecha_factura)}` : ''}
+                        {c.oc_proveedor ? ` · OC ${c.oc_proveedor}` : ''}
                       </div>
                     </td>
                     <td>

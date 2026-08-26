@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
-import { createContenedorSA, fetchCatalogosSA, fetchOrdenesPlaneadas, updateOrdenPlaneada } from '@/features/camanchaca/sa-queries';
+import { createContenedorSA, fetchCatalogosSA, fetchOrdenesPlaneadas, updateOrdenPlaneada, sugerirFolioSA } from '@/features/camanchaca/sa-queries';
 import { etaBodegaAutoSA, CAM_SA_STATUS_OPTS } from '@/features/camanchaca/sa-status';
 import { useAuth } from '@/lib/auth';
 import { useDraft } from '@/lib/useDraft';
@@ -44,6 +44,7 @@ const toNum = (s: string) => {
 const hoyISO = () => new Date().toISOString().slice(0, 10);
 
 type ContenedorDraft = {
+  folioInterno: string;
   ocProveedor: string;
   factura: string;
   fechaFactura: string;
@@ -77,6 +78,7 @@ export function CamSANuevoContenedorPage() {
   });
   const ordenPlaneada = ordenes?.find((o) => o.id === planeadaId);
 
+  const [folioInterno, setFolioInterno] = useState('');
   const [ocProveedor, setOcProveedor] = useState('');
   const [factura, setFactura] = useState('');
   const [fechaFactura, setFechaFactura] = useState(hoyISO());
@@ -96,9 +98,22 @@ export function CamSANuevoContenedorPage() {
     if (ordenPlaneada && !ocProveedor) setOcProveedor(ordenPlaneada.oc_proveedor);
   }, [ordenPlaneada, ocProveedor]);
 
+  // El folio interno se propone continuando la numeracion que ya existe
+  // (CAM-320, CAM-321...), no desde el consecutivo de la BD que arranca en 001.
+  // Es editable: manda lo que el usuario teclee.
+  const { data: folioSugerido } = useQuery({
+    queryKey: ['cam_sa_folio_sugerido', empresaId],
+    queryFn: () => sugerirFolioSA(empresaId),
+  });
+  const folioTocado = useRef(false);
+  useEffect(() => {
+    if (folioSugerido && !folioTocado.current && !folioInterno) setFolioInterno(folioSugerido);
+  }, [folioSugerido, folioInterno]);
+
   const draftKey = `crm:draft:cam-sa-nuevo-contenedor:${empresaId}`;
   const draftSnapshot = useMemo<ContenedorDraft>(
     () => ({
+      folioInterno,
       ocProveedor,
       factura,
       fechaFactura,
@@ -113,9 +128,10 @@ export function CamSANuevoContenedorPage() {
       observaciones,
       lineas,
     }),
-    [ocProveedor, factura, fechaFactura, fechaVencimiento, status, etaManzanillo, etaBodegaOverride, naviera, contenedor, bodegaDestino, presentacion, observaciones, lineas],
+    [folioInterno, ocProveedor, factura, fechaFactura, fechaVencimiento, status, etaManzanillo, etaBodegaOverride, naviera, contenedor, bodegaDestino, presentacion, observaciones, lineas],
   );
   const applyDraft = (d: ContenedorDraft) => {
+    setFolioInterno(d.folioInterno ?? '');
     setOcProveedor(d.ocProveedor ?? '');
     setFactura(d.factura ?? '');
     setFechaFactura(d.fechaFactura ?? hoyISO());
@@ -219,7 +235,8 @@ export function CamSANuevoContenedorPage() {
       await createContenedorSA(
         {
           empresa_id: empresaId,
-          // folio_interno lo asigna la BD (next_cam_folio)
+          // Folio capturado; si se deja vacio la BD aplica su default next_cam_folio()
+          ...(folioInterno.trim() ? { folio_interno: folioInterno.trim() } : {}),
           orden_planeada_id: planeadaId || null,
           oc_proveedor: ocProveedor.trim() || null,
           factura: factura.trim(),
@@ -337,6 +354,21 @@ export function CamSANuevoContenedorPage() {
           </div>
         </div>
         <div className="card-body grid grid-3">
+          <div>
+            <label className="field-label">Folio interno *</label>
+            <input
+              className="field-input mono"
+              value={folioInterno}
+              onChange={(e) => {
+                folioTocado.current = true;
+                setFolioInterno(e.target.value.toUpperCase());
+              }}
+              placeholder="CAM-320"
+            />
+            <div className="text-xs muted" style={{ marginTop: 3 }}>
+              {folioSugerido ? `Sigue de tu numeración (${folioSugerido})` : 'Tu número de contenedor'}
+            </div>
+          </div>
           <div>
             <label className="field-label">OC del proveedor</label>
             <input className="field-input mono" value={ocProveedor} onChange={(e) => setOcProveedor(e.target.value)} placeholder="OC-12345" />

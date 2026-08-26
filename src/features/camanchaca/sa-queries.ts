@@ -72,8 +72,35 @@ export async function fetchContenedorSAById(id: string): Promise<CamContenedorSA
 }
 
 /**
- * Crea el contenedor + sus líneas. El folio interno lo asigna la BD
- * (default crm.next_cam_folio() — NO se genera en frontend).
+ * Sugiere el siguiente folio interno CONTINUANDO la numeración que ya existe.
+ *
+ * La BD tiene un default `next_cam_folio()` que empieza en CAM-001, pero la
+ * numeración real del usuario va por CAM-3xx (se cargó su histórico completo en
+ * 2026-08-19). Dejar que la secuencia mandara habría empezado a numerar desde el
+ * 1, encimándose con folios que él ya usa en sus papeles. Por eso el folio se
+ * captura, y aquí solo se propone el que sigue.
+ *
+ * Se toma el número más alto y se le suma 1. Ignora sufijos tipo `CAM-280.2`
+ * (contenedores partidos): de 280.2 la base es 280.
+ */
+export async function sugerirFolioSA(empresaId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('cam_contenedores_sa')
+    .select('folio_interno')
+    .eq('empresa_id', empresaId);
+  if (error) throw error;
+
+  let max = 0;
+  for (const { folio_interno } of data ?? []) {
+    const m = /^CAM-(\d+)/i.exec(folio_interno ?? '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `CAM-${max + 1}`;
+}
+
+/**
+ * Crea el contenedor + sus líneas. El folio interno viene en el payload; si se
+ * omite, la BD aplica su default `next_cam_folio()`.
  */
 export async function createContenedorSA(
   payload: CamContenedorSAInsert,
@@ -84,6 +111,11 @@ export async function createContenedorSA(
     .insert(payload)
     .select()
     .single();
+  // 23505 = folio repetido. El mensaje crudo de Postgres no le dice nada a quien
+  // captura, y este es el error más probable al teclear el folio a mano.
+  if (error?.code === '23505') {
+    throw new Error(`El folio ${payload.folio_interno ?? ''} ya existe. Usa otro número.`);
+  }
   if (error) throw error;
 
   if (productos.length > 0) {
