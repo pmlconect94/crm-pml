@@ -162,7 +162,7 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
         { label: '🖨  Bonos', run: () => imprimirNomina('bonos', calcData, semana) },
         { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
         { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
-        { label: '⬇  Vales — Excel (.xlsx)', run: () => exportarValesXLSX(calcData, semana) },
+        { label: '⬇  Dispersión Efectivale (.xls)', run: () => exportarValesXLSX(calcData, semana) },
         { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
       ]
     : [
@@ -170,7 +170,7 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
         { label: '🖨  Viajes y horas extra', run: () => imprimirNomina('viajeshe', calcData, semana) },
         { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
         { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
-        { label: '⬇  Vales — Excel (.xlsx)', run: () => exportarValesXLSX(calcData, semana) },
+        { label: '⬇  Dispersión Efectivale (.xls)', run: () => exportarValesXLSX(calcData, semana) },
         { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
       ];
 
