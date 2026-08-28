@@ -8,7 +8,10 @@ export function descargarXLSX(aoa: (string | number)[][], sheetName: string, fil
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
-  XLSX.writeFile(wb, filename);
+  // `.xls` se escribe como BIFF8 (el formato viejo de Excel), no como xlsx
+  // renombrado: el portal de Efectivale espera el archivo tal cual su plantilla.
+  const bookType = filename.toLowerCase().endsWith('.xls') ? 'biff8' : 'xlsx';
+  XLSX.writeFile(wb, filename, { bookType });
 }
 
 // Formatos de impresión / exportación de la nómina.
@@ -319,26 +322,54 @@ export async function imprimirNomina(tipo: TipoImpresion, calcData: any[], seman
   }
 }
 
-// ───────────────────────── EXPORT VALES (.xlsx) ─────────────────────────
+// ─────────────────── EXPORT DISPERSIÓN EFECTIVALE (.xls) ───────────────────
+//
+// Layout copiado de la plantilla que da Efectivale ("DISPERSION EFECTIVALE.xls"):
+//
+//   A1 XSUBTOTAL | B1 <suma de importes>
+//   A2 XCLIENTE  | B2 XTIPOPEDIDO | C2 XNUMERO | D2 XIMPORTE
+//   A3+ <cliente> | DISPERSION | <número, TEXTO relleno a 20> | <importe>
+//
+// Dos cosas que parecen cosméticas y NO lo son:
+//  · XNUMERO va como TEXTO rellenado con espacios hasta 20 caracteres (campo de
+//    ancho fijo en su sistema). Mandarlo como número lo rompe.
+//  · El archivo es .xls de verdad (BIFF8), no un .xlsx renombrado.
+const ANCHO_XNUMERO = 20;
+const TIPO_PEDIDO = 'DISPERSION';
+
 export function exportarValesXLSX(calcData: any[], semana: any) {
-  const vales = getEmpresa(semana?.empresa).vales;
-  if (!vales) { alert('Esta empresa aún no tiene configurada su cuenta de vales.'); return; }
-  const data = [...calcData].sort(byBanco).filter((d) => (d.calc.valesPago || 0) > 0.005);
+  const empresa = getEmpresa(semana?.empresa);
+  const vales = empresa.vales;
+  if (!vales?.cliente) {
+    alert(`${empresa.nombre} todavía no tiene su número de cliente de Efectivale.\n\nSin él no se puede generar la dispersión: se mandaría a una cuenta equivocada.`);
+    return;
+  }
+  const data = calcData.filter((d) => (d.calc.valesPago || 0) > 0.005);
   const sinId = data.filter((d) => d.empleado.id_efectivale == null || d.empleado.id_efectivale === '');
-  const buenos = data.filter((d) => !(d.empleado.id_efectivale == null || d.empleado.id_efectivale === ''));
+  const buenos = data
+    .filter((d) => !(d.empleado.id_efectivale == null || d.empleado.id_efectivale === ''))
+    .sort((a, b) => Number(a.empleado.id_efectivale) - Number(b.empleado.id_efectivale));
 
   if (!buenos.length) { alert('No hay empleados con vales (y con ID Efectivale) en esta nómina.'); return; }
 
-  const aoa: (string | number)[][] = [['ID', 'NOMINA', 'MONTO', 'PRODUCTO']];
-  buenos.forEach((d) => {
-    const monto = Math.round((d.calc.valesPago || 0) * 100) / 100;
-    aoa.push([Number(vales.idCuenta), d.empleado.id_efectivale, monto, vales.producto]);
-  });
+  const filas = buenos.map((d) => ({
+    numero: String(d.empleado.id_efectivale).padEnd(ANCHO_XNUMERO, ' '),
+    monto: Math.round((d.calc.valesPago || 0) * 100) / 100,
+  }));
+  // El subtotal se saca de las filas YA redondeadas: si se suma antes de
+  // redondear se va un centavo contra el detalle y el portal lo rechaza.
+  const subtotal = Math.round(filas.reduce((s, f) => s + f.monto, 0) * 100) / 100;
+
+  const aoa: (string | number)[][] = [
+    ['XSUBTOTAL', subtotal],
+    ['XCLIENTE', 'XTIPOPEDIDO', 'XNUMERO', 'XIMPORTE'],
+    ...filas.map((f) => [vales.cliente, TIPO_PEDIDO, f.numero, f.monto]),
+  ];
   const periodo = semana ? `${semana.fecha_inicio}_a_${semana.fecha_fin}` : 'nomina';
-  descargarXLSX(aoa, 'Vales', `vales_efectivale_${periodo}.xlsx`);
+  descargarXLSX(aoa, 'Sheet0', `dispersion_efectivale_${periodo}.xls`);
 
   if (sinId.length) {
-    alert(`Se exportaron ${buenos.length} empleados con vales.\n\n${sinId.length} con vales NO se incluyeron por no tener ID Efectivale:\n` + sinId.map((d) => `· ${d.empleado.nombre}`).join('\n'));
+    alert(`Se exportaron ${buenos.length} empleados con vales por ${subtotal.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}.\n\n${sinId.length} con vales NO se incluyeron por no tener ID Efectivale:\n` + sinId.map((d) => `· ${d.empleado.nombre}`).join('\n'));
   }
 }
 

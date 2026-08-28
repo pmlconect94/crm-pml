@@ -11,7 +11,10 @@ export type Empresa = {
   nombre: string;        // nombre corto (UI / encabezados)
   razonSocial: string;   // razón social (impresiones)
   areas: string[];       // áreas para el dropdown del catálogo
-  vales?: { idCuenta: string; producto: string };          // Efectivale (antes Toka/EasyVale)
+  // Numero de cliente en Efectivale (columna XCLIENTE del archivo de dispersion).
+  // Sin el, la exportacion de vales se niega a generar el archivo en vez de
+  // mandar una cuenta equivocada.
+  vales?: { cliente: string };
   banorte?: { emisora: string; cuentaCargo: string };      // dispersión Banorte (.pag)
 };
 
@@ -21,7 +24,7 @@ export const EMPRESAS: Empresa[] = [
     nombre: 'Productos Marinos Lizárraga',
     razonSocial: 'Productos Marinos Lizarraga, S. de R.L. de C.V.',
     areas: ['Administración', 'Cobranza', 'Contabilidad', 'Logistica/Almacen', 'Recursos Humanos', 'Ventas'],
-    vales: { idCuenta: '26260', producto: 'EASYVALE CHIP' },
+    vales: { cliente: '122006-1' },
     banorte: { emisora: '21659', cuentaCargo: '0265911011' },
   },
   {
@@ -29,7 +32,8 @@ export const EMPRESAS: Empresa[] = [
     nombre: 'Marlin Lizárraga',
     razonSocial: 'Marlin Lizarraga, S. de R.L. de C.V.',
     areas: ['Administración', 'Empaque', 'Estilado', 'Fileteado', 'Hornos', 'Inyección', 'Mantenimiento', 'Parrillas', 'Producción', 'Recursos Humanos', 'Salmon', 'Subida de Tambos'],
-    vales: { idCuenta: '27352', producto: 'EASYVALE CHIP' },
+    // TODO Marlin: falta su numero de cliente de Efectivale (el de Toka era 27352).
+    // Mientras siga sin ponerse, exportar vales de Marlin avisa y no genera nada.
     banorte: { emisora: '61016', cuentaCargo: '0528568240' },
   },
 ];
