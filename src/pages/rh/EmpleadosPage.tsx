@@ -72,7 +72,7 @@ export function EmpleadosPage() {
     else if (filtro === 'bajas') r = r.filter((e) => !e.activo);
     if (busqueda) {
       const t = busqueda.toLowerCase();
-      r = r.filter((e) => [e.nombre, e.puesto, e.area, e.rfc, e.id_nomex, e.id_toka].some((v) => v && String(v).toLowerCase().includes(t)));
+      r = r.filter((e) => [e.nombre, e.puesto, e.area, e.rfc, e.id_nomex, e.id_efectivale].some((v) => v && String(v).toLowerCase().includes(t)));
     }
     return r;
   }, [empleados, filtro, busqueda]);
@@ -91,7 +91,7 @@ export function EmpleadosPage() {
     const num = (v: any) => (v === '' || v == null ? null : Number(v));
     const txt = (v: any) => (v === '' || v == null ? null : v);
     const data: any = {
-      id_nomex: num(form.id_nomex), id_banco: num(form.id_banco), id_toka: num(form.id_toka),
+      id_nomex: num(form.id_nomex), id_banco: num(form.id_banco), id_efectivale: num(form.id_efectivale),
       nombre: form.nombre, activo: form.activo !== false, alta_imss: form.alta_imss === true,
       fecha_ingreso: txt(form.fecha_ingreso), puesto: txt(form.puesto), area: txt(form.area),
       jefe_inmediato: txt(form.jefe_inmediato), ubicacion: txt(form.ubicacion), razon_social: txt(form.razon_social),
@@ -277,7 +277,7 @@ export function EmpleadosPage() {
             </div>
             <div className="modal-body">
               <div className="form-section-title">Identificadores</div>
-              <div className="grid grid-3"><Campo label="NOMEX" value={nomexLabel(verEmp)} /><Campo label="ID Banco" value={verEmp.id_banco} /><Campo label="ID Toka" value={verEmp.id_toka} /></div>
+              <div className="grid grid-3"><Campo label="NOMEX" value={nomexLabel(verEmp)} /><Campo label="ID Banco" value={verEmp.id_banco} /><Campo label="ID Efectivale" value={verEmp.id_efectivale} /></div>
               <div className="form-section-title">Datos generales</div>
               <div className="grid grid-3">
                 <Campo label="Jefe inmediato" value={verEmp.jefe_inmediato} /><Campo label="Fecha de ingreso" value={fmtFecha(verEmp.fecha_ingreso)} /><Campo label="Esquema" value={verEmp.esquema_pago} />
@@ -319,7 +319,7 @@ export function EmpleadosPage() {
               <div className="form-grid form-grid-3">
                 <div><label className="field-label">ID Nomex</label><input className="field-input" type="number" value={form.id_nomex ?? ''} onChange={(e) => f('id_nomex', e.target.value)} /></div>
                 <div><label className="field-label">ID Banco</label><input className="field-input" type="number" value={form.id_banco ?? ''} onChange={(e) => f('id_banco', e.target.value)} /></div>
-                <div><label className="field-label">ID Toka</label><input className="field-input" type="number" value={form.id_toka ?? ''} onChange={(e) => f('id_toka', e.target.value)} /></div>
+                <div><label className="field-label">ID Efectivale</label><input className="field-input" type="number" value={form.id_efectivale ?? ''} onChange={(e) => f('id_efectivale', e.target.value)} /></div>
               </div>
               <div className="form-section-title">Datos generales</div>
               <div className="form-grid"><div><label className="field-label">Nombre completo *</label><input className="field-input" value={form.nombre || ''} onChange={(e) => f('nombre', e.target.value)} /></div></div>

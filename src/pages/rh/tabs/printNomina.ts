@@ -206,7 +206,7 @@ function bodyDispersion(calcData: any[], semana: any): string {
   const fila = (d: any) => {
     const c = d.calc;
     const sueldo = c.asistMonto + c.septimo;
-    // Dep. Banco = banco + toka (vales) = depósito fiscal/corregido.
+    // Dep. Banco = banco + vales (Efectivale) = depósito fiscal/corregido.
     const vals = [sueldo, c.prestDesc, c.comedor, c.descuentoProducto, c.infonavit, (c.descuentoPermanente || 0), c.retardoMonto, c.bono, c.retroactivoTotal, (c.te || 0), (c.incentivos || 0), c.neto, c.depositoCorregido, c.efectivo];
     const ded = new Set([1, 2, 3, 4, 5, 6]); // índices de deducciones (rojo)
     return `<tr><td class="c mono">${esc(d.empleado.id_banco ?? '—')}</td><td>${esc(d.empleado.nombre)}</td>${vals.map((v, i) => `<td class="r mono ${ded.has(i) && v > 0 ? 'neg' : ''}">${v ? m(v) : '—'}</td>`).join('')}</tr>`;
@@ -221,7 +221,7 @@ function bodyDispersion(calcData: any[], semana: any): string {
     <tbody>${data.map(fila).join('')}</tbody>
     <tfoot><tr><td colspan="2">Totales (${data.length})</td>${totVals.map((v) => `<td class="r mono">${m(v)}</td>`).join('')}</tr></tfoot>
   </table>
-  <p class="muted" style="font-size:10px;margin-top:8px">Sueldo = asistencia + séptimo · Horas Extra y Viajes (incentivos) van separados · Falta/Ret. = descuento por retardos (las faltas ya están reflejadas en el sueldo) · <strong>Dep. Banco = depósito a banco + toka (vales)</strong>, igual al depósito fiscal/corregido.</p>`;
+  <p class="muted" style="font-size:10px;margin-top:8px">Sueldo = asistencia + séptimo · Horas Extra y Viajes (incentivos) van separados · Falta/Ret. = descuento por retardos (las faltas ya están reflejadas en el sueldo) · <strong>Dep. Banco = depósito a banco + vales</strong>, igual al depósito fiscal/corregido.</p>`;
 }
 
 // ───────────────────────── REPORTE FISCAL ─────────────────────────
@@ -271,7 +271,7 @@ function bodyFiscal(calcData: any[], semana: any): string {
     <tbody>${data.map(fila).join('')}</tbody>
     <tfoot><tr><td colspan="2">Totales (${data.length})</td><td class="r mono">${m(tot.vales)}</td>${esMarlin ? `<td class="r mono">${m(tot.prev)}</td>` : ''}<td class="r mono">${m(tot.banco)}</td><td class="r mono">${nd(tot.asis)}</td><td class="r mono">${nd(tot.sept)}</td><td class="r mono">${factorSeptimo}</td><td class="r mono">${m(tot.inf)}</td><td class="r mono">${m(tot.otros)}</td><td class="r mono">${m(tot.com)}</td><td class="r mono">${m(tot.ret)}</td><td class="r mono">${m(tot.prest)}</td><td class="r mono">${m(tot.dp)}</td></tr></tfoot>
   </table>
-  <p class="muted" style="font-size:10px;margin-top:8px"><strong>Asistencia y Séptimo día van en número de días</strong> (no en dinero): semana completa = 6 y 1. <strong>Séptimo (dom.) · factor</strong> = ${factorSeptimo} (${semana?.tipo === 'quincenal' ? 'quincenal' : 'semanal'}). Dep. Banco = solo banco (los vales/toka van en su columna).</p>`;
+  <p class="muted" style="font-size:10px;margin-top:8px"><strong>Asistencia y Séptimo día van en número de días</strong> (no en dinero): semana completa = 6 y 1. <strong>Séptimo (dom.) · factor</strong> = ${factorSeptimo} (${semana?.tipo === 'quincenal' ? 'quincenal' : 'semanal'}). Dep. Banco = solo banco (los vales van en su columna).</p>`;
 }
 
 // ───────────────────────── BONOS ─────────────────────────
@@ -324,21 +324,21 @@ export function exportarValesXLSX(calcData: any[], semana: any) {
   const vales = getEmpresa(semana?.empresa).vales;
   if (!vales) { alert('Esta empresa aún no tiene configurada su cuenta de vales.'); return; }
   const data = [...calcData].sort(byBanco).filter((d) => (d.calc.valesPago || 0) > 0.005);
-  const sinToka = data.filter((d) => d.empleado.id_toka == null || d.empleado.id_toka === '');
-  const buenos = data.filter((d) => !(d.empleado.id_toka == null || d.empleado.id_toka === ''));
+  const sinId = data.filter((d) => d.empleado.id_efectivale == null || d.empleado.id_efectivale === '');
+  const buenos = data.filter((d) => !(d.empleado.id_efectivale == null || d.empleado.id_efectivale === ''));
 
-  if (!buenos.length) { alert('No hay empleados con vales (y con ID Toka) en esta nómina.'); return; }
+  if (!buenos.length) { alert('No hay empleados con vales (y con ID Efectivale) en esta nómina.'); return; }
 
   const aoa: (string | number)[][] = [['ID', 'NOMINA', 'MONTO', 'PRODUCTO']];
   buenos.forEach((d) => {
     const monto = Math.round((d.calc.valesPago || 0) * 100) / 100;
-    aoa.push([Number(vales.idCuenta), d.empleado.id_toka, monto, vales.producto]);
+    aoa.push([Number(vales.idCuenta), d.empleado.id_efectivale, monto, vales.producto]);
   });
   const periodo = semana ? `${semana.fecha_inicio}_a_${semana.fecha_fin}` : 'nomina';
-  descargarXLSX(aoa, 'Vales', `vales_easyvale_${periodo}.xlsx`);
+  descargarXLSX(aoa, 'Vales', `vales_efectivale_${periodo}.xlsx`);
 
-  if (sinToka.length) {
-    alert(`Se exportaron ${buenos.length} empleados con vales.\n\n${sinToka.length} con vales NO se incluyeron por no tener ID Toka:\n` + sinToka.map((d) => `· ${d.empleado.nombre}`).join('\n'));
+  if (sinId.length) {
+    alert(`Se exportaron ${buenos.length} empleados con vales.\n\n${sinId.length} con vales NO se incluyeron por no tener ID Efectivale:\n` + sinId.map((d) => `· ${d.empleado.nombre}`).join('\n'));
   }
 }
 

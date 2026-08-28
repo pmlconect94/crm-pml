@@ -11,7 +11,7 @@ export type Empresa = {
   nombre: string;        // nombre corto (UI / encabezados)
   razonSocial: string;   // razón social (impresiones)
   areas: string[];       // áreas para el dropdown del catálogo
-  vales?: { idCuenta: string; producto: string };          // EasyVale / Toka
+  vales?: { idCuenta: string; producto: string };          // Efectivale (antes Toka/EasyVale)
   banorte?: { emisora: string; cuentaCargo: string };      // dispersión Banorte (.pag)
 };
 
