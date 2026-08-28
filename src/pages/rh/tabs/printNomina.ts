@@ -322,54 +322,68 @@ export async function imprimirNomina(tipo: TipoImpresion, calcData: any[], seman
   }
 }
 
-// ─────────────────── EXPORT DISPERSIÓN EFECTIVALE (.xls) ───────────────────
+// ───────────────────────── EXPORT VALES DE DESPENSA ─────────────────────────
 //
-// Layout copiado de la plantilla que da Efectivale ("DISPERSION EFECTIVALE.xls"):
+// El layout depende del PROVEEDOR de cada empresa (ver empresas.tsx). El grupo
+// migró a Efectivale en agosto 2026 pero Marlin se quedó en Toka, así que
+// conviven los dos.
 //
+// EFECTIVALE (.xls BIFF8) — plantilla "DISPERSION EFECTIVALE.xls":
 //   A1 XSUBTOTAL | B1 <suma de importes>
-//   A2 XCLIENTE  | B2 XTIPOPEDIDO | C2 XNUMERO | D2 XIMPORTE
+//   A2 XCLIENTE  | XTIPOPEDIDO | XNUMERO | XIMPORTE
 //   A3+ <cliente> | DISPERSION | <número, TEXTO relleno a 20> | <importe>
+//   Dos cosas que parecen cosméticas y NO lo son: XNUMERO va como TEXTO
+//   rellenado a 20 caracteres (campo de ancho fijo), y el archivo es .xls de
+//   verdad, no un .xlsx renombrado.
 //
-// Dos cosas que parecen cosméticas y NO lo son:
-//  · XNUMERO va como TEXTO rellenado con espacios hasta 20 caracteres (campo de
-//    ancho fijo en su sistema). Mandarlo como número lo rompe.
-//  · El archivo es .xls de verdad (BIFF8), no un .xlsx renombrado.
+// TOKA / EasyVale (.xlsx):
+//   ID | NOMINA | MONTO | PRODUCTO
+//   <idCuenta> | <número> | <importe> | <producto>
 const ANCHO_XNUMERO = 20;
 const TIPO_PEDIDO = 'DISPERSION';
 
 export function exportarValesXLSX(calcData: any[], semana: any) {
   const empresa = getEmpresa(semana?.empresa);
   const vales = empresa.vales;
-  if (!vales?.cliente) {
-    alert(`${empresa.nombre} todavía no tiene su número de cliente de Efectivale.\n\nSin él no se puede generar la dispersión: se mandaría a una cuenta equivocada.`);
+  if (!vales) {
+    alert(`${empresa.nombre} todavía no tiene configurada su cuenta de vales.\n\nSin ella no se puede generar la dispersión: se mandaría a una cuenta equivocada.`);
     return;
   }
+  const proveedor = vales.proveedor === 'toka' ? 'Toka' : 'Efectivale';
   const data = calcData.filter((d) => (d.calc.valesPago || 0) > 0.005);
   const sinId = data.filter((d) => d.empleado.id_efectivale == null || d.empleado.id_efectivale === '');
   const buenos = data
     .filter((d) => !(d.empleado.id_efectivale == null || d.empleado.id_efectivale === ''))
     .sort((a, b) => Number(a.empleado.id_efectivale) - Number(b.empleado.id_efectivale));
 
-  if (!buenos.length) { alert('No hay empleados con vales (y con ID Efectivale) en esta nómina.'); return; }
+  if (!buenos.length) { alert(`No hay empleados con vales (y con número de ${proveedor}) en esta nómina.`); return; }
 
   const filas = buenos.map((d) => ({
-    numero: String(d.empleado.id_efectivale).padEnd(ANCHO_XNUMERO, ' '),
+    numero: d.empleado.id_efectivale,
     monto: Math.round((d.calc.valesPago || 0) * 100) / 100,
   }));
   // El subtotal se saca de las filas YA redondeadas: si se suma antes de
   // redondear se va un centavo contra el detalle y el portal lo rechaza.
   const subtotal = Math.round(filas.reduce((s, f) => s + f.monto, 0) * 100) / 100;
-
-  const aoa: (string | number)[][] = [
-    ['XSUBTOTAL', subtotal],
-    ['XCLIENTE', 'XTIPOPEDIDO', 'XNUMERO', 'XIMPORTE'],
-    ...filas.map((f) => [vales.cliente, TIPO_PEDIDO, f.numero, f.monto]),
-  ];
   const periodo = semana ? `${semana.fecha_inicio}_a_${semana.fecha_fin}` : 'nomina';
-  descargarXLSX(aoa, 'Sheet0', `dispersion_efectivale_${periodo}.xls`);
+
+  if (vales.proveedor === 'efectivale') {
+    const aoa: (string | number)[][] = [
+      ['XSUBTOTAL', subtotal],
+      ['XCLIENTE', 'XTIPOPEDIDO', 'XNUMERO', 'XIMPORTE'],
+      ...filas.map((f) => [vales.cliente, TIPO_PEDIDO, String(f.numero).padEnd(ANCHO_XNUMERO, ' '), f.monto]),
+    ];
+    descargarXLSX(aoa, 'Sheet0', `dispersion_efectivale_${periodo}.xls`);
+  } else {
+    const aoa: (string | number)[][] = [
+      ['ID', 'NOMINA', 'MONTO', 'PRODUCTO'],
+      ...filas.map((f) => [Number(vales.idCuenta), f.numero, f.monto, vales.producto]),
+    ];
+    descargarXLSX(aoa, 'Vales', `vales_toka_${periodo}.xlsx`);
+  }
 
   if (sinId.length) {
-    alert(`Se exportaron ${buenos.length} empleados con vales por ${subtotal.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}.\n\n${sinId.length} con vales NO se incluyeron por no tener ID Efectivale:\n` + sinId.map((d) => `· ${d.empleado.nombre}`).join('\n'));
+    alert(`Se exportaron ${buenos.length} empleados con vales por ${subtotal.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })} (${proveedor}).\n\n${sinId.length} con vales NO se incluyeron por no tener número de ${proveedor}:\n` + sinId.map((d) => `· ${d.empleado.nombre}`).join('\n'));
   }
 }
 

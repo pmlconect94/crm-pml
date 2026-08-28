@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { fmt, fmtFecha, nomexLabel } from '@/lib/nomina/format';
+import { getEmpresa } from '@/lib/nomina/empresas';
 import { Icon } from '@/components/Icon';
 import { imprimirNomina, exportarValesXLSX, exportarBanortePag } from './printNomina';
 
@@ -155,6 +156,11 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
   // El menú depende de la empresa: Marlin NO tiene viajes, así que su reporte es
   // "Horas extras" (solo HE) y suma "Bonos". PML conserva "Viajes y horas extra".
   const esMarlin = semana?.empresa === 'MARLIN';
+  // El proveedor de vales es por empresa, y cada uno genera un archivo distinto.
+  const cfgVales = getEmpresa(semana?.empresa).vales;
+  const btnVales = cfgVales?.proveedor === 'toka'
+    ? '⬇  Vales Toka (.xlsx)'
+    : '⬇  Dispersión Efectivale (.xls)';
   const acciones: { label: string; run: () => void; disabled?: boolean }[] = esMarlin
     ? [
         { label: '🖨  Incidencias', run: () => imprimirNomina('incidencias', calcData, semana) },
@@ -162,7 +168,7 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
         { label: '🖨  Bonos', run: () => imprimirNomina('bonos', calcData, semana) },
         { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
         { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
-        { label: '⬇  Dispersión Efectivale (.xls)', run: () => exportarValesXLSX(calcData, semana) },
+        { label: btnVales, run: () => exportarValesXLSX(calcData, semana) },
         { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
       ]
     : [
@@ -170,7 +176,7 @@ export function TabResumen({ calcData, semana }: { calcData: any[]; semana: any 
         { label: '🖨  Viajes y horas extra', run: () => imprimirNomina('viajeshe', calcData, semana) },
         { label: '🖨  Dispersión', run: () => imprimirNomina('dispersion', calcData, semana) },
         { label: '🖨  Reporte fiscal', run: () => imprimirNomina('fiscal', calcData, semana) },
-        { label: '⬇  Dispersión Efectivale (.xls)', run: () => exportarValesXLSX(calcData, semana) },
+        { label: btnVales, run: () => exportarValesXLSX(calcData, semana) },
         { label: '🏦  Dispersión Banorte (.pag)', run: () => exportarBanortePag(calcData, semana) },
       ];
 

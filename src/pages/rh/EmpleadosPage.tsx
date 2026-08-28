@@ -35,6 +35,10 @@ export function EmpleadosPage() {
   const rhPerm = useRhPermisos();
   const { code: empresa } = useEmpresa();
   const areas = getEmpresa(empresa).areas;
+  // El campo es uno solo, pero el proveedor de vales depende de la empresa
+  // (PML en Efectivale, Marlin todavía en Toka): la etiqueta lo refleja para
+  // que nadie capture el número del proveedor equivocado.
+  const proveedorVales = getEmpresa(empresa).vales?.proveedor === 'toka' ? 'Toka' : 'Efectivale';
   const canEdit = user?.rol === 'admin';
   // Restricciones granulares dentro de Empleados (ej. Efraín: sí ficha/jornada,
   // NO ver switches IMSS/cálculo, NO sueldos, NO banco).
@@ -277,7 +281,7 @@ export function EmpleadosPage() {
             </div>
             <div className="modal-body">
               <div className="form-section-title">Identificadores</div>
-              <div className="grid grid-3"><Campo label="NOMEX" value={nomexLabel(verEmp)} /><Campo label="ID Banco" value={verEmp.id_banco} /><Campo label="ID Efectivale" value={verEmp.id_efectivale} /></div>
+              <div className="grid grid-3"><Campo label="NOMEX" value={nomexLabel(verEmp)} /><Campo label="ID Banco" value={verEmp.id_banco} /><Campo label={`ID ${proveedorVales}`} value={verEmp.id_efectivale} /></div>
               <div className="form-section-title">Datos generales</div>
               <div className="grid grid-3">
                 <Campo label="Jefe inmediato" value={verEmp.jefe_inmediato} /><Campo label="Fecha de ingreso" value={fmtFecha(verEmp.fecha_ingreso)} /><Campo label="Esquema" value={verEmp.esquema_pago} />
@@ -319,7 +323,7 @@ export function EmpleadosPage() {
               <div className="form-grid form-grid-3">
                 <div><label className="field-label">ID Nomex</label><input className="field-input" type="number" value={form.id_nomex ?? ''} onChange={(e) => f('id_nomex', e.target.value)} /></div>
                 <div><label className="field-label">ID Banco</label><input className="field-input" type="number" value={form.id_banco ?? ''} onChange={(e) => f('id_banco', e.target.value)} /></div>
-                <div><label className="field-label">ID Efectivale</label><input className="field-input" type="number" value={form.id_efectivale ?? ''} onChange={(e) => f('id_efectivale', e.target.value)} /></div>
+                <div><label className="field-label">ID {proveedorVales}</label><input className="field-input" type="number" value={form.id_efectivale ?? ''} onChange={(e) => f('id_efectivale', e.target.value)} /></div>
               </div>
               <div className="form-section-title">Datos generales</div>
               <div className="form-grid"><div><label className="field-label">Nombre completo *</label><input className="field-input" value={form.nombre || ''} onChange={(e) => f('nombre', e.target.value)} /></div></div>

@@ -1975,6 +1975,42 @@ captura. `bonoChoferSolo()` existe solo para ese desglose visual.
 inofensivo (nunca se pagó), pero explica por qué la columna "Inc. acomp." de viajes viejos sin
 acompañante no está vacía.
 
+### 18.10b Vales de despensa: el proveedor es POR EMPRESA ✅ 2026-08-28
+
+El grupo migró de **Toka/EasyVale a Efectivale**, pero **cada empresa puede estar
+con un proveedor distinto**: al 2026-08-28 **PML está en Efectivale y Marlin
+regresó a Toka** (decisión del usuario, "solo por esta semana"). La config vive
+en `lib/nomina/empresas.tsx`:
+
+```ts
+vales?: { proveedor: 'efectivale'; cliente: string }
+      | { proveedor: 'toka'; idCuenta: string; producto: string };
+```
+
+**Migrar una empresa a Efectivale = cambiar esa línea + cargar los números
+nuevos** en la ficha de cada empleado. Sin `vales`, la exportación avisa y NO
+genera archivo (mejor eso que mandar la dispersión a una cuenta equivocada).
+
+- **Un solo campo para las dos**: `nomina.empleados.id_efectivale` (antes
+  `id_toka`, migración `20260828120000`). La etiqueta de la ficha y el botón de
+  exportar dicen el proveedor de la empresa activa, para que nadie capture el
+  número del proveedor equivocado.
+- ⚠️ **Al renombrar la columna, los números viejos de Toka se quedaron dentro.**
+  Quien no tenga número nuevo sigue con el de Toka en el campo que ahora dice
+  Efectivale. Por eso Marlin pudo regresar a Toka sin perder nada — pero si un
+  día migra, hay que reemplazar los 39.
+- **Layout Efectivale** (`.xls` BIFF8 real, no un xlsx renombrado): `A1 XSUBTOTAL |
+  B1 <suma>`, `A2 XCLIENTE|XTIPOPEDIDO|XNUMERO|XIMPORTE`, y cada renglón
+  `<cliente>|DISPERSION|<número TEXTO relleno a 20>|<importe>`. **El número como
+  TEXTO de ancho fijo 20 no es cosmético**: es un campo fijo de su sistema.
+  Verificado celda por celda contra la plantilla real: 116 celdas, 0 diferencias.
+- **Layout Toka** (`.xlsx`): `ID|NOMINA|MONTO|PRODUCTO` con el número como NÚMERO.
+- El **subtotal se suma sobre importes YA redondeados**; sumar antes se va un
+  centavo contra el detalle y el portal lo rechaza.
+- 📌 **PML cargado**: 31 activos, 31 con número (802278-802327), 0 duplicados.
+  **Marlin pendiente**: 39 activos con número de Toka; para migrarlo faltan sus
+  números nuevos y su número de cliente de Efectivale.
+
 ### 18.11 Cuándo empieza a descontarse un préstamo ✅ 2026-08-14
 
 Un préstamo no se descuenta de inmediato: hay una **espera** de 7 días (`tipo='semanal'`) o 15
