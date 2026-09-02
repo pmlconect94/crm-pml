@@ -23,7 +23,6 @@ import { BlufinFacturaRevisarPage } from '@/pages/blufin/BlufinFacturaRevisarPag
 // Camanchaca (SA + MX)
 import { ImportacionesCatalogosPage } from '@/pages/importaciones/ImportacionesCatalogosPage';
 import { CamanchacaLayout } from '@/pages/camanchaca/CamanchacaLayout';
-import { CamSAPlaneacionPage } from '@/pages/camanchaca/CamSAPlaneacionPage';
 import { CamSAContenedoresListPage } from '@/pages/camanchaca/CamSAContenedoresListPage';
 import { CamSANuevoContenedorPage } from '@/pages/camanchaca/CamSANuevoContenedorPage';
 import { CamSAPagosPage } from '@/pages/camanchaca/CamSAPagosPage';
@@ -99,7 +98,6 @@ export default function App() {
             <Route index element={<Navigate to="sa/contenedores" replace />} />
             <Route path="sa">
               <Route index element={<Navigate to="contenedores" replace />} />
-              <Route path="planeacion" element={<CamSAPlaneacionPage />} />
               <Route path="contenedores" element={<CamSAContenedoresListPage />} />
               <Route path="contenedores/nuevo" element={<CamSANuevoContenedorPage />} />
               <Route path="pagos" element={<CamSAPagosPage />} />

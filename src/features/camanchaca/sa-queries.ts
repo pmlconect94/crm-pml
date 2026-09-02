@@ -4,8 +4,6 @@ import type {
   CamContenedorSAConProductos,
   CamContenedorSAInsert,
   CamProductoSAInsert,
-  CamOrdenPlaneada,
-  CamOrdenPlaneadaInsert,
   CatalogoSku,
   Naviera,
   Bodega,
@@ -377,35 +375,6 @@ export async function fetchContenedoresConPendienteSA(
       };
     })
     .filter((c) => Number(c.total_usd ?? 0) - c.pagado - c.ncAplicado > EPS);
-}
-
-// ─── Órdenes planeadas ──────────────────────────────────────────────────────
-export async function fetchOrdenesPlaneadas(empresaId: string): Promise<CamOrdenPlaneada[]> {
-  const { data, error } = await supabase
-    .from('cam_ordenes_planeadas')
-    .select('*')
-    .eq('empresa_id', empresaId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function createOrdenPlaneada(payload: CamOrdenPlaneadaInsert): Promise<void> {
-  const { error } = await supabase.from('cam_ordenes_planeadas').insert(payload);
-  if (error) throw error;
-}
-
-export async function updateOrdenPlaneada(
-  id: string,
-  patch: { oc_proveedor?: string; descripcion?: string | null; kg_estimados?: number | null; llegada_estimada?: string | null; status?: string },
-): Promise<void> {
-  const { error } = await supabase.from('cam_ordenes_planeadas').update(patch).eq('id', id);
-  if (error) throw error;
-}
-
-export async function deleteOrdenPlaneada(id: string): Promise<void> {
-  const { error } = await supabase.from('cam_ordenes_planeadas').delete().eq('id', id);
-  if (error) throw error;
 }
 
 /**

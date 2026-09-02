@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Icon } from '@/components/Icon';
-import { createContenedorSA, fetchCatalogosSA, fetchOrdenesPlaneadas, updateOrdenPlaneada, sugerirFolioSA } from '@/features/camanchaca/sa-queries';
+import { createContenedorSA, fetchCatalogosSA, sugerirFolioSA } from '@/features/camanchaca/sa-queries';
 import { etaBodegaAutoSA } from '@/features/camanchaca/sa-status';
 import { useAuth } from '@/lib/auth';
 import { useDraft } from '@/lib/useDraft';
@@ -62,19 +62,11 @@ export function CamSANuevoContenedorPage() {
   const { empresaId } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [params] = useSearchParams();
-  const planeadaId = params.get('planeada');
 
   const { data: cat } = useQuery({
     queryKey: ['cam_sa_catalogos', empresaId],
     queryFn: () => fetchCatalogosSA(empresaId),
   });
-  const { data: ordenes } = useQuery({
-    queryKey: ['cam_sa_planeacion', empresaId],
-    queryFn: () => fetchOrdenesPlaneadas(empresaId),
-    enabled: !!planeadaId,
-  });
-  const ordenPlaneada = ordenes?.find((o) => o.id === planeadaId);
 
   const [folioInterno, setFolioInterno] = useState('');
   const [ocProveedor, setOcProveedor] = useState('');
@@ -88,11 +80,6 @@ export function CamSANuevoContenedorPage() {
   const [bodegaDestino, setBodegaDestino] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [lineas, setLineas] = useState<LineaProducto[]>([emptyLinea()]);
-
-  // Prefill OC desde la orden planeada (si vino por ?planeada=)
-  useEffect(() => {
-    if (ordenPlaneada && !ocProveedor) setOcProveedor(ordenPlaneada.oc_proveedor);
-  }, [ordenPlaneada, ocProveedor]);
 
   // El folio interno se propone continuando la numeracion que ya existe
   // (CAM-320, CAM-321...), no desde el consecutivo de la BD que arranca en 001.
@@ -227,7 +214,6 @@ export function CamSANuevoContenedorPage() {
           empresa_id: empresaId,
           // Folio capturado; si se deja vacio la BD aplica su default next_cam_folio()
           ...(folioInterno.trim() ? { folio_interno: folioInterno.trim() } : {}),
-          orden_planeada_id: planeadaId || null,
           oc_proveedor: ocProveedor.trim() || null,
           factura: factura.trim(),
           fecha_factura: fechaFactura || null,
@@ -255,21 +241,11 @@ export function CamSANuevoContenedorPage() {
           total_usd: toNum(l.kg) * toNum(l.precio_usd),
         })),
       );
-
-      // Marcar la orden planeada como confirmada si vino de una
-      if (planeadaId) {
-        try {
-          await updateOrdenPlaneada(planeadaId, { status: 'confirmado' });
-        } catch {
-          // no bloquea el alta del contenedor
-        }
-      }
     },
     onSuccess: () => {
       toast.success(`Contenedor con factura ${factura} creado correctamente`);
       draft.clear();
       qc.invalidateQueries({ queryKey: ['cam_sa_contenedores'] });
-      qc.invalidateQueries({ queryKey: ['cam_sa_planeacion'] });
       navigate('/app/importaciones/camanchaca/sa/contenedores');
     },
     onError: (err: Error) => toast.error(err.message),
@@ -317,22 +293,6 @@ export function CamSANuevoContenedorPage() {
           </Link>
         </div>
       </div>
-
-      {ordenPlaneada && (
-        <div
-          className="card"
-          style={{
-            marginBottom: 12,
-            padding: '10px 14px',
-            background: 'color-mix(in srgb, var(--blue-500) 6%, white)',
-            border: '1px solid color-mix(in srgb, var(--blue-500) 24%, white)',
-            fontSize: 12,
-          }}
-        >
-          Confirmando la orden planeada <strong className="mono">{ordenPlaneada.oc_proveedor}</strong>
-          {ordenPlaneada.descripcion ? ` — ${ordenPlaneada.descripcion}` : ''}. Al guardar quedará como confirmada.
-        </div>
-      )}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">

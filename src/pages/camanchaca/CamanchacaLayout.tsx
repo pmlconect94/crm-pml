@@ -7,7 +7,6 @@ const SA = '/app/importaciones/camanchaca/sa';
 const MX = '/app/importaciones/camanchaca/mx';
 
 const TABS_SA: Tab[] = [
-  { id: 'planeacion',    label: 'Planeación',        href: `${SA}/planeacion`,    icon: 'calendar'  },
   { id: 'contenedores',  label: 'Contenedores',      href: `${SA}/contenedores`,  icon: 'container' },
   { id: 'pagos',         label: 'Pagos',             href: `${SA}/pagos`,         icon: 'banknote'  },
   { id: 'recepcion',     label: 'Recepción',         href: `${SA}/recepcion`,     icon: 'inbox'     },
