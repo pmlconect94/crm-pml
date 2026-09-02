@@ -14,6 +14,7 @@ import { fmtUSD, fmtMXN, fmtFechaCorta, diasDesde } from '@/lib/format';
 import { fetchCatalogos } from '@/features/blufin/queries';
 import {
   fetchContratosConPendiente,
+  fetchSaldosPorContrato,
   createPagosMultiples,
   type ContratoConPendiente,
   type PagoMultipleItem,
@@ -28,6 +29,8 @@ type Pendiente = {
   tipo: 'anticipo' | 'saldo';
   monto: number;
   fecha: string | null;
+  /** El saldo trae dentro un anticipo que sigue sin pagarse. */
+  incluyeAnticipo?: boolean;
 };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -76,6 +79,13 @@ export function BlufinPagoMultiplePage() {
     queryFn: () => fetchContratosConPendiente(empresaId),
   });
 
+  // Lo pagado y las NCs aplicadas por contrato — sin esto el saldo que se
+  // ofrece cobrar es el PROGRAMADO al crear el contrato, no lo que se debe hoy.
+  const { data: saldos } = useQuery({
+    queryKey: ['blufin_saldos', empresaId],
+    queryFn: () => fetchSaldosPorContrato(empresaId),
+  });
+
   // Construir lista de pendientes (uno por contrato × tipo)
   const pendientes: Pendiente[] = useMemo(() => {
     const out: Pendiente[] = [];
@@ -90,17 +100,29 @@ export function BlufinPagoMultiplePage() {
         });
       }
       if (!c.saldo_pagado && c.saldo_usd && Number(c.saldo_usd) > 0) {
-        out.push({
-          clave: `${c.id}|saldo`,
-          contrato: c,
-          tipo: 'saldo',
-          monto: Number(c.saldo_usd),
-          fecha: c.saldo_fecha,
-        });
+        // Saldo REAL a pagar = total − pagado − NCs, NO el saldo programado
+        // (= total − anticipo) que guarda el contrato: ese da por cobrado un
+        // anticipo que puede seguir pendiente e ignora las notas de crédito.
+        // Misma fórmula que Pagos → Pendientes, para que los dos coincidan.
+        const sal = saldos?.get(c.id);
+        const restante = Math.max(
+          0,
+          Number(c.total_usd ?? 0) - (sal?.pagado ?? 0) - (sal?.ncAplicado ?? 0),
+        );
+        if (restante > 0.01) {
+          out.push({
+            clave: `${c.id}|saldo`,
+            contrato: c,
+            tipo: 'saldo',
+            monto: restante,
+            fecha: c.saldo_fecha,
+            incluyeAnticipo: !c.anticipo_pagado && Number(c.anticipo_usd ?? 0) > 0,
+          });
+        }
       }
     }
     return out;
-  }, [contratos]);
+  }, [contratos, saldos]);
 
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todos');
   const [seleccion, setSeleccion] = useState<Set<ClavePendiente>>(new Set());
@@ -126,17 +148,33 @@ export function BlufinPagoMultiplePage() {
       if (allFiltradosSelected) {
         filtrados.forEach((p) => next.delete(p.clave));
       } else {
+        // Con el filtro en "Todos" un contrato puede tener sus dos renglones a la
+        // vista; se toma el saldo (que ya cubre el anticipo pendiente).
         filtrados.forEach((p) => next.add(p.clave));
+        filtrados.forEach((p) => {
+          if (p.tipo === 'saldo') next.delete(hermana(p.clave));
+        });
       }
       return next;
     });
+  };
+
+  // El anticipo y el saldo del MISMO contrato son excluyentes: como el saldo ya
+  // es "todo lo que se debe" (incluye el anticipo que siga pendiente), cobrar
+  // los dos pagaria el anticipo dos veces. Elegir uno apaga el otro.
+  const hermana = (clave: ClavePendiente): ClavePendiente => {
+    const [id, tipo] = clave.split('|');
+    return `${id}|${tipo === 'anticipo' ? 'saldo' : 'anticipo'}` as ClavePendiente;
   };
 
   const toggle = (clave: ClavePendiente) => {
     setSeleccion((prev) => {
       const next = new Set(prev);
       if (next.has(clave)) next.delete(clave);
-      else next.add(clave);
+      else {
+        next.delete(hermana(clave));
+        next.add(clave);
+      }
       return next;
     });
   };
@@ -162,6 +200,17 @@ export function BlufinPagoMultiplePage() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (itemsSeleccionados.length === 0) throw new Error('Selecciona al menos un pago');
+      // createPagosMultiples valida cada renglon contra el estado ANTERIOR al
+      // batch, asi que no detecta por si mismo que los dos renglones de un mismo
+      // contrato vienen juntos. Se ataja aqui.
+      const dobles = itemsSeleccionados
+        .filter((p) => p.tipo === 'saldo')
+        .filter((p) => seleccion.has(hermana(p.clave)));
+      if (dobles.length > 0) {
+        throw new Error(
+          `${dobles[0].contrato.folio}: no cobres el anticipo y el saldo juntos — el saldo ya incluye el anticipo pendiente.`,
+        );
+      }
       if (toNum(tc) <= 0) throw new Error('Captura el TC');
       if (!bancoId) throw new Error('Selecciona el banco');
 
@@ -184,6 +233,7 @@ export function BlufinPagoMultiplePage() {
       qc.invalidateQueries({ queryKey: ['blufin_pagos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos'] });
       qc.invalidateQueries({ queryKey: ['blufin_contratos_pendientes'] });
+      qc.invalidateQueries({ queryKey: ['blufin_saldos'] });
       qc.invalidateQueries({ queryKey: ['blufin_forwards'] });
       qc.invalidateQueries({ queryKey: ['blufin_forwards_activos'] });
       navigate('/app/importaciones/blufin/pagos');
@@ -374,6 +424,14 @@ export function BlufinPagoMultiplePage() {
                     </td>
                     <td>
                       <TipoPill tipo={p.tipo} />
+                      {p.incluyeAnticipo && (
+                        <div
+                          className="text-xs"
+                          style={{ color: 'var(--amber-600, #B45309)', marginTop: 3 }}
+                        >
+                          incluye el anticipo
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div className="text-sm">{fmtFechaCorta(p.fecha)}</div>
