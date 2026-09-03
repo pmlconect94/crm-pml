@@ -134,8 +134,18 @@ export function BlufinPagoMultiplePage() {
   const [bancoId, setBancoId] = useState<number | ''>('');
   const [referencia, setReferencia] = useState('');
 
+  // Orden: fecha de vencimiento ascendente (lo mas urgente arriba), los sin
+  // fecha al fondo; empate por folio, y anticipo antes que saldo.
   const filtrados = useMemo(
-    () => pendientes.filter((p) => filtroTipo === 'todos' || p.tipo === filtroTipo),
+    () =>
+      pendientes
+        .filter((p) => filtroTipo === 'todos' || p.tipo === filtroTipo)
+        .sort(
+          (a, b) =>
+            (a.fecha ?? '9999-12-31').localeCompare(b.fecha ?? '9999-12-31') ||
+            a.contrato.folio.localeCompare(b.contrato.folio) ||
+            a.tipo.localeCompare(b.tipo),
+        ),
     [pendientes, filtroTipo],
   );
 
