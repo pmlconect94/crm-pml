@@ -2012,8 +2012,19 @@ genera archivo (mejor eso que mandar la dispersión a una cuenta equivocada).
 - El **subtotal se suma sobre importes YA redondeados**; sumar antes se va un
   centavo contra el detalle y el portal lo rechaza.
 - 📌 **PML cargado**: 31 activos, 31 con número (802278-802327), 0 duplicados.
-  **Marlin pendiente**: 39 activos con número de Toka; para migrarlo faltan sus
-  números nuevos y su número de cliente de Efectivale.
+- 📌 **Marlin — números Efectivale CARGADOS (2026-09-04**, del "Reporte de Tarjetas
+  Despensa" `libro (9).xls`): **39 tarjetas asignadas** (803790-803828) — 36 a
+  activos y 3 a dados de baja (Montaño Otero, Medina Rodarte, Ornelas Baltazar;
+  la tarjeta ya existía y no estorba). 4 se casaron a mano por **errores de dedo
+  en la nómina** (Areceaga/Arceaga, Marizcal/Mariscal, Lizet/Lizeth,
+  Balderrrama). ⚠️ A 3 activos CON vales que NO recibieron tarjeta se les
+  **limpió el número viejo de Toka** para que la dispersión Efectivale no los
+  mandara a tarjetas equivocadas: García Osuna Lucio (era 1), Jorge Guzmán
+  Ortiz (21) y Alondra Jiménez Reyes (124) — pedirles tarjeta a Efectivale;
+  mientras, salen en el aviso "sin número" del export. 9 activos en total sin
+  número. **Falta SOLO el número de cliente Efectivale de Marlin** (equivalente
+  al `122006-1` de PML) para voltear `empresas.tsx`; hasta entonces el export
+  de Marlin sigue en formato Toka (que ya no sirve — no exportar).
 
 ### 18.11b Baja de empleado: sale de las nóminas ABIERTAS, las timbradas son historia ✅ 2026-09-04
 
