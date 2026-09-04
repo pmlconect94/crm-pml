@@ -40,7 +40,7 @@ export const EMPRESAS: Empresa[] = [
     // semana). Para migrarlo a Efectivale basta cambiar esta línea por
     // { proveedor: 'efectivale', cliente: '<su número>' } y cargar sus números
     // nuevos en la ficha de cada empleado.
-    vales: { proveedor: 'toka', idCuenta: '27352', producto: 'EASYVALE CHIP' },
+    vales: { proveedor: 'efectivale', cliente: '121963-1' },
     banorte: { emisora: '61016', cuentaCargo: '0528568240' },
   },
 ];

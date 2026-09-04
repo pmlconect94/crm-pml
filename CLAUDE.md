@@ -1981,10 +1981,10 @@ acompañante no está vacía.
 
 ### 18.10b Vales de despensa: el proveedor es POR EMPRESA ✅ 2026-08-28
 
-El grupo migró de **Toka/EasyVale a Efectivale**, pero **cada empresa puede estar
-con un proveedor distinto**: al 2026-08-28 **PML está en Efectivale y Marlin
-regresó a Toka** (decisión del usuario, "solo por esta semana"). La config vive
-en `lib/nomina/empresas.tsx`:
+El grupo migró de **Toka/EasyVale a Efectivale** y desde **2026-09-04 las DOS
+empresas están en Efectivale** (PML cliente `122006-1`, Marlin cliente
+`121963-1`; entre el 28-ago y el 4-sep Marlin regresó temporalmente a Toka).
+La config sigue siendo POR EMPRESA en `lib/nomina/empresas.tsx`:
 
 ```ts
 vales?: { proveedor: 'efectivale'; cliente: string }
@@ -1999,10 +1999,11 @@ genera archivo (mejor eso que mandar la dispersión a una cuenta equivocada).
   `id_toka`, migración `20260828120000`). La etiqueta de la ficha y el botón de
   exportar dicen el proveedor de la empresa activa, para que nadie capture el
   número del proveedor equivocado.
-- ⚠️ **Al renombrar la columna, los números viejos de Toka se quedaron dentro.**
-  Quien no tenga número nuevo sigue con el de Toka en el campo que ahora dice
-  Efectivale. Por eso Marlin pudo regresar a Toka sin perder nada — pero si un
-  día migra, hay que reemplazar los 39.
+- ⚠️ **Al renombrar la columna, los números viejos de Toka se quedaron dentro**
+  — eso permitió el regreso temporal de Marlin a Toka sin perder nada. Ya no
+  aplica: al migrar Marlin (2026-09-04) todos los activos con número traen el
+  de Efectivale, y a quien no recibió tarjeta se le dejó NULL (nunca un Toka
+  viejo, que la dispersión mandaría a tarjeta equivocada).
 - **Layout Efectivale** (`.xls` BIFF8 real, no un xlsx renombrado): `A1 XSUBTOTAL |
   B1 <suma>`, `A2 XCLIENTE|XTIPOPEDIDO|XNUMERO|XIMPORTE`, y cada renglón
   `<cliente>|DISPERSION|<número TEXTO relleno a 20>|<importe>`. **El número como
@@ -2021,10 +2022,13 @@ genera archivo (mejor eso que mandar la dispersión a una cuenta equivocada).
   **limpió el número viejo de Toka** para que la dispersión Efectivale no los
   mandara a tarjetas equivocadas: García Osuna Lucio (era 1), Jorge Guzmán
   Ortiz (21) y Alondra Jiménez Reyes (124) — pedirles tarjeta a Efectivale;
-  mientras, salen en el aviso "sin número" del export. 9 activos en total sin
-  número. **Falta SOLO el número de cliente Efectivale de Marlin** (equivalente
-  al `122006-1` de PML) para voltear `empresas.tsx`; hasta entonces el export
-  de Marlin sigue en formato Toka (que ya no sirve — no exportar).
+  mientras, salen en el aviso "sin número" del export. **Cerrado el mismo día**: el usuario pasó
+  el cliente de Marlin (`121963-1`) y `empresas.tsx` quedó volteado — **Marlin
+  exporta formato Efectivale desde 2026-09-04**. Ajustes finales por decisión
+  del usuario: Jorge Guzmán Ortiz → **803829** (tarjeta del paquete sin
+  asignar); Lucio y Alondra (última semana) quedan **sin número** a propósito —
+  salen en el aviso "sin número" del export y no van en el archivo. Total: 37
+  activos con número (803790-803829), 8 sin.
 
 ### 18.11b Baja de empleado: sale de las nóminas ABIERTAS, las timbradas son historia ✅ 2026-09-04
 
