@@ -4,14 +4,17 @@ import { supabase, dbNomina } from '@/lib/nomina/db';
 import { getEmpresa } from '@/lib/nomina/empresas';
 
 // Genera y descarga un .xlsx a partir de una matriz [filas][columnas].
-export function descargarXLSX(aoa: (string | number)[][], sheetName: string, filename: string) {
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+export function descargarXLSXHojas(hojas: { nombre: string; aoa: (string | number)[][] }[], filename: string) {
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+  hojas.forEach((h) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(h.aoa), h.nombre.slice(0, 31)));
   // `.xls` se escribe como BIFF8 (el formato viejo de Excel), no como xlsx
   // renombrado: el portal de Efectivale espera el archivo tal cual su plantilla.
   const bookType = filename.toLowerCase().endsWith('.xls') ? 'biff8' : 'xlsx';
   XLSX.writeFile(wb, filename, { bookType });
+}
+
+export function descargarXLSX(aoa: (string | number)[][], sheetName: string, filename: string) {
+  descargarXLSXHojas([{ nombre: sheetName, aoa }], filename);
 }
 
 // Formatos de impresión / exportación de la nómina.

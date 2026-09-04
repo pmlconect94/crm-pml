@@ -8,6 +8,7 @@ import { calcEdad, fmtFecha, nomexLabel } from '@/lib/nomina/format';
 import { Icon } from '@/components/Icon';
 import { PageEnter } from '@/components/motion';
 import { SueldoModal } from './SueldoModal';
+import { descargarXLSX } from './tabs/printNomina';
 
 const ESQUEMAS = ['Semanal', 'Quincenal'];
 const SEXOS = ['Masculino', 'Femenino'];
@@ -185,6 +186,29 @@ export function EmpleadosPage() {
   const f = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }));
   const edad = calcEdad(form.fecha_nacimiento);
 
+  // Excel con la ficha BÁSICA de los empleados que muestra el filtro actual.
+  // A propósito NO lleva sueldos (sd_real/sd_fiscal/vales/previsión/infonavit),
+  // ni cuentas bancarias, ni números de dispersión (id_banco/id_efectivale/
+  // id_nomex) — eso vive en las fichas protegidas con contraseña.
+  function exportEmpleados() {
+    if (!lista.length) { toast.error('No hay empleados con el filtro actual.'); return; }
+    const aoa: (string | number)[][] = [[
+      'Nombre', 'Estado', 'Área', 'Puesto', 'Fecha ingreso', 'Esquema de pago', 'Razón social',
+      'Ubicación', 'Turno', 'Horario', 'Jefe inmediato', 'Alta IMSS', 'RFC', 'CURP', 'NSS',
+      'Fecha nacimiento', 'Sexo', 'Estado civil', 'Escolaridad', 'Domicilio', 'Colonia',
+      'Municipio', 'CP', 'Teléfono', 'Correo', 'Contacto emergencia', 'Parentesco', 'Tel. emergencia',
+    ]];
+    lista.forEach((e: any) => aoa.push([
+      e.nombre || '', e.activo ? 'Activo' : 'Baja', e.area || '', e.puesto || '', e.fecha_ingreso || '',
+      e.esquema_pago || '', e.razon_social || '', e.ubicacion || '', e.turno ?? '', e.horario || '',
+      e.jefe_inmediato || '', e.alta_imss ? 'Sí' : 'No', e.rfc || '', e.curp || '', e.nss || '',
+      e.fecha_nacimiento || '', e.sexo || '', e.estado_civil || '', e.escolaridad || '',
+      e.domicilio || '', e.colonia || '', e.municipio || '', e.codigo_postal || '',
+      e.telefono || '', e.correo || '', e.contacto_nombre || '', e.contacto_parentesco || '', e.contacto_telefono || '',
+    ]));
+    descargarXLSX(aoa, 'Empleados', `empleados_${empresa.toLowerCase()}_${filtro}.xlsx`);
+  }
+
   return (
     <PageEnter>
       <div className="page-header">
@@ -198,6 +222,7 @@ export function EmpleadosPage() {
             <Icon name="search" size={15} style={{ color: 'var(--ink-400)' }} />
             <input name="buscar_empleado_x" autoComplete="off" placeholder="Buscar nombre, puesto, RFC…" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
           </form>
+          <button className="btn btn-outline btn-sm" onClick={exportEmpleados} title="Ficha básica — sin sueldos ni cuentas bancarias"><Icon name="download" size={13} /> Excel</button>
           {canEdit && <button className="btn btn-primary" onClick={abrirNuevo}><Icon name="user-plus" size={15} /> Agregar</button>}
         </div>
       </div>

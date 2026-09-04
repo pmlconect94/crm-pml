@@ -72,7 +72,10 @@ export function NominaDetallePage() {
 
     const esquema = sem.tipo === 'semanal' ? 'Semanal' : 'Quincenal';
     const [empRes, nomRes, viajesRes, prestRes, descRes, bonoRes, retroRes, bpRes, bxRes, omitRes, permRes] = await Promise.all([
-      dbNomina.from('empleados').select('*').eq('activo', true).eq('esquema_pago', esquema).eq('empresa', sem.empresa).order('id_banco', { ascending: true, nullsFirst: false }),
+      // Sin filtro de `activo`: en una TIMBRADA el que se dispersó se pinta aunque
+      // hoy esté de baja (la baja no reescribe la historia); abajo se decide quién
+      // se muestra según el status de la semana.
+      dbNomina.from('empleados').select('*').eq('esquema_pago', esquema).eq('empresa', sem.empresa).order('id_banco', { ascending: true, nullsFirst: false }),
       dbNomina.from('nominas').select('*').eq('semana_id', sem.id),
       dbNomina.from('viajes').select('*').eq('semana_id', sem.id),
       dbNomina.from('prestamos').select('*, empleado:empleado_id(nombre,area)').eq('activo', true),
@@ -110,17 +113,23 @@ export function NominaDetallePage() {
       );
     }
 
-    setEmpleados(empRes.data || []);
+    const todosEmp: any[] = empRes.data || [];
+    const activosEmp = todosEmp.filter((e: any) => e.activo);
 
     // Asegura que TODO empleado activo de este esquema tenga su fila en `nominas`
     // (p.ej. si se dio de alta DESPUÉS de crear la nómina). Solo si sigue abierta.
     let nominasData: any[] = nomRes.data || [];
     const conNomina = new Set(nominasData.map((n: any) => n.empleado_id));
-    const faltantes = (empRes.data || []).filter((e: any) => !conNomina.has(e.id));
+    const faltantes = activosEmp.filter((e: any) => !conNomina.has(e.id));
     if (faltantes.length && sem.status !== 'timbrada') {
       const { data: nuevas } = await dbNomina.from('nominas').insert(faltantes.map((e: any) => ({ semana_id: sem.id, empleado_id: e.id }))).select();
       if (nuevas?.length) nominasData = [...nominasData, ...nuevas];
     }
+
+    // TIMBRADA: mandan los renglones guardados — se pinta todo empleado que quedó
+    // en ella, siga activo o no. ABIERTA: solo activos (la baja borra su renglón).
+    const enNomina = new Set(nominasData.map((n: any) => n.empleado_id));
+    setEmpleados(sem.status === 'timbrada' ? todosEmp.filter((e: any) => enNomina.has(e.id)) : activosEmp);
 
     const nomMap: any = {}; nominasData.forEach((n: any) => (nomMap[n.empleado_id] = n)); setNominas(nomMap);
 

@@ -7,7 +7,7 @@ import { Icon } from '@/components/Icon';
 import { useAuth } from '@/lib/nomina/auth';
 import { useRhPermisos } from '@/lib/nomina/permisos';
 import { useEmpresa } from '@/lib/nomina/empresas';
-import { descargarXLSX } from './tabs/printNomina';
+import { descargarXLSX, descargarXLSXHojas } from './tabs/printNomina';
 
 const COSTO_COMEDOR = 30;
 
@@ -240,18 +240,47 @@ export function DashboardPage() {
     descargarXLSX(aoa, 'Comedor', `comedor_${empresa}_${mes}.xlsx`);
   }
 
-  // Incidencias: matriz empleados × tipo de incidencia (del mes) con su valor.
+  // Incidencias del mes: hoja Resumen (matriz empleado × tipo) + hoja Detalle
+  // (cada incidencia con su fecha y motivo — feedback del usuario 2026-09-04).
   function exportIncidencias() {
     const nombres = new Set<string>();
     tiles.forEach((t) => t.list.forEach((p: any) => nombres.add(p.nombre)));
-    if (!nombres.size) { alert(`No hay incidencias en ${mesLabel(mes)}.`); return; }
+
+    // Detalle: un renglón por incidencia. 'A' (asistencia) y 'D' (descanso) no
+    // son incidencias; SUS sí existe en los datos aunque no tenga tile.
+    const CODIGO_LABEL: Record<string, string> = {
+      F: 'Falta', INC: 'Incapacidad', V: 'Vacaciones',
+      PCG: 'Permiso c/goce', PSG: 'Permiso s/goce', SUS: 'Suspensión',
+    };
+    const filas: { fecha: string; nom: string; tipo: string; cant: number; unidad: string; motivo: string }[] = [];
+    for (const a of asis) {
+      if (mesKey(a.fecha) !== mes) continue;
+      const nom = nombre(nomMap[a.nomina_id]);
+      if (a.codigo && a.codigo !== 'A' && a.codigo !== 'D') {
+        filas.push({ fecha: a.fecha, nom, tipo: CODIGO_LABEL[a.codigo] || a.codigo, cant: 1, unidad: 'día', motivo: '' });
+      }
+      const te = N(a.te_horas);
+      if (te > 0) filas.push({ fecha: a.fecha, nom, tipo: 'Horas extra', cant: te, unidad: 'h', motivo: (a.te_motivo || '').trim() });
+      const ret = N(a.retardo_min);
+      if (ret > 0) filas.push({ fecha: a.fecha, nom, tipo: 'Retardo', cant: ret, unidad: 'h', motivo: '' });
+    }
+    if (!nombres.size && !filas.length) { alert(`No hay incidencias en ${mesLabel(mes)}.`); return; }
+
     const aoa: (string | number)[][] = [['Empleado', ...tiles.map((t) => `${t.label}${t.unit ? ` (${t.unit})` : ''}`)]];
     [...nombres].sort((a, b) => a.localeCompare(b)).forEach((nom) => {
       const row: (string | number)[] = [nom];
       tiles.forEach((t) => { const f = t.list.find((p: any) => p.nombre === nom); row.push(f ? f.value : 0); });
       aoa.push(row);
     });
-    descargarXLSX(aoa, 'Incidencias', `incidencias_${empresa}_${mes}.xlsx`);
+
+    filas.sort((x, y) => x.nom.localeCompare(y.nom) || x.fecha.localeCompare(y.fecha));
+    const det: (string | number)[][] = [['Fecha', 'Empleado', 'Incidencia', 'Cantidad', 'Unidad', 'Motivo']];
+    filas.forEach((f) => det.push([f.fecha, f.nom, f.tipo, f.cant, f.unidad, f.motivo]));
+
+    descargarXLSXHojas(
+      [{ nombre: 'Resumen', aoa }, { nombre: 'Detalle', aoa: det }],
+      `incidencias_${empresa}_${mes}.xlsx`,
+    );
   }
 
   const btnExcel = (onClick: () => void) => (

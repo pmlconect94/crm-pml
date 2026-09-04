@@ -2014,6 +2014,37 @@ genera archivo (mejor eso que mandar la dispersión a una cuenta equivocada).
   **Marlin pendiente**: 39 activos con número de Toka; para migrarlo faltan sus
   números nuevos y su número de cliente de Efectivale.
 
+### 18.11b Baja de empleado: sale de las nóminas ABIERTAS, las timbradas son historia ✅ 2026-09-04
+
+**Regla (decisión del usuario):** al dar de baja a un empleado (`SueldoModal.darBaja`), su renglón
+se **borra de todas las semanas con `status='abierta'`** (de cualquier empresa/esquema — solo tiene
+renglones donde le tocaba) y todo lo capturado en él cae en **CASCADE** (asistencias, comedor,
+bonos, retroactivos, descuentos de préstamo — verificado en los FKs). Las semanas **timbradas NO se
+tocan**: si ya se dispersó con él, ahí se queda para siempre.
+
+> **🐛 Lo que destapó este cambio:** `NominaDetallePage` traía los empleados con `.eq('activo',
+> true)` y la tabla se pinta desde esa lista, así que **dar de baja borraba al empleado también de
+> las nóminas TIMBRADAS** (visualmente y en los reportes/impresiones) — su renglón seguía en la BD
+> pero nadie lo pintaba. La historia mentía. Ahora el fetch va **sin filtro de activo** y la lista
+> visible se decide por status: **timbrada** = todo empleado con renglón en `nominas` (siga activo o
+> no); **abierta** = solo activos (los de baja ya no tienen renglón). El auto-insert de `faltantes`
+> sigue calculándose SOLO sobre activos (si no, re-metería a los dados de baja). Efecto colateral
+> bueno: los empleados dados de baja ANTES de este cambio **reaparecen en sus nóminas timbradas
+> históricas** (sus renglones nunca se borraron). Verificado: al aplicar el cambio no había ningún
+> renglón huérfano de inactivo en semanas abiertas.
+
+De pilón, dos exports nuevos (mismo patrón `descargarXLSX`; el helper ganó `descargarXLSXHojas`
+para libros multi-hoja):
+- **Incidencias del mes** (RH → Resumen, botón Excel que ya existía): ahora baja 2 hojas —
+  **Resumen** (matriz empleado × tipo, igual que antes) y **Detalle** (un renglón por incidencia:
+  fecha, empleado, tipo, cantidad, unidad, motivo de HE). Códigos reales en datos: F/INC/V/PCG/PSG
+  **y SUS (Suspensión, sin tile pero sale en el detalle)**; `A` y `D` no son incidencias. Ojo:
+  `retardo_min` se captura en **HORAS** pese al nombre de la columna (así lo dice TabAsistencias).
+- **Empleados** (RH → Empleados, botón Excel junto a Agregar): ficha **BÁSICA** de lo que muestre el
+  filtro actual (activos/bajas/todos + búsqueda). A propósito **NO lleva** sueldos
+  (sd_real/sd_fiscal/vales/previsión/infonavit), ni cuentas bancarias (`banco_*`), ni números de
+  dispersión (`id_banco`/`id_efectivale`/`id_nomex`) — eso vive en las fichas protegidas.
+
 ### 18.11 Cuándo empieza a descontarse un préstamo ✅ 2026-08-14
 
 Un préstamo no se descuenta de inmediato: hay una **espera** de 7 días (`tipo='semanal'`) o 15

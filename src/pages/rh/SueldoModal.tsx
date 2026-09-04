@@ -149,7 +149,7 @@ export function SueldoModal({ empleado, onClose, onChanged }: { empleado: any; o
   }
 
   async function darBaja() {
-    if (!confirm(`¿Dar de baja a ${empleado.nombre}? Quedará inactivo en el catálogo.`)) return;
+    if (!confirm(`¿Dar de baja a ${empleado.nombre}? Quedará inactivo en el catálogo y se le quitará de las nóminas ABIERTAS. Las ya guardadas (dispersadas) no se tocan.`)) return;
     setSaving(true);
     if (vigente) await dbNomina.from('empleado_sueldo_movimientos').update({ fecha_fin: hoy }).eq('id', vigente.id);
     await dbNomina.from('empleado_sueldo_movimientos').insert({
@@ -157,8 +157,29 @@ export function SueldoModal({ empleado, onClose, onChanged }: { empleado: any; o
       sueldo_diario_real: 0, sueldo_diario_fiscal: 0, sdi: 0,
       nota: 'Baja del empleado', changed_by: user?.id, changed_by_nombre: user?.nombre,
     });
-    await dbNomina.from('empleados').update({ activo: false }).eq('id', empleado.id);
-    toast.success('Empleado dado de baja');
+    const { error: eBaja } = await dbNomina.from('empleados').update({ activo: false }).eq('id', empleado.id);
+    if (eBaja) { toast.error('NO se guardó la baja: ' + eBaja.message); setSaving(false); return; }
+
+    // Quitarlo de las nóminas todavía ABIERTAS: su renglón se borra y todo lo
+    // capturado en él (asistencias, comedor, bonos, retroactivos, descuentos de
+    // préstamo) cae en cascada. Las TIMBRADAS no se tocan — si ya se dispersó
+    // con él, es historia y ahí se queda.
+    let quitadas = 0;
+    const { data: abiertas, error: eSem } = await dbNomina.from('semanas').select('id').eq('status', 'abierta');
+    if (eSem) toast.error('La baja quedó, pero no se pudieron leer las nóminas abiertas: ' + eSem.message);
+    else if (abiertas?.length) {
+      const { data: borradas, error: eDel } = await dbNomina
+        .from('nominas')
+        .delete()
+        .eq('empleado_id', empleado.id)
+        .in('semana_id', abiertas.map((x: any) => x.id))
+        .select('id');
+      if (eDel) toast.error('La baja quedó, pero NO se le pudo quitar de las nóminas abiertas: ' + eDel.message);
+      else quitadas = (borradas || []).length;
+    }
+    toast.success(quitadas
+      ? `Empleado dado de baja — se quitó de ${quitadas} nómina${quitadas === 1 ? '' : 's'} abierta${quitadas === 1 ? '' : 's'}`
+      : 'Empleado dado de baja');
     setSaving(false); fetchMovs(); onChanged();
   }
 
