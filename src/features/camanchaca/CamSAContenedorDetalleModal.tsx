@@ -101,6 +101,7 @@ export function CamSAContenedorDetalleModal({
   const totalInternado = fobMxn != null ? fobMxn + costoImp : null;
   const totalKg = Number(c?.total_kg ?? 0);
   const costoKg = totalInternado != null && totalKg > 0 ? totalInternado / totalKg : null;
+  const costoKgSin = fobMxn != null && totalKg > 0 ? fobMxn / totalKg : null;
 
   return (
     <AnimatePresence>
@@ -262,7 +263,7 @@ export function CamSAContenedorDetalleModal({
                       }}
                     >
                       <div>
-                        <div className="text-xs muted">FOB (USD × TC)</div>
+                        <div className="text-xs muted">Costo sin importación (FOB)</div>
                         <div className="mono fw-700">{fmtMXN(fobMxn)}</div>
                       </div>
                       <div>
@@ -270,11 +271,15 @@ export function CamSAContenedorDetalleModal({
                         <div className="mono fw-700">{fmtMXN(costoImp)}</div>
                       </div>
                       <div>
-                        <div className="text-xs muted">Total internado</div>
+                        <div className="text-xs muted">Costo con importación</div>
                         <div className="mono fw-700" style={{ color: 'var(--blue-500)' }}>{fmtMXN(totalInternado)}</div>
                       </div>
                       <div>
-                        <div className="text-xs muted">Costo MXN/kg</div>
+                        <div className="text-xs muted">MXN/kg sin importación</div>
+                        <div className="mono fw-700">{fmtMXN(costoKgSin)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs muted">MXN/kg con importación</div>
                         <div className="mono fw-700" style={{ color: 'var(--blue-500)' }}>{fmtMXN(costoKg)}</div>
                       </div>
                     </div>

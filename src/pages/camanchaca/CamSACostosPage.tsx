@@ -461,7 +461,8 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
               <th style={{ textAlign: 'right' }}>Costo sin importación</th>
               <th style={{ textAlign: 'right' }}>Importación</th>
               <th style={{ textAlign: 'right' }}>Costo con importación</th>
-              <th style={{ textAlign: 'right' }}>Costo MXN/kg</th>
+              <th style={{ textAlign: 'right' }}>MXN/kg sin imp.</th>
+              <th style={{ textAlign: 'right' }}>MXN/kg con imp.</th>
             </tr>
           </thead>
           <tbody>
@@ -475,6 +476,9 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
               const fobMxn = firme ? c.sinImportacionMxn : null;
               const totalMxn = tcUsado != null ? c.total_usd * tcUsado + c.costoImportacionMxn : null;
               const costoKg = totalMxn != null && c.total_kg > 0 ? totalMxn / c.total_kg : null;
+              // $/kg sin importación: misma regla que la columna de totales — solo
+              // con TC firme (liquidado o forward); si sigue expuesto, "Pendiente".
+              const costoKgSin = fobMxn != null && c.total_kg > 0 ? fobMxn / c.total_kg : null;
               const colMxn = estimado ? '#92400E' : 'var(--blue-500)';
               const pendiente = <span className="text-xs muted" style={{ fontStyle: 'italic' }}>Pendiente</span>;
               return (
@@ -514,6 +518,13 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
                           ? <>{fmtMXN(totalMxn)}<span className="text-xs"> est.</span></>
                           : pendiente}
                     </td>
+                    <td style={{ textAlign: 'right' }} className="mono fw-600">
+                      {costoKgSin != null ? (
+                        <span style={{ color: 'var(--blue-500)' }}>{fmtMXN(costoKgSin)}</span>
+                      ) : (
+                        pendiente
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', color: colMxn }} className="mono fw-700">
                       {costoKg != null ? (
                         <>
@@ -527,7 +538,7 @@ function ContenedoresView({ contenedores, tcEstimado }: { contenedores: Contened
                   </tr>
                   {isExp && (
                     <tr>
-                      <td colSpan={9} style={{ padding: 0, background: 'var(--ink-50)' }}>
+                      <td colSpan={10} style={{ padding: 0, background: 'var(--ink-50)' }}>
                         <table className="tbl" style={{ margin: 0 }}>
                           <thead>
                             <tr>

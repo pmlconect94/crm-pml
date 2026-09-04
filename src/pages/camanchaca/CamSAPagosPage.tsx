@@ -7,7 +7,7 @@ import { DeleteConfirmModal } from '@/components/DeleteConfirmModal';
 import { StatStrip } from '@/components/StatStrip';
 import { useAuth } from '@/lib/auth';
 import { getTcDelDiaInfo } from '@/lib/tc';
-import { fmtUSD, fmtMXN, fmtFechaCorta, diasDesde } from '@/lib/format';
+import { fmtUSD, fmtMXN, fmtFecha, fmtFechaCorta, diasDesde } from '@/lib/format';
 import {
   fetchPagosSA,
   fetchForwardsSA,
@@ -20,14 +20,257 @@ import {
   type CamForwardSAEnriquecido,
   type CamCostoImportacionEnriquecido,
 } from '@/features/camanchaca/sa-pagos-queries';
-import { fetchContenedoresConPendienteSA } from '@/features/camanchaca/sa-queries';
+import { fetchContenedoresConPendienteSA, type ContenedorConPendiente } from '@/features/camanchaca/sa-queries';
 import { fetchCostosDataSA, type ContenedorCostoSA } from '@/features/camanchaca/sa-costos-queries';
 import { CamSAPagoModal } from '@/features/camanchaca/CamSAPagoModal';
 import { CamSAForwardModal } from '@/features/camanchaca/CamSAForwardModal';
 import { CamSAAsignarForwardModal } from '@/features/camanchaca/CamSAAsignarForwardModal';
 import { CamSACostoImportacionModal } from '@/features/camanchaca/CamSACostoImportacionModal';
 
-type View = 'pagos' | 'forwards' | 'importacion' | 'comparacion';
+type View = 'pendientes' | 'pagos' | 'forwards' | 'importacion' | 'comparacion';
+
+/* ─── Pendientes por semana de vencimiento (mismo patrón que Blufin) ───────── */
+
+/** Lunes (mediodía local) de la semana que contiene la fecha ISO dada. */
+function lunesDe(iso: string): Date {
+  const d = new Date(iso + 'T12:00:00');
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = (x.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function isoLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function addDias(iso: string, n: number): string {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return isoLocal(d);
+}
+
+type GrupoSemanaSA = {
+  key: string;
+  kind: 'atrasado' | 'semana' | 'sinfecha';
+  label: string;
+  esActual: boolean;
+  items: (ContenedorConPendiente & { restante: number })[];
+  total: number;
+};
+
+function PendientesView({
+  pendientes,
+  forwards,
+  onPagar,
+}: {
+  pendientes: ContenedorConPendiente[];
+  forwards: CamForwardSAEnriquecido[];
+  onPagar: (contenedorId: string) => void;
+}) {
+  const { grupos, totalSemana, totalAtrasado } = useMemo(() => {
+    // Restante REAL = total − pagado − NCs (la misma cuenta que la lista de
+    // contenedores); Camanchaca no maneja anticipos, así que es un solo monto.
+    const items = pendientes.map((c) => ({
+      ...c,
+      restante: Math.max(0, Number(c.total_usd ?? 0) - c.pagado - c.ncAplicado),
+    }));
+
+    const lunesHoyISO = isoLocal(lunesDe(isoLocal(new Date())));
+    const atrasado: typeof items = [];
+    const sinFecha: typeof items = [];
+    const semanas = new Map<string, typeof items>();
+    for (const it of items) {
+      if (!it.fecha_vencimiento) {
+        sinFecha.push(it);
+        continue;
+      }
+      const lunISO = isoLocal(lunesDe(it.fecha_vencimiento));
+      if (lunISO < lunesHoyISO) atrasado.push(it);
+      else {
+        const arr = semanas.get(lunISO);
+        if (arr) arr.push(it);
+        else semanas.set(lunISO, [it]);
+      }
+    }
+
+    const porFecha = (a: (typeof items)[number], b: (typeof items)[number]) =>
+      (a.fecha_vencimiento ?? '').localeCompare(b.fecha_vencimiento ?? '') ||
+      a.folio_interno.localeCompare(b.folio_interno);
+    const sum = (arr: typeof items) => arr.reduce((t, it) => t + it.restante, 0);
+
+    atrasado.sort(porFecha);
+    sinFecha.sort((a, b) => a.folio_interno.localeCompare(b.folio_interno));
+
+    const gs: GrupoSemanaSA[] = [];
+    if (atrasado.length) {
+      gs.push({ key: 'atrasado', kind: 'atrasado', label: 'Atrasado', esActual: false, items: atrasado, total: sum(atrasado) });
+    }
+    for (const lunISO of [...semanas.keys()].sort()) {
+      const arr = semanas.get(lunISO)!;
+      arr.sort(porFecha);
+      const esActual = lunISO === lunesHoyISO;
+      gs.push({
+        key: lunISO,
+        kind: 'semana',
+        label: esActual ? 'Esta semana' : `Semana del ${fmtFechaCorta(lunISO)} al ${fmtFechaCorta(addDias(lunISO, 6))}`,
+        esActual,
+        items: arr,
+        total: sum(arr),
+      });
+    }
+    if (sinFecha.length) {
+      gs.push({ key: 'sinfecha', kind: 'sinfecha', label: 'Sin fecha de vencimiento', esActual: false, items: sinFecha, total: sum(sinFecha) });
+    }
+
+    const sem = gs.find((g) => g.esActual);
+    return { grupos: gs, totalSemana: sem?.total ?? 0, totalAtrasado: atrasado.length ? sum(atrasado) : 0 };
+  }, [pendientes]);
+
+  if (pendientes.length === 0) {
+    return (
+      <div className="card">
+        <div className="empty">
+          <Icon name="check-circle" size={36} />
+          <div className="empty-title">Sin pagos pendientes</div>
+          <p className="muted">Todos los contenedores están liquidados.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="vstack" style={{ gap: 12 }}>
+      <div className="hstack" style={{ justifyContent: 'flex-end' }}>
+        <StatStrip
+          style={{ marginBottom: 0 }}
+          stats={[
+            { value: fmtUSD(totalSemana), label: 'esta semana', color: totalSemana > 0 ? 'var(--blue-500)' : undefined },
+            { value: fmtUSD(totalAtrasado), label: 'atrasado', color: totalAtrasado > 0 ? 'var(--red-500)' : undefined },
+          ]}
+        />
+      </div>
+
+      {grupos.map((g) => {
+        const accent =
+          g.kind === 'atrasado' ? 'var(--red-500)' : g.esActual ? 'var(--blue-500)' : g.kind === 'sinfecha' ? 'var(--ink-400)' : 'var(--ink-300)';
+        const headerBg =
+          g.kind === 'atrasado'
+            ? 'color-mix(in srgb, var(--red-500) 7%, white)'
+            : g.esActual
+              ? 'color-mix(in srgb, var(--blue-500) 7%, white)'
+              : 'var(--ink-50)';
+        const resaltado = g.esActual || g.kind === 'atrasado';
+        return (
+          <div key={g.key} className="card" style={resaltado ? { borderColor: accent } : undefined}>
+            <div
+              style={{
+                padding: '10px 16px',
+                borderBottom: '1px solid var(--ink-100)',
+                background: headerBg,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div className="hstack" style={{ gap: 8, alignItems: 'center' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: accent, display: 'inline-block', flexShrink: 0 }} />
+                <span className="fw-700" style={{ fontSize: 13, color: g.kind === 'atrasado' ? 'var(--red-500)' : 'var(--ink-900)' }}>
+                  {g.label}
+                </span>
+                <span className="text-xs muted">
+                  {g.items.length} contenedor{g.items.length !== 1 ? 'es' : ''}
+                </span>
+              </div>
+              <span className="mono fw-700" style={{ fontSize: 13 }}>{fmtUSD(g.total)}</span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {g.items.map((it, i) => {
+                const dias = diasDesde(it.fecha_vencimiento);
+                const vencido = dias !== null && dias < 0;
+                const proximo = dias !== null && dias >= 0 && dias <= 3;
+                const fwd = forwards.find((f) => f.contenedor_id === it.id && f.status === 'Pendiente');
+                return (
+                  <div
+                    key={it.id}
+                    style={{
+                      padding: '10px 16px',
+                      borderBottom: i < g.items.length - 1 ? '1px solid var(--ink-100)' : 'none',
+                      display: 'grid',
+                      gridTemplateColumns: '150px 1fr 1fr 110px',
+                      gap: 16,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <div className="mono fw-700" style={{ fontSize: 13 }}>{it.folio_interno}</div>
+                      <div className="text-xs muted" style={{ marginTop: 2 }}>{it.status}</div>
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="mono fw-700" style={{ fontSize: 15 }}>{fmtUSD(it.restante)}</div>
+                      <div
+                        className="text-xs muted"
+                        style={{ marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        Vence {fmtFecha(it.fecha_vencimiento)}
+                        {(it.factura || it.oc_proveedor) && (
+                          <span style={{ color: 'var(--ink-400)' }}>
+                            {it.factura ? ` · Factura ${it.factura}` : ''}
+                            {it.oc_proveedor ? ` · OC ${it.oc_proveedor}` : ''}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      {fwd ? (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: 2,
+                            padding: '6px 10px',
+                            background: 'color-mix(in srgb, var(--amber-500) 8%, white)',
+                            border: '1px solid color-mix(in srgb, var(--amber-500) 30%, white)',
+                            borderRadius: 'var(--r-sm)',
+                          }}
+                        >
+                          <div className="text-xs fw-700" style={{ color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Forward cerrado para {fmtFechaCorta(fwd.fecha_entrega)}
+                          </div>
+                          <div className="text-xs muted">
+                            TC pactado <span className="mono fw-600" style={{ color: 'var(--ink-700)' }}>{Number(fwd.tc_forward ?? 0).toFixed(4)}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        dias !== null && (
+                          <div
+                            className="text-xs fw-600"
+                            style={{ color: vencido ? 'var(--red-500)' : proximo ? 'var(--amber-500)' : 'var(--ink-500)' }}
+                          >
+                            {vencido ? `Vencido hace ${-dias}d` : dias === 0 ? 'Vence hoy' : `En ${dias} días`}
+                          </div>
+                        )
+                      )}
+                    </div>
+                    <div className="hstack" style={{ gap: 6, justifySelf: 'end' }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => onPagar(it.id)}>
+                        <Icon name="banknote" size={13} /> {fwd ? 'Pagar spot' : 'Pagar'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function BancoTag({ nombre }: { nombre: string | undefined }) {
   if (!nombre) return <span className="text-xs muted">—</span>;
@@ -53,7 +296,7 @@ function BancoTag({ nombre }: { nombre: string | undefined }) {
 export function CamSAPagosPage() {
   const { empresaId } = useAuth();
   const qc = useQueryClient();
-  const [view, setView] = useState<View>('pagos');
+  const [view, setView] = useState<View>('pendientes');
   const [pagoOpen, setPagoOpen] = useState(false);
   const [forwardOpen, setForwardOpen] = useState(false);
   const [asignarTarget, setAsignarTarget] = useState<CamForwardSAEnriquecido | null>(null);
@@ -179,6 +422,7 @@ export function CamSAPagosPage() {
       <div className="tabs" style={{ marginBottom: 12 }}>
         {(
           [
+            { id: 'pendientes', label: 'Pendientes', icon: 'wallet' },
             { id: 'pagos', label: 'Pagos', icon: 'banknote' },
             { id: 'forwards', label: 'Forwards', icon: 'calendar' },
             { id: 'importacion', label: 'Costo importación', icon: 'truck' },
@@ -191,6 +435,10 @@ export function CamSAPagosPage() {
           </button>
         ))}
       </div>
+
+      {view === 'pendientes' && (
+        <PendientesView pendientes={pendientes} forwards={forwards} onPagar={(id) => openPago(id)} />
+      )}
 
       {view === 'pagos' && (
         <PagosView

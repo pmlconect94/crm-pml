@@ -9,7 +9,7 @@ export async function fetchRecepcionesSA(empresaId: string): Promise<CamRecepcio
     .from('cam_recepcion_sa')
     .select(
       'id, contenedor_id, fecha, bodega_id, entrada_intelisis, presentacion_recibida, observaciones, capturado_por, created_at, ' +
-        'contenedor:cam_contenedores_sa!inner(folio_interno, empresa_id, presentacion, total_kg), ' +
+        'contenedor:cam_contenedores_sa!inner(folio_interno, factura, oc_proveedor, empresa_id, presentacion, total_kg), ' +
         'bodega:bodegas(nombre), ' +
         'lineas:cam_recepcion_sa_lineas(*, sku:catalogo_sku(code, descripcion))',
     )

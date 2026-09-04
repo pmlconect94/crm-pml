@@ -1264,7 +1264,7 @@ export type CamNcSaInsert = Database['crm']['Tables']['cam_nc_sa']['Insert'];
 
 export type CamContenedorSAConProductos = CamContenedorSA & { productos?: CamProductoSA[] };
 export type CamRecepcionSAEnriquecida = CamRecepcionSA & {
-  contenedor?: { folio_interno: string; presentacion: string | null; total_kg: number | null } | null;
+  contenedor?: { folio_interno: string; factura: string | null; oc_proveedor: string | null; presentacion: string | null; total_kg: number | null } | null;
   bodega?: { nombre: string } | null;
   lineas?: (CamRecepcionSALinea & { sku?: { code: string; descripcion: string } | null })[];
 };

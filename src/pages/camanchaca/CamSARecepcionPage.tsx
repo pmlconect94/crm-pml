@@ -304,7 +304,14 @@ function PorRecibirView({
                 </div>
                 <div className="hstack text-xs" style={{ gap: 8, flexWrap: 'wrap', rowGap: 4 }}>
                   <span className="muted">
-                    {[c.contenedor, c.naviera].filter(Boolean).join(' · ') || 'Contenedor por asignar'}
+                    {[
+                      c.factura ? `Factura ${c.factura}` : null,
+                      c.oc_proveedor ? `OC ${c.oc_proveedor}` : null,
+                      c.contenedor,
+                      c.naviera,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Contenedor por asignar'}
                   </span>
                   {c.bodega_destino && (
                     <span
@@ -622,6 +629,16 @@ function HistorialView({
                       >
                         {r.contenedor?.folio_interno ?? '—'}
                       </button>
+                      {(r.contenedor?.factura || r.contenedor?.oc_proveedor) && (
+                        <div className="text-xs muted">
+                          {[
+                            r.contenedor?.factura ? `Factura ${r.contenedor.factura}` : null,
+                            r.contenedor?.oc_proveedor ? `OC ${r.contenedor.oc_proveedor}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                      )}
                       <div className="text-xs muted" style={{ marginTop: 2, maxWidth: 300 }}>
                         {lineas.slice(0, 3).map((l, i) => (
                           <div key={i} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.sku?.descripcion ?? ''}>
@@ -722,6 +739,16 @@ function RecepcionDetalleModal({
             >
               <div>
                 <div className="mono fw-700 text-sm">{recepcion.contenedor?.folio_interno ?? '—'}</div>
+                {(recepcion.contenedor?.factura || recepcion.contenedor?.oc_proveedor) && (
+                  <div className="text-xs muted">
+                    {[
+                      recepcion.contenedor?.factura ? `Factura ${recepcion.contenedor.factura}` : null,
+                      recepcion.contenedor?.oc_proveedor ? `OC ${recepcion.contenedor.oc_proveedor}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                )}
                 <div className="text-xs muted" style={{ marginTop: 2 }}>
                   Recibido {fmtFecha(recepcion.fecha)} · {recepcion.bodega?.nombre ?? 'sin bodega'} · Intelisis{' '}
                   <span className="mono">{recepcion.entrada_intelisis ?? '—'}</span>

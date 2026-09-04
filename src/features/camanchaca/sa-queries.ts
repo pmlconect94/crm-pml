@@ -341,6 +341,7 @@ export type ContenedorConPendiente = {
   id: string;
   folio_interno: string;
   factura: string | null;
+  oc_proveedor: string | null;
   fecha_vencimiento: string | null;
   total_usd: number | null;
   total_kg: number | null;
@@ -365,6 +366,7 @@ export async function fetchContenedoresConPendienteSA(
         id: c.id,
         folio_interno: c.folio_interno,
         factura: c.factura,
+        oc_proveedor: c.oc_proveedor,
         fecha_vencimiento: c.fecha_vencimiento,
         total_usd: c.total_usd,
         total_kg: c.total_kg,
