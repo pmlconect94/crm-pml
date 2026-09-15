@@ -8,3 +8,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Identificador del build sellado por vite.config.ts (SHA del commit o timestamp). */
+declare const __BUILD_ID__: string;

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
+import { VersionBanner } from '@/components/VersionBanner';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ImportacionesPickerPage } from '@/pages/ImportacionesPickerPage';
@@ -60,7 +61,10 @@ import { CatalogosPage } from '@/pages/rh/CatalogosPage';
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      {/* Aviso de version nueva — vive en la raiz para cubrir tambien el login. */}
+      <VersionBanner />
+      <Routes>
       <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
       <Route path="/login" element={<LoginPage />} />
 
@@ -157,5 +161,6 @@ export default function App() {
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </>
   );
 }

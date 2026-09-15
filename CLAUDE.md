@@ -1588,6 +1588,23 @@ Usar `<Combobox>` (`src/components/Combobox.tsx`) — input+datalist genérico q
 **Cuando un modal/overlay se cierra al hacer clic en el backdrop:**
 NUNCA poner `onClick={onClose}` directo en el `motion.div` del overlay. Si el usuario arrastra para seleccionar el texto de un input y **suelta el cursor sobre el fondo**, el navegador dispara un `click` cuyo `target` es el overlay y el modal se cierra solo ("seleccionar texto me saca de la ventana", bug 2026-06-15). Usar `useBackdropDismiss` (`src/lib/useBackdropDismiss.ts`): un hook que devuelve `{ onMouseDown, onClick }` y solo cierra cuando el gesto **empezó Y terminó sobre el propio overlay** (`e.target === e.currentTarget` en mousedown **y** en click). Patrón: (1) `const backdrop = useBackdropDismiss(onClose)` al **tope del componente** (regla de hooks — antes de cualquier render condicional `{open && …}`); (2) esparcir `<motion.div {...backdrop} style={overlay}>` en el overlay; (3) dejar el `onClick={(e) => e.stopPropagation()}` del contenido interno como está. Ya aplicado en los 11 modales (PagoModal, ForwardModal, SkuModal, CapturarMontoNCModal, AplicarNCModal, NuevaNCModal, AsignarForwardModal, ContratoDetalleModal, DeleteConfirmModal, ProgramarLlegadaModal en Recepción, SkuPrecioDetalle en Costos). Click-outside con `document.addEventListener('mousedown', …)` + `ref.contains()` es **seguro** (no se dispara en un arrastre que empieza dentro) — no requiere cambio.
 
+**Aviso de versión nueva (bundle viejo en pestañas abiertas) ✅ 2026-09-15:**
+la app es una SPA — una pestaña que se queda abierta días sigue corriendo el JavaScript de cuando
+se cargó, aunque ya haya deploys nuevos. Eso hace que un cambio de columnas truene con errores
+crípticos: le pasó a Efraín al dar de alta un empleado ("Could not find the 'id_toka' column…"):
+su navegador traía el bundle de antes del rename `id_toka`→`id_efectivale` del 28-ago. **Cerrar la
+sesión NO lo arregla** (el bundle viejo sigue cargado); la solución es detectar el deploy. Cómo
+funciona: `vite.config.ts` sella `__BUILD_ID__` dentro del bundle (SHA del commit en Vercel, o
+timestamp local) y emite el mismo valor en **`/version.json`**; `<VersionBanner>` (montado en la
+RAÍZ de `App.tsx`, cubre también el login) lo consulta **cada 5 min y cada vez que la pestaña
+vuelve a primer plano** (`visibilitychange`/`focus`), y si ya no coinciden muestra un aviso fijo
+abajo-derecha con botón **Actualizar** (`location.reload()`). A propósito **NO recarga solo** — el
+usuario puede estar a media captura de nómina. En dev no hace nada (`import.meta.env.PROD`), y si
+el fetch falla se queda callado y reintenta. Verificado en navegador: sin aviso cuando coinciden,
+aviso al simular un deploy, y el botón hace reload real. Ojo si se agrega otra función que fetchee
+estáticos: la rewrite SPA de `vercel.json` no pisa archivos existentes (filesystem gana), por eso
+`/version.json` se sirve tal cual.
+
 **Cuando se exporta data a Excel:**
 Usar `downloadXlsx(filename, sheets)` de `src/lib/excel.ts` — genera un `.xlsx` OOXML real (no CSV) **sin dependencias** (arma el ZIP + XML a mano con inline strings y CRC32). Ventajas sobre CSV: abre limpio en Excel español (columnas correctas, sin el problema del separador `;`), conserva acentos (UTF-8) y mantiene los números como números (se suman). Cada `sheet` es `{ name, rows }` con `rows[0]` = encabezados; celdas `string | number | null`. Para varias opciones de exportación en una pantalla, usar el botón-menú `<ExportMenu items={[{ label, hint, onSelect }]} />` (`src/components/ExportMenu.tsx`, click-outside con mousedown). Las funciones que arman las filas viven por módulo (ej. `src/features/blufin/blufin-export.ts`). Ya lo usan el catálogo de Productos y los Contratos de Blufin; reutilizable para Camanchaca/Neptuno y futuros módulos.
 
