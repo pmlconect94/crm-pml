@@ -108,7 +108,7 @@ export function ImportacionesCatalogosPage() {
         <div>
           <h1 className="page-title">Catálogos de importaciones</h1>
           <p className="page-subtitle">
-            Navieras y bodegas de destino — los comparten Blufin, Camanchaca y Neptuno
+            Navieras y bodegas de destino — los usan Blufin y Camanchaca (Neptuno no lleva naviera ni bodega: entrega directa)
           </p>
         </div>
       </PageEnter>

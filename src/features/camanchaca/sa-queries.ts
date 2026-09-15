@@ -28,8 +28,10 @@ export async function fetchCatalogosSA(empresaId: string): Promise<{
       .eq('empresa_id', empresaId)
       .eq('activo', true)
       .order('code'),
-    supabase.from('navieras').select('*').order('nombre'),
-    supabase.from('bodegas').select('*').eq('empresa_id', empresaId).order('nombre'),
+    // Solo ACTIVAS: desactivar en Importaciones → Catálogos debe quitarlas de
+    // los formularios de captura (los registros históricos las conservan por FK).
+    supabase.from('navieras').select('*').eq('activo', true).order('nombre'),
+    supabase.from('bodegas').select('*').eq('empresa_id', empresaId).eq('activo', true).order('nombre'),
     supabase.from('bancos').select('*').order('nombre'),
     supabase.from('agencias_importadoras').select('id, razon_social').eq('activo', true).order('razon_social'),
   ]);
